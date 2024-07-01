@@ -1,6 +1,7 @@
 """Functions for validating the inputs into the bounding functions."""
 
 import torch
+import gurobipy as gp
 
 
 def validate_forward_bound_input(
@@ -80,3 +81,14 @@ def validate_backward_bound_input(
     assert all(x_u.dim() == 3 for x_u in activations_u), "Activation bounds must have shape [batchsize x dim x 1]"
 
     return dL_min, dL_max, param_l, param_u, activations_l, activations_u
+
+
+def init_gurobi_model(quiet: bool = True) -> gp.Model:
+    """
+    Initialise a blank Gurobi model. Setting quiet = True will suppress all output from the model.
+    """
+    env = gp.Env(empty=True)
+    env.setParam("OutputFlag", 0)
+    env.start()
+    m = gp.Model(env=env) if quiet else gp.Model()
+    return m

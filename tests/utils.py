@@ -9,9 +9,8 @@ import uci_datasets  # python -m pip install git+https://github.com/treforevans/
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # noqa
 
-from abstract_gradient_training import bounds
 from abstract_gradient_training import loss_gradient_bounds
-from abstract_gradient_training.certified_training.configuration import AGTConfig
+from abstract_gradient_training.certified_training import configuration
 
 
 SHAPES_CLASSIFICATION = [
@@ -31,15 +30,8 @@ SHAPES_ALL = SHAPES_CLASSIFICATION + SHAPES_BINARY_CLASSIFICAITON + SHAPES_REGRE
 EPSILONS = [1.0, 0.1, 0.01]
 BATCHSIZES = [100]
 N_SEEDS = 1
-FORWARD_BOUNDS = [
-    bounds.crown.bound_forward_pass,
-    bounds.interval_bound_propagation.bound_forward_pass,
-    bounds.crown_ibp.bound_forward_pass,
-]
-BACKWARD_BOUNDS = [
-    bounds.crown.bound_backward_pass,
-    bounds.interval_bound_propagation.bound_backward_pass,
-]
+FORWARD_BOUNDS = configuration.FORWARD_BOUNDS.values()
+BACKWARD_BOUNDS = configuration.BACKWARD_BOUNDS.values()
 LOSS_FNS_CLASSIFICATION = [
     (F.cross_entropy, loss_gradient_bounds.bound_cross_entropy_derivative),
     (F.multi_margin_loss, loss_gradient_bounds.bound_max_margin_derivative),
@@ -49,7 +41,7 @@ LOSS_FNS_BINARY_CLASSIFICATION = [
     (F.binary_cross_entropy_with_logits, loss_gradient_bounds.bound_bce_derivative),
 ]
 LOSS_FNS_REGRESSION = [(F.mse_loss, loss_gradient_bounds.bound_mse_derivative)]
-NOMINAL_CONFIG = AGTConfig(
+NOMINAL_CONFIG = configuration.AGTConfig(
     n_epochs=2,
     learning_rate=0.1,
     loss="mse",
