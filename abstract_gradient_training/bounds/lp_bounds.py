@@ -1,5 +1,8 @@
 """Bounding methods using the gurobi linear programming solver."""
 
+import time
+import logging
+
 import gurobipy as gp
 import numpy as np
 import torch
@@ -40,12 +43,17 @@ def bound_forward_pass(
     batchsize = x0_l.shape[0]
     lower_bounds = []
     upper_bounds = []
+    start = time.time()
     for i in range(batchsize):
         x_l = x0_l[i]
         x_u = x0_u[i]
         act_l, act_u = bound_forward_pass_helper(param_l, param_u, x_l, x_u)
         lower_bounds.append(act_l)
         upper_bounds.append(act_u)
+
+    # log the timing statistics
+    avg_time = (time.time() - start) / batchsize
+    logging.info("Solved LP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
 
     # concatenate the results
     activations_l = [np.stack([act[i] for act in lower_bounds], axis=0) for i in range(len(lower_bounds[0]))]
