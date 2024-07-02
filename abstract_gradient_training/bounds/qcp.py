@@ -10,6 +10,9 @@ import torch
 from abstract_gradient_training.bounds import bound_utils
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 def bound_forward_pass(
     param_l: list[torch.Tensor], param_u: list[torch.Tensor], x0_l: torch.Tensor, x0_u: torch.Tensor, **kwargs
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
@@ -46,7 +49,7 @@ def bound_forward_pass(
     start = time.time()
     for i in range(batchsize):
         if i % (batchsize // 10) == 0:
-            logging.debug("Solved QCP bounds for %d/%d instances.", i, batchsize)
+            LOGGER.debug("Solved QCP bounds for %d/%d instances.", i, batchsize)
         x_l = x0_l[i]
         x_u = x0_u[i]
         act_l, act_u, model = bound_forward_pass_helper(param_l, param_u, x_l, x_u)
@@ -55,8 +58,8 @@ def bound_forward_pass(
 
     # log the timing statistics and final model information
     avg_time = (time.time() - start) / batchsize
-    logging.debug("Solved QCP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
-    logging.debug(bound_utils.get_gurobi_model_stats(model))
+    LOGGER.debug("Solved QCP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
+    LOGGER.debug(bound_utils.get_gurobi_model_stats(model))
 
     # concatenate the results
     activations_l = [np.stack([act[i] for act in lower_bounds], axis=0) for i in range(len(lower_bounds[0]))]

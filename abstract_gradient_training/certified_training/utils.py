@@ -11,6 +11,9 @@ from abstract_gradient_training import interval_arithmetic
 from abstract_gradient_training.certified_training.configuration import AGTConfig
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 def grads_helper(
     batch_l: torch.Tensor,
     batch_u: torch.Tensor,
@@ -76,10 +79,10 @@ def break_condition(evaluation: tuple[float, float, float]) -> bool:
         bool: True if the training should stop, False otherwise.
     """
     if evaluation[0] <= 0.03 and evaluation[2] >= 0.97:  # worst case accuracy bounds too loose
-        logging.warning("Early stopping due to loose bounds")
+        LOGGER.warning("Early stopping due to loose bounds")
         return True
     if evaluation[0] >= 1e2:  # worst case MSE too large
-        logging.warning("Early stopping due to loose bounds")
+        LOGGER.warning("Early stopping due to loose bounds")
         return True
     return False
 
@@ -99,8 +102,8 @@ def get_progress_message(
         str: Progress message for the certified training loop.
     """
     msg = (
-        f"Bound: {(param_l[0] - param_u[0]).norm():.3} "
-        f"Network eval: Worst={network_eval[0]:.2g}, Nominal={network_eval[1]:.2g}, Best={network_eval[2]:.2g}"
+        f"Network eval bounds=({network_eval[0]:<4.2g}, {network_eval[1]:<4.2g}, {network_eval[2]:<4.2g}), "
+        f"W0 Bound={(param_l[0] - param_u[0]).norm():.3} "
     )
 
     return msg
@@ -164,7 +167,7 @@ def dataloader_wrapper(dl_train: DataLoader, n_epochs: int) -> Iterator[tuple[to
     Note that we assume the first batch is full.
     """
     if len(dl_train) == 1:
-        logging.warning("Dataloader has only one batch, effective batchsize may be smaller than expected.")
+        LOGGER.warning("Dataloader has only one batch, effective batchsize may be smaller than expected.")
     # batchsize variable will be initialised in the first iteration
     full_batchsize = None
     # loop over epoch
@@ -173,10 +176,10 @@ def dataloader_wrapper(dl_train: DataLoader, n_epochs: int) -> Iterator[tuple[to
             # initialise the batchsize variable if this is the first iteration
             if full_batchsize is None:
                 full_batchsize = batch.size(0)
-                logging.debug("Initialising dataloader batchsize to %s", full_batchsize)
+                LOGGER.debug("Initialising dataloader batchsize to %s", full_batchsize)
             # check the batch is the correct size, otherwise skip it
             if batch.size(0) != full_batchsize:
-                logging.debug("Skipping incomplete batch %s in epoch %s", t, n)
+                LOGGER.debug("Skipping incomplete batch %s in epoch %s", t, n)
                 continue
             # return the batches for this iteration
             yield batch, labels
@@ -194,7 +197,7 @@ def dataloader_pair_wrapper(
     # this is the max number of batches, if none are skipped due to being incomplete
     max_batches_per_epoch = len(dl_train) if dl_clean is None else min(len(dl_train), len(dl_clean))
     if max_batches_per_epoch == 1:
-        logging.warning("Dataloader has only one batch, effective batchsize may be smaller than expected.")
+        LOGGER.warning("Dataloader has only one batch, effective batchsize may be smaller than expected.")
     # batchsize variable will be initialised in the first iteration
     full_batchsize = None
     # loop over epochs
@@ -213,10 +216,10 @@ def dataloader_pair_wrapper(
             # initialise the batchsize variable if this is the first iteration
             if full_batchsize is None:
                 full_batchsize = batch.size(0)
-                logging.debug("Initialising dataloader batchsize to %s", full_batchsize)
+                LOGGER.debug("Initialising dataloader batchsize to %s", full_batchsize)
             # check the batch is the correct size, otherwise skip it
             if batch.size(0) != full_batchsize:
-                logging.debug(
+                LOGGER.debug(
                     "Skipping batch %s in epoch %s (expected batchsize %s, got %s)", t, n, full_batchsize, batch_len
                 )
                 continue

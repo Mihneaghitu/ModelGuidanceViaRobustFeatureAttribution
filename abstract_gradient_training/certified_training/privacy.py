@@ -5,7 +5,6 @@ from typing import Optional, Callable
 import logging
 
 import torch
-from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from abstract_gradient_training import nominal_pass
@@ -13,6 +12,9 @@ from abstract_gradient_training.certified_training import utils as ct_utils
 from abstract_gradient_training import interval_arithmetic
 from abstract_gradient_training.certified_training.configuration import AGTConfig
 from abstract_gradient_training import optimizers
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @torch.no_grad()
@@ -58,20 +60,28 @@ def privacy_certified_training(
     optimizer = optimizers.SGD(config)
     loss_bound_fn = config.loss_bound_fn
     test_loss_fn = config.test_loss_fn
-    logging.getLogger().setLevel(config.log_level)
-    quiet = logging.getLogger().getEffectiveLevel() > logging.INFO
     gamma = config.clip_gamma
     sigma = config.dp_sgd_sigma
     k_private = config.k_private
 
+    # set up logging
+    logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
+    LOGGER.info("Starting Privacy Certified Training")
+    LOGGER.debug(
+        "Privacy parameters: k_private=%s, clip_gamma=%s, dp_sgd_sigma=%s",
+        config.k_private,
+        config.clip_gamma,
+        config.dp_sgd_sigma,
+    )
+    LOGGER.debug("Bounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
+
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_wrapper(dl_train, n_epochs)
-    training_iterator = tqdm(training_iterator, desc="Training Batch", disable=quiet)
 
-    for batch, labels in training_iterator:
-        # evaluate the network and log the results to tqdm
+    for n, (batch, labels) in enumerate(training_iterator):
+        # evaluate the network and log the results
         network_eval = test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
-        training_iterator.set_postfix_str(ct_utils.get_progress_message(network_eval, param_l, param_u))
+        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # get if we should terminate training early
         if ct_utils.break_condition(network_eval):
             return param_l, param_n, param_u
@@ -154,6 +164,8 @@ def privacy_certified_training(
 
     for i in range(len(param_n)):
         if (param_l[i] > param_n[i]).all() or (param_n[i] > param_u[i]).all():
-            logging.warning("Nominal parameters not within certified bounds for parameter %s due to DP-SGD.", i)
+            LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD.", i)
+
+    LOGGER.info("Finished Privacy Certified Training\n")
 
     return param_l, param_n, param_u

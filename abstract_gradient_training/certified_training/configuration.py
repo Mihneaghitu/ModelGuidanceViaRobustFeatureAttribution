@@ -11,6 +11,8 @@ from abstract_gradient_training import bounds
 from abstract_gradient_training import loss_gradient_bounds
 from abstract_gradient_training import test_metrics
 
+LOGGER = logging.getLogger(__name__)
+
 FORWARD_BOUNDS = {
     "interval": bounds.interval_bound_propagation.bound_forward_pass,
     "crown": bounds.crown.bound_forward_pass,
@@ -69,7 +71,7 @@ class AGTConfig:
     def __post_init__(self):
         k = max(self.k_unlearn, self.k_private, self.k_poison, self.label_k_poison)
         if k == 0:
-            logging.warning("k=0 suffers from numerical instability, consider using dtype double or setting k > 0.")
+            LOGGER.warning("k=0 suffers from numerical instability, consider using dtype double or setting k > 0.")
         if self.fragsize <= k:
             raise ValueError(f"fragsize must be greater than k but got fragsize={self.fragsize} and k={k}")
 

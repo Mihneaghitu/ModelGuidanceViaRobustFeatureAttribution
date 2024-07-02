@@ -7,6 +7,9 @@ import torch
 import torch.nn.functional as F
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 def propagate_affine(
     x_l: torch.Tensor, x_u: torch.Tensor, W_l: torch.Tensor, W_u: torch.Tensor, b_l: torch.Tensor, b_u: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -160,10 +163,10 @@ def validate_interval(l: torch.Tensor, u: torch.Tensor) -> None:
         return
     func_name = inspect.currentframe().f_back.f_code.co_name
     if diff > 1e-3:  # a major infraction of the bound
-        logging.error("Violated bound in %s: %s", func_name, diff)
+        LOGGER.error("Violated bound in %s: %s", func_name, diff)
     elif diff > 1e-4:  # a minor infraction of the bound
-        logging.warning("Violated bound in %s: %s", func_name, diff)
+        LOGGER.warning("Violated bound in %s: %s", func_name, diff)
     elif diff > 1e-5:  # a minor infraction of the bound
-        logging.info("Violated bound in %s: %s", func_name, diff)
+        LOGGER.info("Violated bound in %s: %s", func_name, diff)
     elif diff > 0:  # a tiny infraction of the bound
-        logging.debug("Violated bound in %s: %s", func_name, diff)
+        LOGGER.debug("Violated bound in %s: %s", func_name, diff)

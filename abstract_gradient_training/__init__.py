@@ -1,8 +1,20 @@
-from abstract_gradient_training.certified_training.poisoning import poison_certified_training
-from abstract_gradient_training.certified_training.privacy import privacy_certified_training
-from abstract_gradient_training.certified_training.unlearning import unlearning_certified_training
-from abstract_gradient_training.certified_training.utils import get_parameters
-from abstract_gradient_training.certified_training.configuration import AGTConfig
-import abstract_gradient_training.certified_training
-import abstract_gradient_training.test_metrics
-import abstract_gradient_training.bounds
+"""
+Abstract gradient training (AGT) is a framework for training neural networks with certified robustness guarantees.
+"""
+
+import logging
+from abstract_gradient_training.certified_training import (
+    poison_certified_training,
+    privacy_certified_training,
+    unlearning_certified_training,
+    AGTConfig,
+    utils,
+)
+from abstract_gradient_training import test_metrics
+from abstract_gradient_training import bounds
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[AGT] [%(levelname)-8s] [%(asctime)s] %(message)s",
+    datefmt="%H:%M:%S",
+)

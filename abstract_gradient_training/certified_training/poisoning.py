@@ -5,7 +5,6 @@ import logging
 from typing import Optional, Callable
 
 import torch
-from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from abstract_gradient_training.certified_training.configuration import AGTConfig
@@ -13,6 +12,8 @@ from abstract_gradient_training.certified_training import utils as ct_utils
 from abstract_gradient_training import nominal_pass
 from abstract_gradient_training import interval_arithmetic
 from abstract_gradient_training import optimizers
+
+LOGGER = logging.getLogger(__name__)
 
 
 @torch.no_grad()
@@ -61,17 +62,27 @@ def poison_certified_training(
     optimizer = optimizers.SGD(config)
     loss_bound_fn = config.loss_bound_fn
     test_loss_fn = config.test_loss_fn
-    logging.getLogger().setLevel(config.log_level)
-    quiet = logging.getLogger().getEffectiveLevel() > logging.INFO
+
+    # set up logging
+    logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
+    LOGGER.info("Starting Poison Certified Training")
+    LOGGER.debug(
+        "Adversary budget: epsilon=%s, k_poison=%s, label_epsilon=%s, label_k_poison=%s",
+        config.epsilon,
+        config.k_poison,
+        config.label_epsilon,
+        config.label_k_poison,
+    )
+    LOGGER.debug("Bounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_clean, n_epochs)
-    training_iterator = tqdm(training_iterator, desc="Training Batch", disable=quiet)
 
-    for batch, labels, batch_clean, labels_clean in training_iterator:
-        # evaluate the network and log the results to tqdm
+    for n, (batch, labels, batch_clean, labels_clean) in enumerate(training_iterator):
+        # evaluate the network
         network_eval = test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
-        training_iterator.set_postfix_str(ct_utils.get_progress_message(network_eval, param_l, param_u))
+        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
+
         # possibly terminate early
         if ct_utils.break_condition(network_eval):
             return param_l, param_n, param_u
@@ -160,5 +171,7 @@ def poison_certified_training(
         grads_u = [g / batchsize for g in grads_u]
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u)
+
+    LOGGER.info("Finished Poison Certified Training\n")
 
     return param_l, param_n, param_u
