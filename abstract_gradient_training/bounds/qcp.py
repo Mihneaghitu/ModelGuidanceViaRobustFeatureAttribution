@@ -1,4 +1,4 @@
-"""Bounding methods using the gurobi linear programming solver."""
+"""Compute bounds using quadratically constrained programming."""
 
 import time
 import logging
@@ -15,7 +15,7 @@ def bound_forward_pass(
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
     Given bounds on the parameters of the neural network and an interval over the input, compute bounds on the logits
-    and intermediate activations of the network using a linear programming formulation.
+    and intermediate activations of the network using the bilinear programming formulation.
 
     Args:
         param_l (list[torch.Tensor]): list of lower bounds on the parameters of the network [W1, b1, ..., Wm, bm]
@@ -45,15 +45,18 @@ def bound_forward_pass(
     upper_bounds = []
     start = time.time()
     for i in range(batchsize):
+        if i % (batchsize // 10) == 0:
+            logging.debug("Solved QCP bounds for %d/%d instances.", i, batchsize)
         x_l = x0_l[i]
         x_u = x0_u[i]
-        act_l, act_u = bound_forward_pass_helper(param_l, param_u, x_l, x_u)
+        act_l, act_u, model = bound_forward_pass_helper(param_l, param_u, x_l, x_u)
         lower_bounds.append(act_l)
         upper_bounds.append(act_u)
 
-    # log the timing statistics
+    # log the timing statistics and final model information
     avg_time = (time.time() - start) / batchsize
-    logging.info("Solved LP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
+    logging.debug("Solved QCP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
+    logging.debug(bound_utils.get_gurobi_model_stats(model))
 
     # concatenate the results
     activations_l = [np.stack([act[i] for act in lower_bounds], axis=0) for i in range(len(lower_bounds[0]))]
@@ -71,9 +74,9 @@ def bound_forward_pass_helper(
     param_u: list[np.ndarray],
     x0_l: np.ndarray,
     x0_u: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, gp.Model]:
     """
-    Compute bounds on a single input by solving a linear program using gurobi.
+    Compute bounds on a single input by solving a bilinear program using gurobi.
 
     Args:
         param_l (list[np.ndarray]): list of lower bounds on the parameters of the network [W1, b1, ..., Wm, bm]
@@ -82,13 +85,14 @@ def bound_forward_pass_helper(
         x0_u (np.ndarray): [input_dim x 1] Upper bound on a single input to the network.
 
     Returns:
-        activations_l (list[np.ndarray]): list of lower bounds computed using linear programming on the (pre-relu)
+        activations_l (list[np.ndarray]): list of lower bounds computed using bilinear programming on the (pre-relu)
                                             activations [x0, ..., xL] including the input and the logits.
-        activations_u (list[np.ndarray]): list of upper bounds computed using linear programming on the (pre-relu)
+        activations_u (list[np.ndarray]): list of upper bounds computed using bilinear programming on the (pre-relu)
                                             activations [x0, ..., xL] including the input and the logits.
+        model (gp.Model): Gurobi model used to compute the bounds.
     """
     # define model and input variable
-    model = bound_utils.init_gurobi_model()
+    model = bound_utils.init_gurobi_model("qcp_bounds")
     model.setParam("NonConvex", 2)
     h = model.addMVar(x0_l.shape, lb=x0_l, ub=x0_u)
     n_layers = len(param_l) // 2
@@ -109,10 +113,14 @@ def bound_forward_pass_helper(
         activations_l.append(h_l)
         activations_u.append(h_u)
 
+        # skip last layer
+        if i == n_layers - 1:
+            break
+
         # add next hidden variable
         h = add_relu_triangle_constr(model, h, W, b, h_l, h_u)
 
-    return activations_l, activations_u
+    return activations_l, activations_u, model
 
 
 def bound_objective_vector(model: gp.Model, objective: gp.MVar | gp.MLinExpr) -> tuple[np.ndarray, np.ndarray]:

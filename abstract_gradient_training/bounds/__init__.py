@@ -1,4 +1,4 @@
 from abstract_gradient_training.bounds import crown
 from abstract_gradient_training.bounds import interval_bound_propagation
 from abstract_gradient_training.bounds import crown_ibp
-from abstract_gradient_training.bounds import lp_bounds
+from abstract_gradient_training.bounds import qcp

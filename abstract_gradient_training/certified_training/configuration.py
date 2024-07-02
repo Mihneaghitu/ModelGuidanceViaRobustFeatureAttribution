@@ -15,7 +15,7 @@ FORWARD_BOUNDS = {
     "interval": bounds.interval_bound_propagation.bound_forward_pass,
     "crown": bounds.crown.bound_forward_pass,
     "interval+crown": bounds.crown_ibp.bound_forward_pass,
-    "lp": bounds.lp_bounds.bound_forward_pass,
+    "qcp": bounds.qcp.bound_forward_pass,
 }
 
 BACKWARD_BOUNDS = {
