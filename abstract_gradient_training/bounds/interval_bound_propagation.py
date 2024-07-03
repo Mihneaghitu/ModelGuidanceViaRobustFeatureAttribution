@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 from abstract_gradient_training import interval_arithmetic
-from abstract_gradient_training.bounds import bound_utils
+from abstract_gradient_training.bounds import input_validation
 
 
 def bound_forward_pass(
@@ -28,7 +28,7 @@ def bound_forward_pass(
     """
 
     # validate the input
-    param_l, param_u, h_l, h_u = bound_utils.validate_forward_bound_input(param_l, param_u, x0_l, x0_u)
+    param_l, param_u, h_l, h_u = input_validation.validate_forward_bound_input(param_l, param_u, x0_l, x0_u)
     W_l, b_l = param_l[::2], param_l[1::2]
     W_u, b_u = param_u[::2], param_u[1::2]
     activations_l, activations_u = [h_l], [h_u]  # containers to hold intermediate bounds
@@ -76,7 +76,7 @@ def bound_backward_pass(
         grads_u (list[torch.Tensor]): list of upper bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
     """
     # validate the input
-    dL_min, dL_max, param_l, param_u, activations_l, activations_u = bound_utils.validate_backward_bound_input(
+    dL_min, dL_max, param_l, param_u, activations_l, activations_u = input_validation.validate_backward_bound_input(
         dL_min, dL_max, param_l, param_u, activations_l, activations_u
     )
 

@@ -7,7 +7,8 @@ import gurobipy as gp
 import numpy as np
 import torch
 
-from abstract_gradient_training.bounds import bound_utils
+from abstract_gradient_training.bounds import input_validation
+from abstract_gradient_training.bounds import gurobi_helpers
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ def bound_forward_pass(
                                             the input and the logits. Each tensor xi has shape [batchsize x dim x 1].
     """
     # validate the input
-    param_l, param_u, x0_l, x0_u = bound_utils.validate_forward_bound_input(param_l, param_u, x0_l, x0_u)
+    param_l, param_u, x0_l, x0_u = input_validation.validate_forward_bound_input(param_l, param_u, x0_l, x0_u)
     device = x0_l.device
 
     # convert all inputs to numpy arrays
@@ -59,7 +60,7 @@ def bound_forward_pass(
     # log the timing statistics and final model information
     avg_time = (time.time() - start) / batchsize
     LOGGER.debug("Solved QCQP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
-    LOGGER.debug(bound_utils.get_gurobi_model_stats(model))
+    LOGGER.debug(gurobi_helpers.get_gurobi_model_stats(model))
 
     # concatenate the results
     activations_l = [np.stack([act[i] for act in lower_bounds], axis=0) for i in range(len(lower_bounds[0]))]
@@ -95,7 +96,7 @@ def bound_forward_pass_helper(
         model (gp.Model): Gurobi model used to compute the bounds.
     """
     # define model and input variable
-    model = bound_utils.init_gurobi_model("qcqp_bounds")
+    model = gurobi_helpers.init_gurobi_model("qcqp_bounds")
     model.setParam("NonConvex", 2)
     h = model.addMVar(x0_l.shape, lb=x0_l, ub=x0_u)
     n_layers = len(param_l) // 2

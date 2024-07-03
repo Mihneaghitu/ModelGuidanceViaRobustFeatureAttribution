@@ -1,7 +1,6 @@
 """Functions for validating the inputs into the bounding functions."""
 
 import torch
-import gurobipy as gp
 
 
 def validate_forward_bound_input(
@@ -81,37 +80,3 @@ def validate_backward_bound_input(
     assert all(x_u.dim() == 3 for x_u in activations_u), "Activation bounds must have shape [batchsize x dim x 1]"
 
     return dL_min, dL_max, param_l, param_u, activations_l, activations_u
-
-
-def init_gurobi_model(name: str, quiet: bool = True) -> gp.Model:
-    """
-    Initialise a blank Gurobi model. Setting quiet = True will suppress all output from the model.
-    """
-    env = gp.Env(empty=True)
-    env.setParam("OutputFlag", 0)
-    env.start()
-    m = gp.Model(name=name, env=env) if quiet else gp.Model(name=name)
-    return m
-
-
-def get_gurobi_model_stats(model: gp.Model) -> str:
-    """
-    Return a string with statistics about the Gurobi model.
-
-    Args:
-        model (gp.Model):Gurobi model
-
-    Returns:
-        str: Model statistics in a human-readable format.
-    """
-    return (
-        f"Statistics for model {model.ModelName}:\n"
-        f"  {'Linear constraint matrix':<30}: {model.NumConstrs} Constrs, {model.NumVars} Vars, {model.NumNZs} NZs\n"
-        f"  {'Quadratic constraints':<30}: {model.NumQConstrs} QConstrs, {model.NumQCNZs} QNZs\n"
-        f"  {'SOS constraints':<30}: {model.NumSOS} SOS\n"
-        f"  {'General constraints':<30}: {model.NumGenConstrs} GenConstrs\n"
-        f"  {'Quadratic objective':<30}: {model.NumQNZs} NZs, {model.NumPWLObjVars} PWL \n"
-        f"  {'Integer variables':<30}: {model.NumIntVars} IntVars, {model.NumBinVars} BinVars\n"
-        f"  {'Solve time':<30}: {model.Runtime:.2f}s\n"
-        f"  {'Status':<30}: {model.Status}\n"
-    )
