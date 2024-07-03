@@ -49,7 +49,7 @@ def bound_forward_pass(
     start = time.time()
     for i in range(batchsize):
         if i % (batchsize // 10) == 0:
-            LOGGER.debug("Solved QCP bounds for %d/%d instances.", i, batchsize)
+            LOGGER.debug("Solved QCQP bounds for %d/%d instances.", i, batchsize)
         x_l = x0_l[i]
         x_u = x0_u[i]
         act_l, act_u, model = bound_forward_pass_helper(param_l, param_u, x_l, x_u)
@@ -58,7 +58,7 @@ def bound_forward_pass(
 
     # log the timing statistics and final model information
     avg_time = (time.time() - start) / batchsize
-    LOGGER.debug("Solved QCP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
+    LOGGER.debug("Solved QCQP bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
     LOGGER.debug(bound_utils.get_gurobi_model_stats(model))
 
     # concatenate the results
@@ -95,7 +95,7 @@ def bound_forward_pass_helper(
         model (gp.Model): Gurobi model used to compute the bounds.
     """
     # define model and input variable
-    model = bound_utils.init_gurobi_model("qcp_bounds")
+    model = bound_utils.init_gurobi_model("qcqp_bounds")
     model.setParam("NonConvex", 2)
     h = model.addMVar(x0_l.shape, lb=x0_l, ub=x0_u)
     n_layers = len(param_l) // 2
