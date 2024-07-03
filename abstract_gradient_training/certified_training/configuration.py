@@ -14,14 +14,14 @@ from abstract_gradient_training import test_metrics
 LOGGER = logging.getLogger(__name__)
 
 FORWARD_BOUNDS = {
-    "interval": bounds.interval_bound_propagation.bound_forward_pass,
+    "interval": bounds.ibp.bound_forward_pass,
     "crown": bounds.crown.bound_forward_pass,
     "interval+crown": bounds.crown_ibp.bound_forward_pass,
     "qcqp": bounds.qcqp.bound_forward_pass,
 }
 
 BACKWARD_BOUNDS = {
-    "interval": bounds.interval_bound_propagation.bound_backward_pass,
+    "interval": bounds.ibp.bound_backward_pass,
     "crown": bounds.crown.bound_backward_pass,
 }
 

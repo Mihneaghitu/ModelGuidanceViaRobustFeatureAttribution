@@ -5,5 +5,5 @@ input and the parameters.
 
 from . import crown
 from . import crown_ibp
-from . import interval_bound_propagation
+from . import ibp
 from . import qcqp

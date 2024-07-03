@@ -2,7 +2,7 @@
 
 import torch
 
-from abstract_gradient_training.bounds import interval_bound_propagation as ibp
+from abstract_gradient_training.bounds import ibp
 from abstract_gradient_training.bounds import crown
 
 

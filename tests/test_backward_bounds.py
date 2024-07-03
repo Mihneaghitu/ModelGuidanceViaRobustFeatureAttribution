@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from tests import utils
 from abstract_gradient_training import nominal_pass
-from abstract_gradient_training.bounds import interval_bound_propagation as ibp
+from abstract_gradient_training.bounds import ibp
 
 
 @parameterized.expand(

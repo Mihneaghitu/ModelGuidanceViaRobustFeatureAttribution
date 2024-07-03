@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 from abstract_gradient_training import nominal_pass
-from abstract_gradient_training.bounds import interval_bound_propagation as ibp
+from abstract_gradient_training.bounds import ibp
 
 
 def test_mse(
