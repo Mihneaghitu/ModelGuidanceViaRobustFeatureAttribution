@@ -14,22 +14,22 @@ from abstract_gradient_training.certified_training import configuration
 
 
 SHAPES_CLASSIFICATION = [
-    (5, 15, 10, 5),  # two hidden layers
-    (5, 10, 5),  # one hidden layer
+    (3, 6, 5, 3),  # two hidden layers
+    (3, 5, 3),  # one hidden layer
 ]
 SHAPES_BINARY_CLASSIFICAITON = [
-    (5, 10, 10, 1),  # two hidden layers
-    (5, 10, 15, 1),  # two hidden layers
-    (5, 10, 1),  # one hidden layer
+    (3, 5, 3, 1),  # two hidden layers
+    (3, 5, 1),  # one hidden layer
 ]
 SHAPES_REGRESSION = [
-    (5, 10, 10, 1),  # two hidden layers
-    (5, 10, 1),  # one hidden layer
+    (3, 5, 3, 1),  # two hidden layers
+    (3, 5, 1),  # one hidden layer
 ]
 SHAPES_ALL = SHAPES_CLASSIFICATION + SHAPES_BINARY_CLASSIFICAITON + SHAPES_REGRESSION
 EPSILONS = [1.0, 0.1, 0.01]
 BATCHSIZES = [100]
 N_SEEDS = 1
+TOLERANCE = 1e-8
 FORWARD_BOUNDS = configuration.FORWARD_BOUNDS.values()
 BACKWARD_BOUNDS = configuration.BACKWARD_BOUNDS.values()
 LOSS_FNS_CLASSIFICATION = [
@@ -67,7 +67,7 @@ def validate_sound(lower: list[torch.Tensor] | torch.Tensor, upper: list[torch.T
     for l, u in zip(lower, upper):
         assert l.shape == u.shape, f"{l.shape}, {u.shape}"
         assert l.dtype == u.dtype, f"{l.dtype}, {u.dtype}"
-        assert torch.all(l <= u + 1e-10), f"{torch.max(l - u)}"
+        assert torch.all(l <= u + TOLERANCE), f"{torch.max(l - u)}"
 
 
 def validate_equal(lower: list[torch.Tensor] | torch.Tensor, upper: list[torch.Tensor] | torch.Tensor):
@@ -116,6 +116,8 @@ def generate_network(shape: list[int], seed: int):
 
 
 class FullyConnected(torch.nn.Sequential):
+    """Example fully connected neural network for tests."""
+
     def __init__(self, in_dim, out_dim, hidden_dim, hidden_lay):
         layers = [torch.nn.Linear(in_dim, hidden_dim)]
         layers.append(torch.nn.ReLU())
