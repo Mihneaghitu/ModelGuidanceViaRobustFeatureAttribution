@@ -4,14 +4,15 @@ import gurobipy as gp
 import numpy as np
 
 
-def init_gurobi_model(name: str, quiet: bool = True) -> gp.Model:
+def init_gurobi_model(name: str, quiet: bool = True, logfile: str = "") -> gp.Model:
     """
     Initialise a blank Gurobi model. Setting quiet = True will suppress all output from the model.
     """
     env = gp.Env(empty=True)
-    env.setParam("OutputFlag", 0)
+    env.setParam("LogToConsole", 0)
     env.start()
     m = gp.Model(name=name, env=env) if quiet else gp.Model(name=name)
+    m.setParam("LogFile", logfile)
     return m
 
 

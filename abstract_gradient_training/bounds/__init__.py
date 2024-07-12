@@ -7,3 +7,4 @@ from . import crown
 from . import crown_ibp
 from . import ibp
 from . import qcqp
+from . import miqp

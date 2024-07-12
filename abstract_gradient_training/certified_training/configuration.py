@@ -18,6 +18,7 @@ FORWARD_BOUNDS = {
     "crown": bounds.crown.bound_forward_pass,
     "interval+crown": bounds.crown_ibp.bound_forward_pass,
     "qcqp": bounds.qcqp.bound_forward_pass,
+    "miqp": bounds.miqp.bound_forward_pass,
 }
 
 BACKWARD_BOUNDS = {
