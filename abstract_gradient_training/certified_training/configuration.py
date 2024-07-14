@@ -17,8 +17,10 @@ FORWARD_BOUNDS = {
     "interval": bounds.ibp.bound_forward_pass,
     "crown": bounds.crown.bound_forward_pass,
     "interval+crown": bounds.crown_ibp.bound_forward_pass,
-    "qcqp": bounds.qcqp.bound_forward_pass,
-    "miqp": bounds.miqp.bound_forward_pass,
+    "miqp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=False, relax_bilinear=False),
+    "milp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=False, relax_bilinear=True),
+    "qcqp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=True, relax_bilinear=False),
+    "lp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=True, relax_bilinear=True),
 }
 
 BACKWARD_BOUNDS = {
