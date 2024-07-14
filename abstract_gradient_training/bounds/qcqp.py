@@ -137,8 +137,8 @@ def add_relu_triangle_constr(model: gp.Model, x: gp.MVar, W: gp.MVar, b: gp.MVar
         x (gp.MVar): [m x 1] Gurobi MVar for the input variable.
         W (gp.MVar): [n x m] Gurobi MVar for the weight matrix.
         b (gp.MVar): [n x 1] Gurobi MVar for the bias vector.
-        l (np.ndarray): [n x 1] Array of lower bounds for the input variable x.
-        u (np.ndarray): [n x 1] Array of upper bounds for the input variable x.
+        l (np.ndarray): [n x 1] Array of lower bounds for the term W @ x + b.
+        u (np.ndarray): [n x 1] Array of upper bounds for the term W @ x + b.
     Returns:
         y (gp.MVar): [n x 1] MVar for the output of the ReLU
     """
