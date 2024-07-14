@@ -113,7 +113,7 @@ def bound_forward_pass_helper(
         b = model.addMVar(b_l.shape, lb=b_l, ub=b_u)
 
         # compute the pre-activation bounds for this layer
-        h_l, h_u = bound_objective_vector(model, W @ h + b)
+        h_l, h_u = gurobi_helpers.bound_objective_vector(model, W @ h + b)
         activations_l.append(h_l)
         activations_u.append(h_u)
 
@@ -125,36 +125,6 @@ def bound_forward_pass_helper(
         h = add_relu_triangle_constr(model, h, W, b, h_l, h_u)
 
     return activations_l, activations_u, model
-
-
-def bound_objective_vector(model: gp.Model, objective: gp.MVar | gp.MLinExpr) -> tuple[np.ndarray, np.ndarray]:
-    """
-
-    Given a gurobi model and a vector of objectives, compute the minimum and maximum value of the objective over the
-    model.
-
-    Args:
-        model (gp.Model): Gurobi model
-        objective (gp.MVar | gp.MLinExpr): Objective to minimize/maximize over, either a gurobi variable or expression.
-
-    Returns:
-        tuple[np.ndarray, np.ndarray]: Tuple of two numpy arrays, the first containing the minimum of each objective
-                                       and the second containing the maximum value.
-    """
-    N = objective.size
-    L, U = np.zeros((N, 1)), np.zeros((N, 1))
-    for i in range(N):
-        model.setObjective(objective[i], gp.GRB.MINIMIZE)
-        model.reset()
-        model.optimize()
-        assert model.status == gp.GRB.OPTIMAL
-        L[i] = model.objVal
-        model.setObjective(objective[i], gp.GRB.MAXIMIZE)
-        model.reset()
-        model.optimize()
-        assert model.status == gp.GRB.OPTIMAL
-        U[i] = model.objVal
-    return L, U
 
 
 def add_relu_triangle_constr(model: gp.Model, x: gp.MVar, W: gp.MVar, b: gp.MVar, l: np.ndarray, u: np.ndarray):
