@@ -65,6 +65,29 @@ def propagate_matmul(
     return H_l, H_u
 
 
+def propagate_matmul_exact(
+    A_l: torch.Tensor, A_u: torch.Tensor, B_l: torch.Tensor, B_u: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute an interval bound on the matrix multiplication A @ B using exact interval arithmetic.
+
+    Args:
+        A_l (torch.Tensor): Lower bound of the matrix A.
+        A_u (torch.Tensor): Upper bound of the matrix A.
+        B_l (torch.Tensor): Lower bound of the matrix B.
+        B_u (torch.Tensor): Upper bound of the matrix B.
+
+    Returns:
+        H_l (torch.Tensor): Lower bound of the output tensor.
+        H_u (torch.Tensor): Upper bound of the output tensor.
+    """
+    validate_interval(A_l, A_u)
+    validate_interval(B_l, B_u)
+    E_l, E_u = propagate_elementwise(A_l.unsqueeze(-1), A_u.unsqueeze(-1), B_l.unsqueeze(-3), B_u.unsqueeze(-3))
+    validate_interval(E_l, E_u)
+    return E_l.sum(-2), E_u.sum(-2)
+
+
 def propagate_elementwise(
     A_l: torch.Tensor, A_u: torch.Tensor, B_l: torch.Tensor, B_u: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
