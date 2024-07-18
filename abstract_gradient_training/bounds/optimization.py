@@ -11,6 +11,7 @@ import numpy as np
 import torch
 
 from abstract_gradient_training.bounds import input_validation
+from abstract_gradient_training import interval_arithmetic
 
 
 LOGGER = logging.getLogger(__name__)
@@ -150,7 +151,15 @@ def bound_forward_pass_helper(
         s = add_bilinear_term(model, W, h, W_l, W_u, h_l, h_u, relax_bilinear)
 
         # compute the pre-activation bounds for this layer
-        h_l, h_u = bound_objective_vector(model, s + b)
+        if i == 0:
+            # best we can do on the first layer is to use ibp
+            h_l, h_u = numpy_to_torch_wrapper(interval_arithmetic.propagate_matmul_exact, W_l, W_u, h_l, h_u)
+            h_l, h_u = h_l + b_l, h_u + b_u
+        else:
+            # otherwise solve the min/max optimization problem for each neuron in the layer
+            h_l, h_u = bound_objective_vector(model, s + b)
+
+        # store the bounds
         activations_l.append(h_l)
         activations_u.append(h_u)
 
@@ -285,6 +294,14 @@ def bound_objective_vector(model: gp.Model, objective: gp.MVar | gp.MLinExpr) ->
         assert model.status == gp.GRB.OPTIMAL
         U[i] = model.objVal
     return L, U
+
+
+def numpy_to_torch_wrapper(fn, *args):
+    """
+    Wrapper function to convert numpy arrays to torch tensors before calling the function.
+    """
+    ret = fn(*[torch.from_numpy(arg) for arg in args])
+    return tuple(r.detach().cpu().numpy() for r in ret)
 
 
 def init_gurobi_model(name: str, quiet: bool = True, logfile: str = "") -> gp.Model:
