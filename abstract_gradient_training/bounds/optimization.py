@@ -75,7 +75,7 @@ def bound_forward_pass(
     upper_bounds = []
     start = time.time()
     for i in range(batchsize):
-        if i % (batchsize // 10) == 0:
+        if i % (batchsize // 10 + 1) == 0:
             LOGGER.debug("Solved %s bounds for %d/%d instances.", method, i, batchsize)
         x_l = x0_l[i]
         x_u = x0_u[i]
