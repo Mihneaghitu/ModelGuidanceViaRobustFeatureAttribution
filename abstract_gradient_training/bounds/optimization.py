@@ -24,6 +24,7 @@ def bound_forward_pass(
     x0_u: torch.Tensor,
     relax_binaries: bool = False,
     relax_bilinear: bool = False,
+    gurobi_kwargs: Optional[dict] = None,
     **kwargs,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
@@ -42,6 +43,7 @@ def bound_forward_pass(
         x0_u (torch.Tensor): [batchsize x input_dim x 1] Upper bound on the input to the network.
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
+        gurobi_kwargs (Optional[dict]): Parameters to pass to the gurobi model.
 
     Returns:
         activations_l (list[torch.Tensor]): list of lower bounds on all (pre-relu) activations [x0, ..., xL] including
@@ -79,7 +81,9 @@ def bound_forward_pass(
             LOGGER.debug("Solved %s bounds for %d/%d instances.", method, i, batchsize)
         x_l = x0_l[i]
         x_u = x0_u[i]
-        act_l, act_u, model = bound_forward_pass_helper(param_l, param_u, x_l, x_u, relax_binaries, relax_bilinear)
+        act_l, act_u, model = bound_forward_pass_helper(
+            param_l, param_u, x_l, x_u, relax_binaries, relax_bilinear, gurobi_kwargs
+        )
         lower_bounds.append(act_l)
         upper_bounds.append(act_u)
 
@@ -106,6 +110,7 @@ def bound_forward_pass_helper(
     x0_u: np.ndarray,
     relax_binaries: bool,
     relax_bilinear: bool,
+    gurobi_kwargs: Optional[dict] = None,
 ) -> tuple[np.ndarray, np.ndarray, gp.Model]:
     """
     Compute bounds on a single input by solving a mixed-integer program using gurobi.
@@ -117,7 +122,7 @@ def bound_forward_pass_helper(
         x0_u (np.ndarray): [input_dim x 1] Upper bound on a single input to the network.
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
-        name (str): Name to use for the gurobi model
+        gurobi_kwargs (Optional[dict]): Parameters to pass to the gurobi model.
 
     Returns:
         activations_l (list[np.ndarray]): list of lower bounds computed using bilinear programming on the (pre-relu)
@@ -125,9 +130,14 @@ def bound_forward_pass_helper(
         activations_u (list[np.ndarray]): list of upper bounds computed using bilinear programming on the (pre-relu)
                                             activations [x0, ..., xL] including the input and the logits.
     """
-    # define model and input variable
+    # define model and set the model parameters
     model = init_gurobi_model("Bounds", logfile="gurobi.log")
     model.setParam("NonConvex", 2)
+    if gurobi_kwargs is not None:
+        for key, value in gurobi_kwargs.items():
+            model.setParam(key, value)
+
+    # add the input variable
     h = model.addMVar(x0_l.shape, lb=x0_l, ub=x0_u)
     n_layers = len(param_l) // 2
 
@@ -150,14 +160,19 @@ def bound_forward_pass_helper(
         # add the bilinear term s = W @ h
         s = add_bilinear_term(model, W, h, W_l, W_u, h_l, h_u, relax_bilinear)
 
-        # compute the pre-activation bounds for this layer
-        if i == 0:
-            # best we can do on the first layer is to use ibp
-            h_l, h_u = numpy_to_torch_wrapper(interval_arithmetic.propagate_matmul_exact, W_l, W_u, h_l, h_u)
-            h_l, h_u = h_l + b_l, h_u + b_u
-        else:
-            # otherwise solve the min/max optimization problem for each neuron in the layer
-            h_l, h_u = bound_objective_vector(model, s + b)
+        # first compute the pre-activation bounds for this layer using IBP
+        h_l, h_u = numpy_to_torch_wrapper(interval_arithmetic.propagate_matmul_exact, W_l, W_u, h_l, h_u)
+        h_l, h_u = h_l + b_l, h_u + b_u
+
+        # if i == 0, the best we can do is ibp. otherwise, solve the min/max optimization problem for each neuron
+        if i > 0:
+            h_l_optimized, h_u_optimized = bound_objective_vector(model, s + b)
+            if np.isinf(h_l_optimized).any() or np.isinf(h_u_optimized).any():
+                LOGGER.debug(
+                    "Inf in optimized bounds for layer %d, falling back to IBP. Consider increasing timeout.",
+                    i,
+                )
+            h_l, h_u = np.maximum(h_l, h_l_optimized), np.minimum(h_u, h_u_optimized)
 
         # store the bounds
         activations_l.append(h_l)
@@ -283,16 +298,22 @@ def bound_objective_vector(model: gp.Model, objective: gp.MVar | gp.MLinExpr) ->
     N = objective.size
     L, U = np.zeros((N, 1)), np.zeros((N, 1))
     for i in range(N):
+        # lower bound
         model.setObjective(objective[i], gp.GRB.MINIMIZE)
         model.reset()
         model.optimize()
-        assert model.status == gp.GRB.OPTIMAL
-        L[i] = model.objVal
+        if model.status == gp.GRB.OPTIMAL:  # if model is solved, store the objective value
+            L[i] = model.objVal
+        else:  # otherwise use the best bound
+            L[i] = getattr(model, "objBound", -np.inf)
+        # upper bound
         model.setObjective(objective[i], gp.GRB.MAXIMIZE)
         model.reset()
         model.optimize()
-        assert model.status == gp.GRB.OPTIMAL
-        U[i] = model.objVal
+        if model.status == gp.GRB.OPTIMAL:
+            U[i] = model.objVal
+        else:
+            U[i] = getattr(model, "objBound", np.inf)
     return L, U
 
 
