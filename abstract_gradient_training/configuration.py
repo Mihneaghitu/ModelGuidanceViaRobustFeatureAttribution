@@ -8,32 +8,36 @@ from typing import Dict, Callable
 import pydantic
 
 from abstract_gradient_training import bounds
-from abstract_gradient_training import loss_gradient_bounds
 from abstract_gradient_training import test_metrics
 
 LOGGER = logging.getLogger(__name__)
 
 FORWARD_BOUNDS = {
-    "interval": bounds.ibp.bound_forward_pass,
-    "crown": bounds.crown.bound_forward_pass,
-    "interval+crown": bounds.crown_ibp.bound_forward_pass,
-    "miqp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=False, relax_bilinear=False),
-    "milp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=False, relax_bilinear=True),
-    "qcqp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=True, relax_bilinear=False),
-    "lp": lambda *args: bounds.optimization.bound_forward_pass(*args, relax_binaries=True, relax_bilinear=True),
+    "interval": bounds.interval_bound_propagation.bound_forward_pass,
+    "crown": bounds.linear_bound_propagation.bound_forward_pass,
+    "miqp": lambda *args: bounds.optimization_bounds.bound_forward_pass(
+        *args, relax_binaries=False, relax_bilinear=False
+    ),
+    "milp": lambda *args: bounds.optimization_bounds.bound_forward_pass(
+        *args, relax_binaries=False, relax_bilinear=True
+    ),
+    "qcqp": lambda *args: bounds.optimization_bounds.bound_forward_pass(
+        *args, relax_binaries=True, relax_bilinear=False
+    ),
+    "lp": lambda *args: bounds.optimization_bounds.bound_forward_pass(*args, relax_binaries=True, relax_bilinear=True),
 }
 
 BACKWARD_BOUNDS = {
-    "interval": bounds.ibp.bound_backward_pass,
-    "crown": bounds.crown.bound_backward_pass,
+    "interval": bounds.interval_bound_propagation.bound_backward_pass,
+    "crown": bounds.linear_bound_propagation.bound_backward_pass,
 }
 
 LOSS_BOUNDS = {
-    "cross_entropy": loss_gradient_bounds.bound_cross_entropy_derivative,
-    "binary_cross_entropy": loss_gradient_bounds.bound_bce_derivative,
-    "max_margin": loss_gradient_bounds.bound_max_margin_derivative,
-    "mse": loss_gradient_bounds.bound_mse_derivative,
-    "hinge": loss_gradient_bounds.bound_hinge_derivative,
+    "cross_entropy": bounds.loss_gradients.bound_cross_entropy_derivative,
+    "binary_cross_entropy": bounds.loss_gradients.bound_bce_derivative,
+    "max_margin": bounds.loss_gradients.bound_max_margin_derivative,
+    "mse": bounds.loss_gradients.bound_mse_derivative,
+    "hinge": bounds.loss_gradients.bound_hinge_derivative,
 }
 
 

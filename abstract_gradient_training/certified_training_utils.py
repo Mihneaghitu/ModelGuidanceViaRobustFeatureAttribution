@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from abstract_gradient_training import interval_arithmetic
-from abstract_gradient_training.certified_training.configuration import AGTConfig
+from abstract_gradient_training.configuration import AGTConfig
 
 
 LOGGER = logging.getLogger(__name__)

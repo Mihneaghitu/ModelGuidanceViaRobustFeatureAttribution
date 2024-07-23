@@ -3,7 +3,7 @@ Provides methods for computing bounds on the activations and logits of a neural 
 input and the parameters.
 """
 
-from . import crown
-from . import crown_ibp
-from . import ibp
-from . import optimization
+from abstract_gradient_training.bounds import interval_bound_propagation
+from abstract_gradient_training.bounds import linear_bound_propagation
+from abstract_gradient_training.bounds import optimization_bounds
+from abstract_gradient_training.bounds import loss_gradients

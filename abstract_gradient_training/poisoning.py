@@ -7,8 +7,8 @@ from typing import Optional, Callable
 import torch
 from torch.utils.data import DataLoader
 
-from abstract_gradient_training.certified_training.configuration import AGTConfig
-from abstract_gradient_training.certified_training import utils as ct_utils
+from abstract_gradient_training.configuration import AGTConfig
+from abstract_gradient_training import certified_training_utils as ct_utils
 from abstract_gradient_training import nominal_pass
 from abstract_gradient_training import interval_arithmetic
 from abstract_gradient_training import optimizers

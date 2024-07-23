@@ -5,8 +5,8 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
-from abstract_gradient_training.interval_tensor import IntervalTensor
-from abstract_gradient_training.bounds import input_validation
+from abstract_gradient_training.bounds.interval_tensor import IntervalTensor
+from abstract_gradient_training.bounds import bound_utils
 
 
 @torch.no_grad()
@@ -37,7 +37,7 @@ def bound_forward_pass(
     """
 
     # validate the input
-    param_l, param_u, x0_l, x0_u = input_validation.validate_forward_bound_input(param_l, param_u, x0_l, x0_u)
+    param_l, param_u, x0_l, x0_u = bound_utils.validate_forward_bound_input(param_l, param_u, x0_l, x0_u)
 
     # form IntervalTensors of the parameters
     W = [IntervalTensor(W_l, W_u) for W_l, W_u in zip(param_l[::2], param_u[::2])]
@@ -90,7 +90,7 @@ def bound_backward_pass(
         grads_u (list[torch.Tensor]): list of upper bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
     """
     # validate the input
-    dL_min, dL_max, param_l, param_u, activations_l, activations_u = input_validation.validate_backward_bound_input(
+    dL_min, dL_max, param_l, param_u, activations_l, activations_u = bound_utils.validate_backward_bound_input(
         dL_min, dL_max, param_l, param_u, activations_l, activations_u
     )
 

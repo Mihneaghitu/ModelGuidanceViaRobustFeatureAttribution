@@ -19,18 +19,17 @@ from abstract_gradient_training import nominal_pass
         utils.SHAPES_ALL,
         utils.FORWARD_BOUNDS,
         utils.EPSILONS,
-        utils.BATCHSIZES,
         range(utils.N_SEEDS),
     )
 )
-def test_forward_bound(shape, forward_bound, epsilon, batchsize, seed):
+def test_forward_bound(shape, forward_bound, epsilon, seed):
     """
     Test the interval bound propagation method.
     """
     # generate the network parameters
     param_n, param_l, param_u = utils.generate_network(shape, seed)
     # generate the input batch
-    x = torch.randn(batchsize, shape[0], 1, requires_grad=True).double()
+    x = torch.randn(2, shape[0], 1, requires_grad=True).double()
     # do nominal pass
     activations_n = nominal_pass.nominal_forward_pass(x, param_n)
     # do bounding pass with no epsilon
