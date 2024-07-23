@@ -15,6 +15,9 @@ LOGGER = logging.getLogger(__name__)
 FORWARD_BOUNDS = {
     "interval": bounds.interval_bound_propagation.bound_forward_pass,
     "crown": bounds.linear_bound_propagation.bound_forward_pass,
+    "interval+crown": bounds.bound_utils.combine_bounding_methods_elementwise(
+        bounds.interval_bound_propagation.bound_forward_pass, bounds.linear_bound_propagation.bound_forward_pass
+    ),
     "miqp": lambda *args: bounds.optimization_bounds.bound_forward_pass(
         *args, relax_binaries=False, relax_bilinear=False
     ),
