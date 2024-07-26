@@ -11,10 +11,16 @@ LOGGER = logging.getLogger(__name__)
 
 
 def propagate_affine(
-    x_l: torch.Tensor, x_u: torch.Tensor, W_l: torch.Tensor, W_u: torch.Tensor, b_l: torch.Tensor, b_u: torch.Tensor
+    x_l: torch.Tensor,
+    x_u: torch.Tensor,
+    W_l: torch.Tensor,
+    W_u: torch.Tensor,
+    b_l: torch.Tensor,
+    b_u: torch.Tensor,
+    interval_matmul: str = "rump",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Compute an interval bound on the affine transformation A @ x + b.
+    Compute an interval bound on the affine transformation A @ x + b using Rump's algorithm.
 
     Args:
         x_l (torch.Tensor): Lower bound of the input tensor x.
@@ -23,17 +29,49 @@ def propagate_affine(
         W_u (torch.Tensor): Upper bound of the weight matrix A.
         b_l (torch.Tensor): Lower bound of the bias vector b.
         b_u (torch.Tensor): Upper bound of the bias vector b.
+        interval_matmul (str): Method to use for interval matmul, one of ["rump", "exact", "nguyen"].
 
     Returns:
         e_l (torch.Tensor): Lower bound of the output tensor.
         e_u (torch.Tensor): Upper bound of the output tensor.
     """
     validate_interval(b_l, b_u)
-    h_l, h_u = propagate_matmul(W_l, W_u, x_l, x_u)
+    h_l, h_u = propagate_matmul(W_l, W_u, x_l, x_u, interval_matmul)
     return h_l + b_l, h_u + b_u
 
 
 def propagate_matmul(
+    A_l: torch.Tensor, A_u: torch.Tensor, B_l: torch.Tensor, B_u: torch.Tensor, interval_matmul: str = "rump"
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute an interval bound on the matrix multiplication A @ B using the specified method.
+
+    Args:
+        A_l (torch.Tensor): Lower bound of the matrix A.
+        A_u (torch.Tensor): Upper bound of the matrix A.
+        B_l (torch.Tensor): Lower bound of the matrix B.
+        B_u (torch.Tensor): Upper bound of the matrix B.
+        interval_matmul (str): Method to use for interval matmul, one of ["rump", "exact", "nguyen"].
+
+    Returns:
+        H_l (torch.Tensor): Lower bound of the output tensor.
+        H_u (torch.Tensor): Upper bound of the output tensor.
+    """
+    validate_interval(A_l, A_u)
+    validate_interval(B_l, B_u)
+    if interval_matmul == "rump":
+        H_l, H_u = propagate_matmul_rump(A_l, A_u, B_l, B_u)
+    elif interval_matmul == "exact":
+        H_l, H_u = propagate_matmul_exact(A_l, A_u, B_l, B_u)
+    elif interval_matmul == "nguyen":
+        H_l, H_u = propagate_matmul_nguyen(A_l, A_u, B_l, B_u)
+    else:
+        raise ValueError(f"Unknown interval matmul method: {interval_matmul}")
+    validate_interval(H_l, H_u)
+    return H_l, H_u
+
+
+def propagate_matmul_rump(
     A_l: torch.Tensor, A_u: torch.Tensor, B_l: torch.Tensor, B_u: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
@@ -49,8 +87,6 @@ def propagate_matmul(
         H_l (torch.Tensor): Lower bound of the output tensor.
         H_u (torch.Tensor): Upper bound of the output tensor.
     """
-    validate_interval(A_l, A_u)
-    validate_interval(B_l, B_u)
     A_mu = (A_u + A_l) / 2
     A_r = (A_u - A_l) / 2
     B_mu = (B_u + B_l) / 2
@@ -60,8 +96,77 @@ def propagate_matmul(
     H_r = torch.abs(A_mu) @ B_r + A_r @ torch.abs(B_mu) + A_r @ B_r
     H_l = H_mu - H_r
     H_u = H_mu + H_r
+    return H_l, H_u
 
-    validate_interval(H_l, H_u)
+
+def propagate_matmul_nguyen(
+    A_l: torch.Tensor, A_u: torch.Tensor, B_l: torch.Tensor, B_u: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute an interval bound on the matrix multiplication A @ B using Nguyen's algorithm. The algorithm performs
+    a decomposition of A into two intervals A^0 and A^* such that
+    - A^0 is a zero-centered interval
+    - A^* is an interval that does not contain zero
+
+    Args:
+        A_l (torch.Tensor): Lower bound of the matrix A.
+        A_u (torch.Tensor): Upper bound of the matrix A.
+        B_l (torch.Tensor): Lower bound of the matrix B.
+        B_u (torch.Tensor): Upper bound of the matrix B.
+
+    Returns:
+        H_l (torch.Tensor): Lower bound of the output tensor.
+        H_u (torch.Tensor): Upper bound of the output tensor.
+    """
+    # A0 is an interval centered at zero
+    A0_l, A0_u = torch.zeros_like(A_l), torch.zeros_like(A_l)
+    # Astar is an interval not containing zero.
+    # we further split Astar into its negative and positive parts
+    Astar_neg_l, Astar_neg_u = torch.zeros_like(A_l), torch.zeros_like(A_l)
+    Astar_pos_l, Astar_pos_u = torch.zeros_like(A_l), torch.zeros_like(A_l)
+
+    # case where A_l * A_u >= 0
+    condition = (A_l >= 0) & (A_u >= 0)
+    Astar_pos_l = torch.where(condition, A_l, Astar_pos_l)
+    Astar_pos_u = torch.where(condition, A_u, Astar_pos_u)
+    condition = (A_l <= 0) & (A_u <= 0)
+    Astar_neg_l = torch.where(condition, A_l, Astar_neg_l)
+    Astar_neg_u = torch.where(condition, A_u, Astar_neg_u)
+
+    # case where A_l < 0 < |A_l| <= A_u
+    condition = (A_l < 0) & (torch.abs(A_l) <= A_u)
+    A0_l = torch.where(condition, A_l, A0_l)
+    A0_u = torch.where(condition, -A_l, A0_u)
+    Astar_pos_u = torch.where(condition, A_l + A_u, Astar_pos_u)
+
+    # case where A_l < 0 < A_u < |A_l|
+    condition = (A_l < 0) & (0 < A_u) & (A_u < torch.abs(A_l))
+    A0_l = torch.where(condition, -A_u, A0_l)
+    A0_u = torch.where(condition, A_u, A0_u)
+    Astar_neg_l = torch.where(condition, A_l + A_u, Astar_neg_l)
+
+    assert torch.allclose(A_l, A0_l + Astar_pos_l + Astar_neg_l)
+    assert torch.allclose(A_u, A0_u + Astar_pos_u + Astar_neg_u)
+    assert torch.allclose(A0_l + A0_u, torch.zeros_like(A0_l))
+    assert torch.all((Astar_neg_l <= 0) & (Astar_neg_u <= 0))
+    assert torch.all((Astar_pos_l >= 0) & (Astar_pos_u >= 0))
+
+    # compute the interval A0 @ B
+    H_u = A0_u @ torch.maximum(torch.abs(B_l), torch.abs(B_u))
+    H_l = -H_u
+
+    # split the matrix B into its negative and positive parts
+    B_neg_l, B_neg_u = torch.clamp(B_l, max=0), torch.clamp(B_u, max=0)
+    B_pos_l, B_pos_u = torch.clamp(B_l, min=0), torch.clamp(B_u, min=0)
+
+    # compute the interval Astar_pos @ B
+    H_l += Astar_pos_l @ B_pos_l + Astar_pos_u @ B_neg_l
+    H_u += Astar_pos_u @ B_pos_u + Astar_pos_l @ B_neg_u
+
+    # compute the interval Astar_neg @ B
+    H_l += Astar_neg_l @ B_pos_u + Astar_neg_u @ B_neg_u
+    H_u += Astar_neg_u @ B_pos_l + Astar_neg_l @ B_neg_l
+
     return H_l, H_u
 
 
@@ -81,10 +186,7 @@ def propagate_matmul_exact(
         H_l (torch.Tensor): Lower bound of the output tensor.
         H_u (torch.Tensor): Upper bound of the output tensor.
     """
-    validate_interval(A_l, A_u)
-    validate_interval(B_l, B_u)
     E_l, E_u = propagate_elementwise(A_l.unsqueeze(-1), A_u.unsqueeze(-1), B_l.unsqueeze(-3), B_u.unsqueeze(-3))
-    validate_interval(E_l, E_u)
     return E_l.sum(-2), E_u.sum(-2)
 
 
