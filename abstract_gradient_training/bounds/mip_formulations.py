@@ -7,7 +7,7 @@ import gurobipy as gp
 import numpy as np
 
 
-def add_relu_constr_bigm(
+def add_relu_bigm(
     model: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax: bool = False
 ) -> Tuple[gp.MVar, Optional[gp.MVar]]:
     """
@@ -20,6 +20,7 @@ def add_relu_constr_bigm(
         x (gp.MVar): [n x 1] Gurobi MVar for the input variable.
         l (np.ndarray): [n x 1] Array of lower bounds for the input variable x.
         u (np.ndarray): [n x 1] Array of upper bounds for the input variable x.
+
     Returns:
         y (gp.MVar): [n x 1] MVar for the output of the ReLU
         z (Optional[gp.MVar]): MVar for the activation set of the ReLU
@@ -51,7 +52,7 @@ def add_relu_constr_bigm(
     return y, z
 
 
-def add_bilinear_term(
+def add_bilinear_matmul(
     model: gp.Model,
     W: gp.MVar,
     h: gp.MVar,
@@ -100,3 +101,29 @@ def add_bilinear_term(
     # sum along the rows to obtain the matrix - vector product
     model.addConstr(s == S.sum(0)[:, None])
     return s
+
+
+def add_heaviside(m: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax_binaries: bool):
+    """
+    Add the term z = Heaviside(x) to the gurobi model. The Heaviside function is defined as
+        z = 1 if x > 0
+        z = 0 if x <= 0
+    If relax_binaries is True, then we'll use the linear relaxation.
+
+    Args:
+        model (gp.Model): Gurobi model to add the constraints to.
+        x (gp.MVar): [n x 1] Gurobi MVar for the input variable.
+        l (np.ndarray): [n x 1] Array of lower bounds for the input variable x.
+        u (np.ndarray): [n x 1] Array of upper bounds for the input variable x.
+        relax_binaries (bool): If True, use the linear relaxation of the Heaviside function.
+
+    Returns:
+        z (gp.MVar): [n x 1] MVar for the output of the Heaviside function.
+    """
+    vtype = gp.GRB.CONTINUOUS if relax_binaries else gp.GRB.BINARY
+    z = m.addMVar(shape=x.shape, lb=0, ub=1, vtype=vtype)
+    m.addConstr(x <= z * u)
+    m.addConstr(x >= (1 - z) * l)
+    m.addConstrs(z[i] == 1 for i in range(x.shape[0]) if l[i] > 0)
+    m.addConstrs(z[i] == 0 for i in range(x.shape[0]) if u[i] <= 0)
+    return z

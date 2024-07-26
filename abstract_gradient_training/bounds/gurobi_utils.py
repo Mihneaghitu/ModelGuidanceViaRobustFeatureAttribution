@@ -41,7 +41,7 @@ def bound_objective_vector(model: gp.Model, objective: gp.MVar | gp.MLinExpr) ->
     return L, U
 
 
-def init_gurobi_model(name: str, quiet: bool = True, logfile: str = "") -> gp.Model:
+def init_gurobi_model(name: str, quiet: bool = True) -> gp.Model:
     """
     Initialise a blank Gurobi model. Setting quiet = True will suppress all output from the model.
     """
@@ -49,7 +49,6 @@ def init_gurobi_model(name: str, quiet: bool = True, logfile: str = "") -> gp.Mo
     env.setParam("LogToConsole", 0)
     env.start()
     m = gp.Model(name=name, env=env) if quiet else gp.Model(name=name)
-    m.setParam("LogFile", logfile)
     return m
 
 
