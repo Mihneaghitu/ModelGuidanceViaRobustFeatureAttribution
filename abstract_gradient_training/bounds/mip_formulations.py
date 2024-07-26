@@ -103,6 +103,54 @@ def add_bilinear_matmul(
     return s
 
 
+def add_bilinear_elementwise(
+    model: gp.Model,
+    a: gp.MVar,
+    b: gp.MVar,
+    a_l: np.ndarray,
+    a_u: np.ndarray,
+    b_l: np.ndarray,
+    b_u: np.ndarray,
+    relax: bool = False,
+) -> gp.MVar:
+    """
+    Add the bilinear term s = a * b to the gurobi model. If relax is True, then the bilinear term is replaced with its
+    linear envelope.
+
+    Args:
+        model (gp.Model): Gurobi model
+        a (gp.MVar): [n x 1] Gurobi MVar for the input vector
+        b (gp.MVar): [n x 1] Gurobi MVar for the input vector
+        a_l (np.ndarray): [n x 1] Lower bounds on the vector a
+        a_u (np.ndarray): [n x 1] Upper bounds on the vector a
+        b_l (np.ndarray): [n x 1] Lower bounds on the vector b
+        b_u (np.ndarray): [n x 1] Upper bounds on the vector b
+        relax (bool, optional): If True, use the linear envelope of the bilinear term. Defaults to False.
+
+    Returns:
+        gp.MVar: [m x 1] MVar representing the bilinear variable s.
+    """
+    # validate shapes of input
+    assert a.shape == a_l.shape == a_u.shape
+    assert b.shape == b_l.shape == b_u.shape
+    assert a.shape == b.shape
+
+    # use bilinear term
+    if not relax:
+        return a * b
+
+    # use linear envelope
+    s = model.addMVar(a.shape, lb=-np.inf)
+    # lower bounds
+    model.addConstr(s >= a_l * b + a * b_l - a_l * b_l)
+    model.addConstr(s >= a_u * b + a * b_u - a_u * b_u)
+    # upper bounds
+    model.addConstr(s <= a_u * b + a * b_l - a_u * b_l)
+    model.addConstr(s <= a * b_u + a_l * b - a_l * b_u)
+
+    return s
+
+
 def add_heaviside(m: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax_binaries: bool):
     """
     Add the term z = Heaviside(x) to the gurobi model. The Heaviside function is defined as
@@ -124,6 +172,6 @@ def add_heaviside(m: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax_b
     z = m.addMVar(shape=x.shape, lb=0, ub=1, vtype=vtype)
     m.addConstr(x <= z * u)
     m.addConstr(x >= (1 - z) * l)
-    m.addConstrs(z[i] == 1 for i in range(x.shape[0]) if l[i] > 0)
-    m.addConstrs(z[i] == 0 for i in range(x.shape[0]) if u[i] <= 0)
+    m.addConstr(np.heaviside(l, 0) <= z)
+    m.addConstr(np.heaviside(u, 0) >= z)
     return z

@@ -314,6 +314,7 @@ def _bound_backward_pass_helper(
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
         gurobi_kwargs (dict): Parameters to pass to the gurobi model.
+
     Returns:
         grads_l (list[np.ndarray]): list of lower bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
         grads_u (list[np.ndarray]): list of upper bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
@@ -327,9 +328,6 @@ def _bound_backward_pass_helper(
     if gurobi_kwargs is not None:
         for key, value in gurobi_kwargs.items():
             model.setParam(key, value)
-
-    if relax_bilinear:
-        raise NotImplementedError("Relaxing bilinear constraints is not supported for the backward pass.")
 
     # compute the gradient of the loss with respect to the weights and biases of the last layer
     dW_min, dW_max = numpy_to_torch_wrapper(
@@ -347,15 +345,24 @@ def _bound_backward_pass_helper(
         # initialise variable for the weight matrix and current partial derivative
         dL = model.addMVar(shape=dL_min.shape, lb=dL_min, ub=dL_max)
         W = model.addMVar(shape=W_l[i].shape, lb=W_l[i], ub=W_u[i])
+        # add the bilinear term for s = W.T @ dL
+        s = mip_formulations.add_bilinear_matmul(model, W.T, dL, W_l[i].T, W_u[i].T, dL_min, dL_max, relax_bilinear)
         # compute bounds on the next partial derivative
-        dL_dz_min, dL_dz_max = gurobi_utils.bound_objective_vector(model, W.T @ dL)
+        dL_dz_min, dL_dz_max = gurobi_utils.bound_objective_vector(model, s)
         # initialise variables for the next partial derivative, activation and heaviside of the activation
         dL_dz = model.addMVar(shape=(W_l[i].shape[1], 1), lb=dL_dz_min, ub=dL_dz_max)
         act = model.addMVar(shape=activations_l[i].shape, lb=activations_l[i], ub=activations_u[i])
         # note that we define the heaviside function using the pre-activation bounds
-        heavi = mip_formulations.add_heaviside(model, act, activations_l[i], activations_u[i], relax_binaries)
+        heaviside = mip_formulations.add_heaviside(model, act, activations_l[i], activations_u[i], relax_binaries)
+        # compute bounds on the heaviside term
+        heaviside_l = np.heaviside(activations_l[i], 0)
+        heaviside_u = np.heaviside(activations_u[i], 0)
+        # add the bilinear term for dL_dz * heavi
+        s = mip_formulations.add_bilinear_elementwise(
+            model, dL_dz, heaviside, dL_dz_min, dL_dz_max, heaviside_l, heaviside_u, relax_bilinear
+        )
         # compute bounds on the next partial derivvative
-        dL_min, dL_max = gurobi_utils.bound_objective_vector(model, dL_dz * heavi)
+        dL_min, dL_max = gurobi_utils.bound_objective_vector(model, s)
         # compute bounds on the partial derivative wrt the weights using ibp
         dW_min, dW_max = numpy_to_torch_wrapper(
             interval_arithmetic.propagate_matmul,
