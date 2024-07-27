@@ -200,6 +200,9 @@ def bound_backward_pass(
     activations_u: list[torch.Tensor],
     relax_binaries: bool = False,
     relax_bilinear: bool = False,
+    relax_loss: bool = True,
+    loss_fn: str = "cross_entropy",
+    labels: Optional[torch.Tensor] = None,
     gurobi_kwargs: Optional[dict] = None,
     **kwargs,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
@@ -218,6 +221,9 @@ def bound_backward_pass(
                                             the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
+        relax_loss (bool): Whether to relax the loss function to interval propagation.
+        loss_fn (str): The loss function to use if relax_loss is False.
+        labels (Optional[torch.Tensor]): Tensor of labels or targets for the batch, needed if relax_loss is False.
         gurobi_kwargs (Optional[dict]): Parameters to pass to the gurobi model.
 
     Returns:
@@ -248,6 +254,7 @@ def bound_backward_pass(
     param_u = [param.detach().cpu().numpy() for param in param_u]
     activations_l = [act.detach().cpu().numpy() for act in activations_l]
     activations_u = [act.detach().cpu().numpy() for act in activations_u]
+    labels = labels.detach().cpu().numpy().ravel() if labels is not None else None
 
     # get weight matrix bounds
     W_l, W_u = param_l[::2], param_u[::2]
@@ -262,10 +269,11 @@ def bound_backward_pass(
             LOGGER.debug("Solved %s backward pass bounds for %d/%d instances", method, i, batchsize)
         act_l = [act[i] for act in activations_l]
         act_u = [act[i] for act in activations_u]
+        label = labels[i] if labels is not None else None
         d_l = dL_min[i]
         d_u = dL_max[i]
         grads_l, grads_u, model = _bound_backward_pass_helper(
-            d_l, d_u, W_l, W_u, act_l, act_u, relax_binaries, relax_bilinear, gurobi_kwargs
+            d_l, d_u, W_l, W_u, act_l, act_u, relax_binaries, relax_bilinear, relax_loss, loss_fn, label, gurobi_kwargs
         )
 
         lower_bounds.append(grads_l)
@@ -296,6 +304,9 @@ def _bound_backward_pass_helper(
     activations_u: list[np.ndarray],
     relax_binaries: bool,
     relax_bilinear: bool,
+    relax_loss: bool,
+    loss_fn: str,
+    label: Optional[np.ndarray],
     gurobi_kwargs: dict,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """
@@ -313,6 +324,9 @@ def _bound_backward_pass_helper(
                                             the input and the logits. Each tensor has shape [n_i x 1].
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
+        relax_loss (bool): Whether to relax the loss function to interval propagation.
+        loss_fn (str): The loss function to use if relax_loss is False.
+        label (Optional[np.ndarray]): The label or target for the input, required if relax_loss is False.
         gurobi_kwargs (dict): Parameters to pass to the gurobi model.
 
     Returns:
@@ -329,6 +343,13 @@ def _bound_backward_pass_helper(
         for key, value in gurobi_kwargs.items():
             model.setParam(key, value)
 
+    # add first partial derivative of the loss wrt the logits to the model
+    if relax_loss:
+        dL = model.addMVar(shape=dL_min.shape, lb=dL_min, ub=dL_max)
+    else:
+        act = model.addMVar(shape=activations_l[-1].shape, lb=activations_l[-1], ub=activations_u[-1])
+        dL = mip_formulations.add_loss_gradient(model, act, label, loss_fn)
+
     # compute the gradient of the loss with respect to the weights and biases of the last layer
     dW_min, dW_max = numpy_to_torch_wrapper(
         interval_arithmetic.propagate_matmul,
@@ -342,8 +363,7 @@ def _bound_backward_pass_helper(
 
     # compute gradients for each layer
     for i in range(len(W_l) - 1, 0, -1):
-        # initialise variable for the weight matrix and current partial derivative
-        dL = model.addMVar(shape=dL_min.shape, lb=dL_min, ub=dL_max)
+        # initialise variable for the weight matrix
         W = model.addMVar(shape=W_l[i].shape, lb=W_l[i], ub=W_u[i])
         # add the bilinear term for s = W.T @ dL
         s = mip_formulations.add_bilinear_matmul(model, W.T, dL, W_l[i].T, W_u[i].T, dL_min, dL_max, relax_bilinear)
@@ -372,10 +392,13 @@ def _bound_backward_pass_helper(
             np.maximum(activations_u[i - 1].T, 0) if i - 1 > 0 else activations_u[i - 1].T,
             interval_matmul="exact",
         )
+        # store the results
         grads_l.append(dL_min)
         grads_l.append(dW_min)
         grads_u.append(dL_max)
         grads_u.append(dW_max)
+        # add the next partial derivative variable
+        dL = model.addMVar(shape=dL_min.shape, lb=dL_min, ub=dL_max)
 
     grads_l.reverse()
     grads_u.reverse()

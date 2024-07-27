@@ -175,3 +175,51 @@ def add_heaviside(m: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax_b
     m.addConstr(np.heaviside(l, 0) <= z)
     m.addConstr(np.heaviside(u, 0) >= z)
     return z
+
+
+def add_softmax(m: gp.Model, x: gp.MVar) -> gp.MVar:
+    """
+    Add the constraints defining the softmax function y = softmax(x) to the gurobi model.
+
+    Args:
+        m (gp.Model): Gurobi model
+        x (gp.MVar): Input MVar to the softmax
+    """
+    # add intermediate exp and output variable
+    e = m.addMVar(x.shape, lb=0)
+    y = m.addMVar(x.shape, lb=0, ub=1)
+
+    # add exponential constraints
+    for xi, ei in zip(x, e):
+        m.addGenConstrExp(xi, ei)
+
+    # add softmax constraint
+    m.addConstr(e.sum() * y == e)
+
+    return y
+
+
+def add_loss_gradient(m: gp.Model, logits: gp.MVar, label: np.ndarray, loss: str) -> gp.MVar:
+    """
+    Add the gradient of the loss function with respect to the logits to the gurobi model.
+
+    Args:
+        m (gp.Model): Gurobi model to add the constraints to.
+        logits (gp.MVar): [n x 1] Gurobi MVar for the logits.
+        label (np.ndarray): [1] True label
+        loss (str): Name of the loss function.
+
+    Returns:
+        dL (gp.MVar): [n x 1] MVar for the gradient of the loss function with respect to the logits.
+    """
+
+    if loss == "cross_entropy":
+        # get one-hot encoding of labels
+        y_t = np.zeros(logits.shape)
+        y_t[label] = 1
+        y = add_softmax(m, logits)
+        loss = y - y_t
+    else:
+        raise NotImplementedError(f"Loss fn {loss} not implemented.")
+
+    return loss
