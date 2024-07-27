@@ -264,12 +264,12 @@ def bound_backward_pass(
         label = labels[i] if labels is not None else None
         d_l = dL_min[i]
         d_u = dL_max[i]
-        grads_l, grads_u, model = _bound_backward_pass_helper(
+        g_l, g_u, model = _bound_backward_pass_helper(
             d_l, d_u, W_l, W_u, act_l, act_u, relax_binaries, relax_bilinear, relax_loss, loss_fn, label, gurobi_kwargs
         )
 
-        lower_bounds.append(grads_l)
-        upper_bounds.append(grads_u)
+        lower_bounds.append(g_l)
+        upper_bounds.append(g_u)
 
     # log the timing statistics and final model information
     avg_time = (time.time() - start) / batchsize
@@ -277,14 +277,14 @@ def bound_backward_pass(
     LOGGER.debug(gurobi_utils.get_gurobi_model_stats(model))
 
     # concatenate the results
-    activations_l = [np.stack([act[i] for act in lower_bounds], axis=0) for i in range(len(lower_bounds[0]))]
-    activations_u = [np.stack([act[i] for act in upper_bounds], axis=0) for i in range(len(upper_bounds[0]))]
+    grads_l = [np.stack([g[i] for g in lower_bounds], axis=0) for i in range(len(lower_bounds[0]))]
+    grads_u = [np.stack([g[i] for g in upper_bounds], axis=0) for i in range(len(upper_bounds[0]))]
 
     # convert the results back to torch tensors
-    activations_l = [torch.tensor(act, device=device) for act in activations_l]
-    activations_u = [torch.tensor(act, device=device) for act in activations_u]
+    grads_l = [torch.tensor(g, device=device) for g in grads_l]
+    grads_u = [torch.tensor(g, device=device) for g in grads_u]
 
-    return activations_l, activations_u
+    return grads_l, grads_u
 
 
 def _bound_backward_pass_helper(
