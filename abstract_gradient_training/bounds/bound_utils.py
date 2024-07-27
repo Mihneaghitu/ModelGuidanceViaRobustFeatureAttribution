@@ -106,3 +106,11 @@ def combine_bounding_methods_elementwise(method_1: Callable, method_2: Callable)
         return l, u
 
     return combined_method
+
+
+def numpy_to_torch_wrapper(fn, *args, **kwargs):
+    """
+    Wrapper function to convert numpy arrays to torch tensors before calling the function.
+    """
+    ret = fn(*[torch.from_numpy(arg) for arg in args], **kwargs)
+    return tuple(r.detach().cpu().numpy() for r in ret)

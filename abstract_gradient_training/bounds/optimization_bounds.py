@@ -24,8 +24,10 @@ def bound_forward_pass(
     param_u: list[torch.Tensor],
     x0_l: torch.Tensor,
     x0_u: torch.Tensor,
+    *,
     relax_binaries: bool = False,
     relax_bilinear: bool = False,
+    optimize_intermediate_bounds: bool = True,
     gurobi_kwargs: Optional[dict] = None,
     **kwargs,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
@@ -45,6 +47,8 @@ def bound_forward_pass(
         x0_u (torch.Tensor): [batchsize x input_dim x 1] Upper bound on the input to the network.
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
+        optimize_intermediate_bounds (bool): Whether to solve an optimization problem for each intermediate activation
+                                             or to use IBP bounds.
         gurobi_kwargs (Optional[dict]): Parameters to pass to the gurobi model.
 
     Returns:
@@ -84,7 +88,7 @@ def bound_forward_pass(
         x_l = x0_l[i]
         x_u = x0_u[i]
         act_l, act_u, model = _bound_forward_pass_helper(
-            param_l, param_u, x_l, x_u, relax_binaries, relax_bilinear, gurobi_kwargs
+            param_l, param_u, x_l, x_u, relax_binaries, relax_bilinear, optimize_intermediate_bounds, gurobi_kwargs
         )
         lower_bounds.append(act_l)
         upper_bounds.append(act_u)
@@ -112,6 +116,7 @@ def _bound_forward_pass_helper(
     x0_u: np.ndarray,
     relax_binaries: bool,
     relax_bilinear: bool,
+    optimize_intermediate_bounds: bool,
     gurobi_kwargs: dict,
 ) -> tuple[np.ndarray, np.ndarray, gp.Model]:
     """
@@ -124,6 +129,8 @@ def _bound_forward_pass_helper(
         x0_u (np.ndarray): [input_dim x 1] Upper bound on a single input to the network.
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
+        optimize_intermedaite_bounds (bool): Whether to solve an optimization problem for each intermediate activation
+                                             or to use IBP bounds.
         gurobi_kwargs (dict): Parameters to pass to the gurobi model.
 
     Returns:
@@ -164,11 +171,13 @@ def _bound_forward_pass_helper(
         s = mip_formulations.add_bilinear_matmul(model, W, h, W_l, W_u, h_l, h_u, relax_bilinear)
 
         # first compute the pre-activation bounds for this layer using IBP
-        h_l, h_u = numpy_to_torch_wrapper(interval_arithmetic.propagate_matmul_exact, W_l, W_u, h_l, h_u)
+        h_l, h_u = bound_utils.numpy_to_torch_wrapper(interval_arithmetic.propagate_matmul_exact, W_l, W_u, h_l, h_u)
         h_l, h_u = h_l + b_l, h_u + b_u
 
-        # if i == 0, the best we can do is ibp. otherwise, solve the min/max optimization problem for each neuron
-        if i > 0:
+        # if i == 0, the best we can do is ibp.
+        # if i == n_layers - 1, we are at the last layer and optimize the logit bounds
+        # otherwise, only optimize the bounds for intermediate activations if the flag is set.
+        if (i > 0 and optimize_intermediate_bounds) or i == n_layers - 1:
             h_l_optimized, h_u_optimized = gurobi_utils.bound_objective_vector(model, s + b)
             if np.isinf(h_l_optimized).any() or np.isinf(h_u_optimized).any():
                 LOGGER.debug(
@@ -198,6 +207,7 @@ def bound_backward_pass(
     param_u: list[torch.Tensor],
     activations_l: list[torch.Tensor],
     activations_u: list[torch.Tensor],
+    *,
     relax_binaries: bool = False,
     relax_bilinear: bool = False,
     relax_loss: bool = True,
@@ -246,7 +256,7 @@ def bound_backward_pass(
     param_u = [param.detach().cpu().numpy() for param in param_u]
     activations_l = [act.detach().cpu().numpy() for act in activations_l]
     activations_u = [act.detach().cpu().numpy() for act in activations_u]
-    labels = labels.detach().cpu().numpy().ravel() if labels is not None else None
+    labels = labels.detach().cpu().numpy().squeeze() if labels is not None else None
 
     # get weight matrix bounds
     W_l, W_u = param_l[::2], param_u[::2]
@@ -342,7 +352,7 @@ def _bound_backward_pass_helper(
         dL = mip_formulations.add_loss_gradient(model, act, label, loss_fn)
 
     # compute the gradient of the loss with respect to the weights and biases of the last layer
-    dW_min, dW_max = numpy_to_torch_wrapper(
+    dW_min, dW_max = bound_utils.numpy_to_torch_wrapper(
         interval_arithmetic.propagate_matmul,
         dL_min,
         dL_max,
@@ -375,7 +385,7 @@ def _bound_backward_pass_helper(
         # compute bounds on the next partial derivvative
         dL_min, dL_max = gurobi_utils.bound_objective_vector(model, s)
         # compute bounds on the partial derivative wrt the weights using ibp
-        dW_min, dW_max = numpy_to_torch_wrapper(
+        dW_min, dW_max = bound_utils.numpy_to_torch_wrapper(
             interval_arithmetic.propagate_matmul,
             dL_min,
             dL_max,
@@ -394,11 +404,3 @@ def _bound_backward_pass_helper(
     grads_l.reverse()
     grads_u.reverse()
     return grads_l, grads_u, model
-
-
-def numpy_to_torch_wrapper(fn, *args, **kwargs):
-    """
-    Wrapper function to convert numpy arrays to torch tensors before calling the function.
-    """
-    ret = fn(*[torch.from_numpy(arg) for arg in args], **kwargs)
-    return tuple(r.detach().cpu().numpy() for r in ret)
