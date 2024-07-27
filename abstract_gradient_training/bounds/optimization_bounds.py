@@ -237,15 +237,7 @@ def bound_backward_pass(
     )
     device = dL_min.device
 
-    # get the name of the bounding method
-    if relax_binaries and relax_bilinear:
-        method = "LP"
-    elif relax_binaries:
-        method = "QCQP"
-    elif relax_bilinear:
-        method = "MILP"
-    else:
-        method = "MIQP"
+    LOGGER.info("Optimization based bounds for backward pass not recommended, use IBP instead.")
 
     # convert all inputs to numpy arrays
     dL_min = dL_min.detach().cpu().numpy()
@@ -266,7 +258,7 @@ def bound_backward_pass(
     start = time.time()
     for i in range(batchsize):
         if i % (batchsize // 10 + 1) == 0:
-            LOGGER.debug("Solved %s backward pass bounds for %d/%d instances", method, i, batchsize)
+            LOGGER.debug("Solved backward pass bounds for %d/%d instances", i, batchsize)
         act_l = [act[i] for act in activations_l]
         act_u = [act[i] for act in activations_u]
         label = labels[i] if labels is not None else None
@@ -281,7 +273,7 @@ def bound_backward_pass(
 
     # log the timing statistics and final model information
     avg_time = (time.time() - start) / batchsize
-    LOGGER.debug("Solved %s backward pass bounds for %d instances. Avg bound time %.2fs.", method, batchsize, avg_time)
+    LOGGER.debug("Solved backward pass bounds for %d instances. Avg bound time %.2fs.", batchsize, avg_time)
     LOGGER.debug(gurobi_utils.get_gurobi_model_stats(model))
 
     # concatenate the results
@@ -308,7 +300,7 @@ def _bound_backward_pass_helper(
     loss_fn: str,
     label: Optional[np.ndarray],
     gurobi_kwargs: dict,
-) -> tuple[list[np.ndarray], list[np.ndarray]]:
+) -> tuple[list[np.ndarray], list[np.ndarray], gp.Model]:
     """
     Compute backward pass bounds for a single input in the batch by formulating and solving an optimization problem
     for each gradient bound.
@@ -333,7 +325,6 @@ def _bound_backward_pass_helper(
         grads_l (list[np.ndarray]): list of lower bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
         grads_u (list[np.ndarray]): list of upper bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
         model (gp.Model): The gurobi model used to compute the bounds.
-
     """
 
     # define model and set the model parameters
