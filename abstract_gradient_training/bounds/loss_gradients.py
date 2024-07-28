@@ -8,6 +8,43 @@ import torch.nn.functional as F
 from abstract_gradient_training import interval_arithmetic
 
 
+def bound_loss_function_derivative(
+    loss: str,
+    logit_l: torch.Tensor,
+    logit_u: torch.Tensor,
+    logit_n: torch.Tensor,
+    labels: torch.Tensor,
+    **kwargs,
+):
+    """
+    Compute an interval bound for the partial derivative of the loss function with respect to the logits.
+
+    Args:
+        loss (str): Loss function name.
+        logit_l (torch.Tensor): [batchsize x output_dim x 1] Lower bound on the output logits of the network.
+        logit_u (torch.Tensor): [batchsize x output_dim x 1] Upper bound on the output logits of the network.
+        logit_n (torch.Tensor): [batchsize x output_dim x 1] Nominal output logits of the network.
+        labels (torch.Tensor): [batchsize] Tensor of labels for the batch.
+
+    Returns:
+        dl_l (torch.Tensor): lower bound on the partial derivative of the loss with respect to the logits.
+        dl_u (torch.Tensor): upper bound on the partial derivative of the loss with respect to the logits.
+        dl_n (torch.Tensor): nominal value of the partial derivative of the loss with respect to the logits.
+    """
+    if loss == "cross_entropy":
+        return bound_cross_entropy_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
+    elif loss == "binary_cross_entropy":
+        return bound_bce_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
+    elif loss == "max_margin":
+        return bound_max_margin_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
+    elif loss == "mse":
+        return bound_mse_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
+    elif loss == "hinge":
+        return bound_hinge_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
+
+    raise ValueError(f"Loss function {loss} not supported.")
+
+
 def bound_cross_entropy_derivative(
     logit_l: torch.Tensor,
     logit_u: torch.Tensor,

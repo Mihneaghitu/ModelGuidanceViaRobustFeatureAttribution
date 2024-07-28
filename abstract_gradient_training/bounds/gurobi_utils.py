@@ -6,10 +6,10 @@ import gurobipy as gp
 import numpy as np
 
 
-def bound_objective_vector(model: gp.Model, objective: gp.MVar | gp.MLinExpr) -> tuple[np.ndarray, np.ndarray]:
+def bound_objective(model: gp.Model, objective: gp.MVar | gp.MLinExpr) -> tuple[np.ndarray, np.ndarray]:
     """
-    Given a gurobi model and a vector of objectives, compute the minimum and maximum value of the objective over the
-    model.
+    Given a gurobi model and a vector / matrix of objectives, compute the elementwise minimum and maximum value of the
+    objective over the model.
 
     Args:
         model (gp.Model): Gurobi model
@@ -19,25 +19,26 @@ def bound_objective_vector(model: gp.Model, objective: gp.MVar | gp.MLinExpr) ->
         tuple[np.ndarray, np.ndarray]: Tuple of two numpy arrays, the first containing the minimum of each objective
                                        and the second containing the maximum value.
     """
-    N = objective.size
-    L, U = np.zeros((N, 1)), np.zeros((N, 1))
+    N, M = objective.shape
+    L, U = np.zeros((N, M)), np.zeros((N, M))
     for i in range(N):
-        # lower bound
-        model.setObjective(objective[i], gp.GRB.MINIMIZE)
-        model.reset()
-        model.optimize()
-        if model.status == gp.GRB.OPTIMAL:  # if model is solved, store the objective value
-            L[i] = model.objVal
-        else:  # otherwise use the best bound
-            L[i] = getattr(model, "objBound", -np.inf)
-        # upper bound
-        model.setObjective(objective[i], gp.GRB.MAXIMIZE)
-        model.reset()
-        model.optimize()
-        if model.status == gp.GRB.OPTIMAL:
-            U[i] = model.objVal
-        else:
-            U[i] = getattr(model, "objBound", np.inf)
+        for j in range(M):
+            # lower bound
+            model.setObjective(objective[i, j], gp.GRB.MINIMIZE)
+            model.reset()
+            model.optimize()
+            if model.status == gp.GRB.OPTIMAL:  # if model is solved, store the objective value
+                L[i, j] = model.objVal
+            else:  # otherwise use the best bound
+                L[i, j] = getattr(model, "objBound", -np.inf)
+            # upper bound
+            model.setObjective(objective[i, j], gp.GRB.MAXIMIZE)
+            model.reset()
+            model.optimize()
+            if model.status == gp.GRB.OPTIMAL:
+                U[i, j] = model.objVal
+            else:
+                U[i, j] = getattr(model, "objBound", np.inf)
     return L, U
 
 

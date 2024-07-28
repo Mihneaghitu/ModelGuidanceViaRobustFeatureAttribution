@@ -2,6 +2,7 @@
 
 from typing import Callable
 import torch
+import numpy as np
 
 
 def validate_forward_bound_input(
@@ -112,5 +113,6 @@ def numpy_to_torch_wrapper(fn, *args, **kwargs):
     """
     Wrapper function to convert numpy arrays to torch tensors before calling the function.
     """
-    ret = fn(*[torch.from_numpy(arg) for arg in args], **kwargs)
+    args = [torch.from_numpy(a) if isinstance(a, np.ndarray) else a for a in args]
+    ret = fn(*args, **kwargs)
     return tuple(r.detach().cpu().numpy() for r in ret)

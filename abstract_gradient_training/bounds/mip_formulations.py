@@ -8,11 +8,11 @@ import numpy as np
 
 
 def add_relu_bigm(
-    model: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax: bool = False
+    model: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax: bool = False, triangle: bool = False
 ) -> Tuple[gp.MVar, Optional[gp.MVar]]:
     """
     Add the constraints defining the function y = ReLU(x) to the gurobi model.
-    If relax is True, then we'll use the triangle relaxation.
+    If relax is True, then relax the binary variables.
     Returns the MVar for y and optionally the binaries z.
 
     Args:
@@ -37,15 +37,17 @@ def add_relu_bigm(
     model.addConstr(x <= u)
     model.addConstr(x >= l)
 
+    vtype = gp.GRB.CONTINUOUS if relax else gp.GRB.BINARY
+
     # Use either the big-M or the triangle relaxation. Using the triangle relaxation directly is slightly faster than
     # using the big-M relaxation with continuous z variables.
-    if relax:
+    if triangle:
         l = np.minimum(l, 0)
         u = np.maximum(u, 0)
         z = None
         model.addConstr(y <= u * (x - l) / (u - l))
     else:
-        z = model.addMVar(x.shape, vtype=gp.GRB.BINARY)
+        z = model.addMVar(x.shape, vtype=vtype)
         model.addConstr(y <= x - l * (1 - z))
         model.addConstr(y <= u * z)
 
@@ -133,14 +135,13 @@ def add_bilinear_elementwise(
     # validate shapes of input
     assert a.shape == a_l.shape == a_u.shape
     assert b.shape == b_l.shape == b_u.shape
-    assert a.shape == b.shape
 
     # use bilinear term
     if not relax:
         return a * b
 
     # use linear envelope
-    s = model.addMVar(a.shape, lb=-np.inf)
+    s = model.addMVar((a * b).shape, lb=-np.inf)
     # lower bounds
     model.addConstr(s >= a_l * b + a * b_l - a_l * b_l)
     model.addConstr(s >= a_u * b + a * b_u - a_u * b_u)
@@ -177,7 +178,7 @@ def add_heaviside(m: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax_b
     return z
 
 
-def add_softmax(m: gp.Model, x: gp.MVar) -> gp.MVar:
+def add_softmax(m: gp.Model, x: gp.MVar | gp.MLinExpr | gp.MQuadExpr) -> gp.MVar:
     """
     Add the constraints defining the softmax function y = softmax(x) to the gurobi model.
 
@@ -188,6 +189,11 @@ def add_softmax(m: gp.Model, x: gp.MVar) -> gp.MVar:
     # add intermediate exp and output variable
     e = m.addMVar(x.shape, lb=0)
     y = m.addMVar(x.shape, lb=0, ub=1)
+
+    if isinstance(x, gp.MLinExpr) or isinstance(x, gp.MQuadExpr):
+        z = m.addMVar(x.shape, lb=-np.inf)
+        m.addConstr(z == x)
+        x = z
 
     # add exponential constraints
     for xi, ei in zip(x, e):
