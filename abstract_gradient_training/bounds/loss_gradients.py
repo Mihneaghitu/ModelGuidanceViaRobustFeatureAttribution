@@ -76,6 +76,7 @@ def bound_cross_entropy_derivative(
     assert logit_l.dim() == 3, "Logits must be of shape (batch_size, nclasses, 1) for binary cross-entropy loss."
     assert logit_l.shape[-1] == 1
     assert logit_l.shape[-2] > 1, "Cross-entropy loss does not support binary classification, use BCE instead."
+    assert labels.max() <= logit_l.shape[-2], "Label out of range of logit dimension."
     labels = labels.flatten(start_dim=0)  # to allow for labels to be of shape (batch_size,) or (batch_size, 1)
     assert labels.dim() == 1, f"Labels must be of shape (batch_size,) not {labels.shape}"
     # calculate post-softmax output with and without bounds
@@ -127,6 +128,7 @@ def bound_bce_derivative(
         dl_n (torch.Tensor): nominal value of the partial derivative of the loss with respect to the logits.
     """
 
+    assert ((labels == 0) + (labels == 1)).all(), "Labels must be binary for binary cross-entropy loss."
     assert logit_l.dim() == 3, "Logits must be of shape (batch_size, 1, 1) for binary cross-entropy loss."
     assert logit_l.shape[-1] == 1
     assert logit_l.shape[-2] == 1, "Binary cross-entropy loss must have logit size (batch_size, 1, 1)."
@@ -173,6 +175,7 @@ def bound_max_margin_derivative(
     labels = labels.flatten(start_dim=0)
     assert len(logit_l.shape) == 3, "Logits must be of shape (batch_size, 1, 1) for binary cross-entropy loss."
     assert logit_l.shape[-2] > 1, "Max-margin loss does not support binary classification, use BCE instead."
+    assert labels.max() <= logit_l.shape[-2], "Label out of range of logit dimension."
     assert labels.dim() == 1, "Labels must be of shape (batch_size,)."
     assert k_label_poison == 0, "Poisoning is not supported for max-margin loss."
     assert kwargs.get("poison_target", -1) == -1, "Specifying a poison target is not supported for this loss."
@@ -222,6 +225,7 @@ def bound_hinge_derivative(
         dl_n (torch.Tensor): nominal value of the partial derivative of the loss with respect to the logits.
     """
 
+    assert ((labels == 0) + (labels == 1)).all(), "Labels must be binary for binary cross-entropy loss."
     assert logit_l.dim() == 3, "Logits must be of shape (batch_size, 1, 1) for binary loss."
     assert logit_l.shape[-1] == 1
     assert logit_l.shape[-2] == 1, "Hinge loss must have logit size (batch_size, 1, 1)."

@@ -96,7 +96,7 @@ def test_accuracy(
     device = param_n[-1].device
     device = torch.device(device) if device != -1 else torch.device("cpu")
     batch, labels = next(iter(dl_test))
-    batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device)
+    batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device).type(torch.int64)
     assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
     # for finetuning, we may need to transform the input through the earlier layers of the network
     if transform:
@@ -116,6 +116,7 @@ def test_accuracy(
         y_worst = worst_case > 0
         y_best = best_case > 0
     else:  # multi-class classification
+        assert labels.max() < logit_l.shape[-1], "Labels must be in the range of the output logit dimension."
         # calculate best and worst case output from the network given the parameter bounds
         v1 = F.one_hot(labels, num_classes=logit_l.size(1))
         v2 = 1 - v1
@@ -186,6 +187,7 @@ def test_cross_entropy(
         worst_case_loss = F.binary_cross_entropy_with_logits(worst_case_logits, labels.float())
 
     else:  # multi-class classification
+        assert labels.max() < logit_l.shape[-1], "Labels must be in the range of the output logit dimension."
         # calculate best and worst case output from the network given the parameter bounds
         v1 = F.one_hot(labels, num_classes=logit_l.size(1))
         v2 = 1 - v1
