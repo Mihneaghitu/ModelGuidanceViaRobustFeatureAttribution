@@ -15,10 +15,10 @@ LOGGER = logging.getLogger(__name__)
 FORWARD_BOUNDS = {
     "interval": bounds.interval_bound_propagation.bound_forward_pass,
     "interval(exact)": lambda *args: bounds.interval_bound_propagation.bound_forward_pass(
-        *args, interval_matmul="Exact"
+        *args, interval_matmul="exact"
     ),
     "interval(nguyen)": lambda *args: bounds.interval_bound_propagation.bound_forward_pass(
-        *args, interval_matmul="Nguyen"
+        *args, interval_matmul="nguyen"
     ),
     "crown": bounds.linear_bound_propagation.bound_forward_pass,
     "interval+crown": bounds.bound_utils.combine_bounding_methods_elementwise(
@@ -39,10 +39,10 @@ FORWARD_BOUNDS = {
 BACKWARD_BOUNDS = {
     "interval": bounds.interval_bound_propagation.bound_backward_pass,
     "interval(exact)": lambda *args: bounds.interval_bound_propagation.bound_backward_pass(
-        *args, interval_matmul="Exact"
+        *args, interval_matmul="exact"
     ),
     "interval(nguyen)": lambda *args: bounds.interval_bound_propagation.bound_backward_pass(
-        *args, interval_matmul="Nguyen"
+        *args, interval_matmul="nguyen"
     ),
     "crown": bounds.linear_bound_propagation.bound_backward_pass,
     "miqp": lambda *args: bounds.optimization_bounds.bound_backward_pass(
