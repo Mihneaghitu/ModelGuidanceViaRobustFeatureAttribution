@@ -78,6 +78,7 @@ class AGTConfig:
     log_level: str = pydantic.Field(
         "INFO", json_schema_extra={"in_": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]}
     )
+    early_stopping: bool = pydantic.Field(True, description="Whether to use early stopping criterion.")
     # bounding parameters
     forward_bound: str = pydantic.Field("interval", json_schema_extra={"in_": FORWARD_BOUNDS.keys()})
     backward_bound: str = pydantic.Field("interval", json_schema_extra={"in_": BACKWARD_BOUNDS.keys()})

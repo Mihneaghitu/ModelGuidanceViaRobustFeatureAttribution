@@ -55,11 +55,7 @@ def privacy_certified_training(
     dtype = dl_train.dataset[0][0].dtype
     model = model.to(dtype).to(device)  # match the dtype and device of the model and data
     param_n, param_l, param_u = ct_utils.get_parameters(model)
-    n_epochs = config.n_epochs
-    fragsize = config.fragsize
     optimizer = optimizers.SGD(config)
-    loss_bound_fn = config.loss_bound_fn
-    test_loss_fn = config.test_loss_fn
     gamma = config.clip_gamma
     sigma = config.dp_sgd_sigma
     k_private = config.k_private
@@ -76,14 +72,14 @@ def privacy_certified_training(
     LOGGER.debug("Bounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
-    training_iterator = ct_utils.dataloader_wrapper(dl_train, n_epochs)
+    training_iterator = ct_utils.dataloader_wrapper(dl_train, config.n_epochs)
 
     for n, (batch, labels) in enumerate(training_iterator):
         # evaluate the network and log the results
-        network_eval = test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+        network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
         LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # get if we should terminate training early
-        if ct_utils.break_condition(network_eval):
+        if config.early_stopping and ct_utils.break_condition(network_eval):
             return param_l, param_n, param_u
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
@@ -98,15 +94,15 @@ def privacy_certified_training(
         grads_u_bottom_ks = [[] for _ in param_n]  # bottom k upper bound gradients from each fragment
 
         # split the batch into fragments to avoid running out of GPU memory
-        batch_fragments = torch.split(batch, fragsize, dim=0)
-        label_fragments = torch.split(labels, fragsize, dim=0)
+        batch_fragments = torch.split(batch, config.fragsize, dim=0)
+        label_fragments = torch.split(labels, config.fragsize, dim=0)
         for f in range(len(batch_fragments)):  # loop over all batch fragments
             batch_frag = batch_fragments[f].to(device)
             batch_frag = transform(batch_frag, model, 0)[0] if transform else batch_frag
             label_frag = label_fragments[f].to(device)
             activations_n = nominal_pass.nominal_forward_pass(batch_frag, param_n)
             logit_n = activations_n[-1]
-            _, _, dL_n = loss_bound_fn(logit_n, logit_n, logit_n, label_frag)
+            _, _, dL_n = config.loss_bound_fn(logit_n, logit_n, logit_n, label_frag)
             frag_grads_n = nominal_pass.nominal_backward_pass(dL_n, param_n, activations_n)
             frag_grads_l, frag_grads_u = ct_utils.grads_helper(
                 batch_frag, batch_frag, label_frag, param_l, param_u, config

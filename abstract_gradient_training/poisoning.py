@@ -56,12 +56,7 @@ def poison_certified_training(
     model = model.to(dtype).to(device)  # match the dtype and device of the model and data
     param_n, param_l, param_u = ct_utils.get_parameters(model)
     k_poison = max(config.k_poison, config.label_k_poison)
-    epsilon = config.epsilon
-    n_epochs = config.n_epochs
-    fragsize = config.fragsize
     optimizer = optimizers.SGD(config)
-    loss_bound_fn = config.loss_bound_fn
-    test_loss_fn = config.test_loss_fn
 
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
@@ -76,15 +71,15 @@ def poison_certified_training(
     LOGGER.debug("Bounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
-    training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_clean, n_epochs)
+    training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_clean, config.n_epochs)
 
     for n, (batch, labels, batch_clean, labels_clean) in enumerate(training_iterator):
         # evaluate the network
-        network_eval = test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+        network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
         LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
 
         # possibly terminate early
-        if ct_utils.break_condition(network_eval):
+        if config.early_stopping and ct_utils.break_condition(network_eval):
             return param_l, param_n, param_u
 
         # calculate batchsize
@@ -104,14 +99,14 @@ def poison_certified_training(
         grads_diffs_u = [[] for _ in param_n]  # difference of input+weight perturbed and weight perturbed bounds
 
         # process clean data
-        batch_fragments = torch.split(batch_clean, fragsize, dim=0) if dl_clean else []
-        label_fragments = torch.split(labels_clean, fragsize, dim=0) if dl_clean else []
+        batch_fragments = torch.split(batch_clean, config.fragsize, dim=0) if dl_clean else []
+        label_fragments = torch.split(labels_clean, config.fragsize, dim=0) if dl_clean else []
         for batch_frag, label_frag in zip(batch_fragments, label_fragments):
             batch_frag, label_frag = batch_frag.to(device), label_frag.to(device)
             batch_frag = transform(batch_frag, model, 0)[0] if transform else batch_frag
             # nominal pass
             activations_n = nominal_pass.nominal_forward_pass(batch_frag, param_n)
-            _, _, dL_n = loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
+            _, _, dL_n = config.loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
             frag_grads_n = nominal_pass.nominal_backward_pass(dL_n, param_n, activations_n)
             # weight perturbed bounds
             grads_weight_perturb_l, grads_weight_perturb_u = ct_utils.grads_helper(
@@ -122,14 +117,14 @@ def poison_certified_training(
             grads_u = [a + b.sum(dim=0) for a, b in zip(grads_u, grads_weight_perturb_u)]
 
         # process potentially poisoned data
-        batch_fragments = torch.split(batch, fragsize, dim=0)
-        label_fragments = torch.split(labels, fragsize, dim=0)
+        batch_fragments = torch.split(batch, config.fragsize, dim=0)
+        label_fragments = torch.split(labels, config.fragsize, dim=0)
         for batch_frag, label_frag in zip(batch_fragments, label_fragments):
             batch_frag, label_frag = batch_frag.to(device), label_frag.to(device)
             # nominal pass
             batch_frag_n = transform(batch_frag, model, 0)[0] if transform else batch_frag
             activations_n = nominal_pass.nominal_forward_pass(batch_frag_n, param_n)
-            _, _, dL_n = loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
+            _, _, dL_n = config.loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
             frag_grads_n = nominal_pass.nominal_backward_pass(dL_n, param_n, activations_n)
             # weight perturbed bounds
             grads_weight_perturb_l, grads_weight_perturb_u = ct_utils.grads_helper(
@@ -140,9 +135,9 @@ def poison_certified_training(
             grads_u = [a + b.sum(dim=0) for a, b in zip(grads_u, grads_weight_perturb_u)]
             # apply input transformation
             if transform:
-                batch_frag_l, batch_frag_u = transform(batch_frag, model, epsilon)
+                batch_frag_l, batch_frag_u = transform(batch_frag, model, config.epsilon)
             else:
-                batch_frag_l, batch_frag_u = batch_frag - epsilon, batch_frag + epsilon
+                batch_frag_l, batch_frag_u = batch_frag - config.epsilon, batch_frag + config.epsilon
             # input + weight perturbed bounds
             grads_input_weight_perturb_l, grads_input_weight_perturb_u = ct_utils.grads_helper(
                 batch_frag_l, batch_frag_u, label_frag, param_l, param_u, config, True
