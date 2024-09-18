@@ -204,3 +204,67 @@ def test_cross_entropy(
     assert nominal_loss <= worst_case_loss
     assert nominal_loss >= best_case_loss
     return worst_case_loss.item(), nominal_loss.item(), best_case_loss.item()
+
+
+def proportion_certified(
+    param_n: list[torch.Tensor],
+    param_l: list[torch.Tensor],
+    param_u: list[torch.Tensor],
+    batch: torch.Tensor,
+    labels: torch.Tensor,
+    model: Optional[torch.nn.Sequential] = None,
+    transform: Optional[Callable] = None,
+    epsilon: float = 0.0,
+) -> float:
+    """
+    Given bounds on the parameters of a neural network, calculate the proportion of inputs in the test set that have a
+    constant prediction across all parameters in the bounds.
+    If epsilon > 0, the proportion of certified points is certified for the given feature poisoning parameter.
+
+    Args:
+        param_n (list[torch.Tensor]): List of the nominal parameters of the network [W1, b1, ..., Wn, bn].
+        param_l (list[torch.Tensor]): List of the lower bound parameters of the network [W1, b1, ..., Wn, bn].
+        param_u (list[torch.Tensor]): List of the upper bound parameters of the network [W1, b1, ..., Wn, bn].
+        batch (torch.Tensor): Input batch of data (shape [batchsize, ...]).
+        labels (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
+        model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
+        transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
+                                        the provided model.
+        epsilon (float, optional): Feature poisoning parameter.
+
+    Returns:
+        tuple[float, float, float]: worst case, nominal case and best case loss
+    """
+    # get the test batch and send it to the correct device
+    device = param_n[-1].get_device()
+    device = torch.device(device) if device != -1 else torch.device("cpu")
+    batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device).type(torch.int64)
+    assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
+    # for finetuning, we may need to transform the input through the earlier layers of the network
+    if transform:
+        batch_n = transform(batch, model, 0)[0]
+        batch_l, batch_u = transform(batch, model, epsilon)
+    else:
+        batch_n = batch.view(batch.size(0), -1, 1)
+        batch_l, batch_u = batch_n - epsilon, batch_n + epsilon
+    # nominal, lower and upper bounds for the forward pass
+    *_, logit_n = nominal_pass.nominal_forward_pass(batch_n, param_n)
+    (*_, logit_l), (*_, logit_u) = ibp.bound_forward_pass(param_l, param_u, batch_l, batch_u)
+    logit_l, _, logit_u = logit_l.squeeze(), logit_n.squeeze(), logit_u.squeeze()
+    if logit_l.dim() == 1:  # binary classification
+        worst_case_logits = (1 - labels) * logit_u + labels * logit_l
+        worst_case_preds = worst_case_logits > 0
+        best_case_logits = labels * logit_u + (1 - labels) * logit_l
+        best_case_preds = best_case_logits > 0
+    else:  # multi-class classification
+        assert labels.max() < logit_l.shape[-1], "Labels must be in the range of the output logit dimension."
+        # calculate best and worst case output from the network given the parameter bounds
+        v1 = F.one_hot(labels, num_classes=logit_l.size(1))
+        v2 = 1 - v1
+        worst_case_logits = v2 * logit_u + v1 * logit_l
+        best_case_logits = v1 * logit_u + v2 * logit_l
+        # calculate post-softmax output
+        worst_case_preds = torch.nn.Softmax(dim=1)(worst_case_logits).argmax(dim=1)
+        best_case_preds = torch.nn.Softmax(dim=1)(best_case_logits).argmax(dim=1)
+    percent_certified = (worst_case_preds == best_case_preds).float().mean().item()
+    return percent_certified

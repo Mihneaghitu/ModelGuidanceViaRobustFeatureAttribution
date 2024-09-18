@@ -4,8 +4,11 @@ pydantic is a data validation library that uses Python type annotations to valid
 """
 
 import logging
+import json
+import hashlib
 from typing import Dict, Callable
 import pydantic
+import pydantic.json
 
 from abstract_gradient_training import bounds
 from abstract_gradient_training import test_metrics
@@ -104,6 +107,15 @@ class AGTConfig:
             LOGGER.warning("k=0 suffers from numerical instability, consider using dtype double or setting k > 0.")
         if self.fragsize <= k:
             raise ValueError(f"fragsize must be greater than k but got fragsize={self.fragsize} and k={k}")
+
+    def hash(self):
+        """Return a hash of the configuration, used for tracking experiments. Should not be used for dynamic storage of
+        configurations, as this object is mutable."""
+        return hashlib.md5(self.json().encode()).hexdigest()
+
+    def json(self):
+        """Return a JSON representation of the configuration."""
+        return json.dumps(self, sort_keys=True, indent=4, default=pydantic.json.pydantic_encoder)
 
     @pydantic.computed_field
     def forward_bound_fn(self) -> Callable:
