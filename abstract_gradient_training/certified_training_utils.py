@@ -131,6 +131,47 @@ def get_parameters(model: torch.nn.Sequential) -> tuple[list[torch.Tensor], list
     return param_n, param_l, param_u
 
 
+def propagate_clipping(
+    x_l: torch.Tensor, x: torch.Tensor, x_u: torch.Tensor, gamma: float, method: str
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Propagate the input through a clipping operation. This function is used to clip the gradients in the
+    DP-SGD algorithm.
+
+    Args:
+        x_l (torch.Tensor): Lower bound of the input tensor.
+        x_u (torch.Tensor): Upper bound of the input tensor.
+        gamma (float): Clipping parameter.
+        method (str): Clipping method, one of ["clamp", "norm"].
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]: Tuple of the lower, nominal and upper bounds of the clipped
+            input tensor.
+    """
+    if method == "clamp":
+        x_l = torch.clamp(x_l, -gamma, gamma)
+        x = torch.clamp(x, -gamma, gamma)
+        x_u = torch.clamp(x_u, -gamma, gamma)
+    elif method == "norm":
+        interval_arithmetic.validate_interval(x_l, x_u, msg="input")
+        # compute interval over the norm of the input interval
+        norms = x.flatten(1).norm(2, dim=1)
+        norms_l, norms_u = interval_arithmetic.propagate_norm(x_l, x_u, p=2)
+        interval_arithmetic.validate_interval(norms_l, norms_u, msg="norm")
+        # compute an interval over the clipping factor
+        clip_factor = (gamma / (norms + 1e-6)).clamp(max=1.0)
+        clip_factor_l = (gamma / (norms_u + 1e-6)).clamp(max=1.0)
+        clip_factor_u = (gamma / (norms_l + 1e-6)).clamp(max=1.0)
+        interval_arithmetic.validate_interval(clip_factor_l, clip_factor_u, msg="clip factor")
+        # compute an interval over the clipped input
+        x_l, x_u = interval_arithmetic.propagate_elementwise(
+            x_l, x_u, clip_factor_l.view(-1, 1, 1), clip_factor_u.view(-1, 1, 1)
+        )
+        x = x * clip_factor.view(-1, 1, 1)
+        interval_arithmetic.validate_interval(x_l, x_u, msg="clipped input")
+    return x_l, x, x_u
+
+
 def propagate_conv_layers(
     x: torch.Tensor, model: torch.nn.Sequential, epsilon: float
 ) -> tuple[torch.Tensor, torch.Tensor]:

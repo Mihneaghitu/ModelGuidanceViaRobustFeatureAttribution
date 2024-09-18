@@ -215,6 +215,45 @@ def propagate_elementwise(
     return lb, ub
 
 
+def propagate_norm(x_l: torch.Tensor, x_u: torch.Tensor, p: float = 2) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute an interval bound on the Lp norm of the input interval [x_l, x_u].
+    If dim x > 1, then the first dimension is treated as a batch dimension and the norm is computed over the remaining
+    dimensions flattened into a single dimension.
+
+    Args:
+        x_l (torch.Tensor): Lower bound of the input tensor x.
+        x_u (torch.Tensor): Upper bound of the input tensor x.
+        p (float, optional): Order of the norm. Defaults to 2.
+
+    Returns:
+        e_l (torch.Tensor): Lower bound of the output tensor.
+        e_u (torch.Tensor): Upper bound of the output tensor.
+    """
+    validate_interval(x_l, x_u)
+    if x_l.dim() > 2:
+        x_l, x_u = x_l.flatten(start_dim=1), x_u.flatten(start_dim=1)
+
+    if p == 1:
+        # compute interval over abs(x)
+        x_abs_l = torch.minimum(x_l.abs(), x_u.abs()) * ((x_l > 0) | (x_u < 0))
+        x_abs_u = torch.maximum(x_l.abs(), x_u.abs())
+        validate_interval(x_abs_l, x_abs_u)
+        norm_l = x_abs_l.sum(-1)
+        norm_u = x_abs_u.sum(-1)
+    elif p == 2:
+        # compute interval over x^2, then sum and take the sqrt
+        x_square_l = torch.minimum(x_l.abs(), x_u.abs()).square() * ((x_l > 0) | (x_u < 0))
+        x_square_u = torch.maximum(x_l.abs(), x_u.abs()).square()
+        validate_interval(x_square_l, x_square_u)
+        norm_l = x_square_l.sum(-1).sqrt()
+        norm_u = x_square_u.sum(-1).sqrt()
+    else:
+        raise ValueError(f"Norm of order {p} not suppported.")
+    validate_interval(norm_l, norm_u)
+    return norm_l, norm_u
+
+
 def propagate_conv2d(
     x_l: torch.Tensor, x_u: torch.Tensor, W: torch.Tensor, b: torch.Tensor, stride: int = 1, padding: int = 0
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -274,7 +313,7 @@ def propagate_softmax(A_l: torch.Tensor, A_u: torch.Tensor) -> tuple[torch.Tenso
     return y_l, y_u
 
 
-def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor = None) -> None:
+def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor = None, msg: str = "") -> None:
     """
     Validate an arbitrary interval n in [l, u] and log any violations of the bound at a level based on the size of the
     violation.
@@ -283,20 +322,21 @@ def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor = None) 
         l (torch.Tensor): Lower bound of the interval.
         u (torch.Tensor): Upper bound of the interval.
         n (torch.Tensor, optional): Nominal value of the interval. Defaults to None.
+        msg (str, optional): Optional message to log with the bound violation for debugging purposes.
     """
     if n is None:
-        diff = torch.max(l - u)
+        diff = torch.max(l - u).item()
     else:
-        diff = max(torch.max(l - u), torch.max(l - n), torch.max(n - u))
+        diff = max(torch.max(l - u).item(), torch.max(l - n).item(), torch.max(n - u).item())
     # this should be negative if all bounds are satisfied
     if diff <= 0:
         return
     func_name = inspect.currentframe().f_back.f_code.co_name
     if diff > 1e-3:  # a major infraction of the bound
-        LOGGER.error("Violated bound in %s: %s", func_name, diff)
+        LOGGER.error("Violated bound in %s: %.2e (%s)", func_name, diff, msg)
     elif diff > 1e-4:  # a minor infraction of the bound
-        LOGGER.warning("Violated bound in %s: %s", func_name, diff)
+        LOGGER.warning("Violated bound in %s: %.2e (%s)", func_name, diff, msg)
     elif diff > 1e-5:  # a minor infraction of the bound
-        LOGGER.info("Violated bound in %s: %s", func_name, diff)
+        LOGGER.info("Violated bound in %s: %.2e (%s)", func_name, diff, msg)
     elif diff > 0:  # a tiny infraction of the bound
-        LOGGER.debug("Violated bound in %s: %s", func_name, diff)
+        LOGGER.debug("Violated bound in %s: %.2e (%s)", func_name, diff, msg)

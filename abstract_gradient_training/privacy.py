@@ -108,14 +108,15 @@ def privacy_certified_training(
                 batch_frag, batch_frag, label_frag, param_l, param_u, config
             )
 
-            # clip the gradients
-            frag_grads_l = [torch.clamp(g, -gamma, gamma) for g in frag_grads_l]
-            frag_grads_u = [torch.clamp(g, -gamma, gamma) for g in frag_grads_u]
-            frag_grads_n = [torch.clamp(g, -gamma, gamma) for g in frag_grads_n]
-
             # accumulate the results for this batch to save memory
-            grads_n = [a + b.sum(dim=0) for a, b in zip(grads_n, frag_grads_n)]
             for i in range(len(grads_n)):
+                # clip the gradients
+                frag_grads_l[i], frag_grads_n[i], frag_grads_u[i] = ct_utils.propagate_clipping(
+                    frag_grads_l[i], frag_grads_n[i], frag_grads_u[i], gamma, config.clip_method
+                )
+                # accumulate the nominal gradients
+                grads_n[i] += frag_grads_n[i].sum(dim=0)
+                # accumulate the top/bottom s - k gradient bounds
                 size = frag_grads_n[i].size(0)
                 # we are guaranteed to take the bottom s - k from the lower bound, so add the sum to grads_l
                 # the remaining k gradients are stored until all the frags have been processed

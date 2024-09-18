@@ -95,6 +95,7 @@ class AGTConfig:
     # privacy and dp-sgd parameters
     k_private: int = pydantic.Field(0, ge=0)
     clip_gamma: float = pydantic.Field(1e10, gt=0)
+    clip_method: str = pydantic.Field("clamp", json_schema_extra={"in_": ["norm", "clamp"]})
     dp_sgd_sigma: float = pydantic.Field(0, ge=0)
 
     def __post_init__(self):
