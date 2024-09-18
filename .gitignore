@@ -26,3 +26,5 @@ examples/datasets/MNIST/MNIST/raw/train-labels-idx1-ubyte
 examples/datasets/MNIST/MNIST/raw/train-labels-idx1-ubyte.gz
 .tmp
 .results
+.models
+.data

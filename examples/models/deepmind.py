@@ -2,6 +2,7 @@
 
 import torch
 
+
 class DeepMindSmall(torch.nn.Sequential):
     def __init__(self, in_channels, out_dim):
         output = torch.nn.Softmax(dim=-1) if out_dim > 1 else torch.nn.Sigmoid()
@@ -14,6 +15,5 @@ class DeepMindSmall(torch.nn.Sequential):
             torch.nn.Linear(3200, 100),
             torch.nn.ReLU(),
             torch.nn.Linear(100, out_dim),
-            output
+            output,
         )
-        
