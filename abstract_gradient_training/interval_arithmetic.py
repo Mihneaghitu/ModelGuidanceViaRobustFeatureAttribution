@@ -274,16 +274,21 @@ def propagate_softmax(A_l: torch.Tensor, A_u: torch.Tensor) -> tuple[torch.Tenso
     return y_l, y_u
 
 
-def validate_interval(l: torch.Tensor, u: torch.Tensor) -> None:
+def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor = None) -> None:
     """
-    Validate an arbitrary interval [l, u] and log any violations of the bound at a level based on the size of the
+    Validate an arbitrary interval n in [l, u] and log any violations of the bound at a level based on the size of the
     violation.
 
     Args:
         l (torch.Tensor): Lower bound of the interval.
         u (torch.Tensor): Upper bound of the interval.
+        n (torch.Tensor, optional): Nominal value of the interval. Defaults to None.
     """
-    diff = torch.max(l - u)  # this should be negative
+    if n is None:
+        diff = torch.max(l - u)
+    else:
+        diff = max(torch.max(l - u), torch.max(l - n), torch.max(n - u))
+    # this should be negative if all bounds are satisfied
     if diff <= 0:
         return
     func_name = inspect.currentframe().f_back.f_code.co_name

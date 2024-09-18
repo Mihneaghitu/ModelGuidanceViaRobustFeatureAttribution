@@ -152,8 +152,7 @@ def unlearning_certified_training(
         # check bounds and add noise
         for i in range(len(grads_n)):
             if sound:
-                interval_arithmetic.validate_interval(grads_l[i], grads_n[i])
-                interval_arithmetic.validate_interval(grads_n[i], grads_u[i])
+                interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
             else:
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
             grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), noise_level)

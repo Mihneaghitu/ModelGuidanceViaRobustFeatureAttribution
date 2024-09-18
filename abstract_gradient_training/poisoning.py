@@ -157,8 +157,7 @@ def poison_certified_training(
         for i in range(len(grads_n)):
             grads_l[i] += torch.topk(grads_diffs_l[i], k_poison, dim=0, largest=False)[0].sum(dim=0)
             grads_u[i] += torch.topk(grads_diffs_u[i], k_poison, dim=0)[0].sum(dim=0)
-            interval_arithmetic.validate_interval(grads_l[i], grads_n[i])
-            interval_arithmetic.validate_interval(grads_n[i], grads_u[i])
+            interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
 
         # normalise each by the batchsize
         grads_l = [g / batchsize for g in grads_l]

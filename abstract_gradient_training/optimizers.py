@@ -65,8 +65,7 @@ class SGD:
             param_l[i] -= lr * update_u[i]
             param_u[i] -= lr * update_l[i]
             if sound:
-                interval_arithmetic.validate_interval(param_l[i], param_n[i])
-                interval_arithmetic.validate_interval(param_n[i], param_u[i])
+                interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
             else:
                 interval_arithmetic.validate_interval(param_l[i], param_u[i])
         self.epoch += 1
@@ -108,8 +107,7 @@ def l1_update(
             crossing, torch.clamp(param_u[i] - l1_reg, min=l1_reg), param_u[i] - l1_reg * torch.sign(param_u[i])
         )
         if sound:
-            interval_arithmetic.validate_interval(param_l[i], param_u[i])
-            interval_arithmetic.validate_interval(param_n[i], param_u[i])
+            interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
         else:
             interval_arithmetic.validate_interval(param_l[i], param_u[i])
     return param_n, param_l, param_u
@@ -141,8 +139,7 @@ def l2_update(
         param_l[i] = (1 - l2_reg) * param_l[i]
         param_u[i] = (1 - l2_reg) * param_u[i]
         if sound:
-            interval_arithmetic.validate_interval(param_l[i], param_u[i])
-            interval_arithmetic.validate_interval(param_n[i], param_u[i])
+            interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
         else:
             interval_arithmetic.validate_interval(param_l[i], param_u[i])
     return param_n, param_l, param_u

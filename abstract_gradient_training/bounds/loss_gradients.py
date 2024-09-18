@@ -98,8 +98,7 @@ def bound_cross_entropy_derivative(
         dl_l = y_l - y_t_u
         dl_n = y_n - y_t
         dl_u = y_u - 0.0
-    interval_arithmetic.validate_interval(dl_l, dl_n)
-    interval_arithmetic.validate_interval(dl_n, dl_u)
+    interval_arithmetic.validate_interval(dl_l, dl_u, dl_n)
     return dl_l, dl_u, dl_n
 
 
@@ -142,8 +141,7 @@ def bound_bce_derivative(
         dl_l = torch.sigmoid(logit_l) - 1
         dl_n = torch.sigmoid(logit_n) - labels
         dl_u = torch.sigmoid(logit_u) - 0
-    interval_arithmetic.validate_interval(dl_l, dl_n)
-    interval_arithmetic.validate_interval(dl_n, dl_u)
+    interval_arithmetic.validate_interval(dl_l, dl_u, dl_n)
     return dl_l, dl_u, dl_n
 
 
@@ -193,8 +191,7 @@ def bound_max_margin_derivative(
     dl_l[idx, labels] = -dl_u.sum(dim=-2)
     dl_u[idx, labels] = tmp
     dl_n[idx, labels] = -dl_n.sum(dim=-2)
-    interval_arithmetic.validate_interval(dl_l, dl_n)
-    interval_arithmetic.validate_interval(dl_n, dl_u)
+    interval_arithmetic.validate_interval(dl_l, dl_u, dl_n)
     return dl_l, dl_u, dl_n
 
 
@@ -237,8 +234,7 @@ def bound_hinge_derivative(
     dl_l = 1.0 * (labels == 1) - 1.0 * (labels == 0) * (logit_l < 1)
     dl_n = 1.0 * (labels == 1) - 1.0 * (labels == 0) * (logit_n < 1)
     dl_u = 1.0 * (labels == 1) - 1.0 * (labels == 0) * (logit_u < 1)
-    interval_arithmetic.validate_interval(dl_l, dl_n)
-    interval_arithmetic.validate_interval(dl_n, dl_u)
+    interval_arithmetic.validate_interval(dl_l, dl_u, dl_n)
     return dl_l.type(logit_l.dtype), dl_u.type(logit_l.dtype), dl_n.type(logit_l.dtype)
 
 
@@ -277,6 +273,5 @@ def bound_mse_derivative(
     dl_l = 2 * (logit_l - target - label_epsilon)
     dl_n = 2 * (logit_n - target)
     dl_u = 2 * (logit_u - target + label_epsilon)
-    interval_arithmetic.validate_interval(dl_l, dl_n)
-    interval_arithmetic.validate_interval(dl_n, dl_u)
+    interval_arithmetic.validate_interval(dl_l, dl_u, dl_n)
     return dl_l, dl_u, dl_n

@@ -150,8 +150,7 @@ def privacy_certified_training(
         # check bounds and add noise
         for i in range(len(grads_n)):
             if sigma == 0.0:  # sound update
-                interval_arithmetic.validate_interval(grads_l[i], grads_n[i])
-                interval_arithmetic.validate_interval(grads_n[i], grads_u[i])
+                interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
             else:  # unsound update due to noise
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
             grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), sigma * gamma)
