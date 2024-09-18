@@ -207,12 +207,14 @@ def dataloader_wrapper(dl_train: DataLoader, n_epochs: int) -> Iterator[tuple[to
     This includes a check to ensure that each batch is full and ignore any incomplete batches.
     Note that we assume the first batch is full.
     """
+    assert len(dl_train) > 0, "Dataloader is empty!"
     if len(dl_train) == 1:
         LOGGER.warning("Dataloader has only one batch, effective batchsize may be smaller than expected.")
     # batchsize variable will be initialised in the first iteration
     full_batchsize = None
     # loop over epoch
     for n in range(n_epochs):
+        LOGGER.info("Starting epoch %s", n + 1)
         for t, (batch, labels) in enumerate(dl_train):
             # initialise the batchsize variable if this is the first iteration
             if full_batchsize is None:
@@ -220,7 +222,9 @@ def dataloader_wrapper(dl_train: DataLoader, n_epochs: int) -> Iterator[tuple[to
                 LOGGER.debug("Initialising dataloader batchsize to %s", full_batchsize)
             # check the batch is the correct size, otherwise skip it
             if batch.size(0) != full_batchsize:
-                LOGGER.debug("Skipping incomplete batch %s in epoch %s", t, n)
+                LOGGER.debug(
+                    "Skipping batch %s in epoch %s (expected size %s, got %s)", t, n + 1, full_batchsize, batch.size(0)
+                )
                 continue
             # return the batches for this iteration
             yield batch, labels
@@ -235,6 +239,7 @@ def dataloader_pair_wrapper(
     This includes a check to ensure that each batch is full and ignore any incomplete batches.
     Note that we assume the first batch is full.
     """
+    assert len(dl_train) > 0, "Dataloader is empty!"
     # this is the max number of batches, if none are skipped due to being incomplete
     max_batches_per_epoch = len(dl_train) if dl_clean is None else min(len(dl_train), len(dl_clean))
     if max_batches_per_epoch == 1:
@@ -243,6 +248,7 @@ def dataloader_pair_wrapper(
     full_batchsize = None
     # loop over epochs
     for n in range(n_epochs):
+        LOGGER.info("Starting epoch %s", n + 1)
         # handle the case where there is no clean dataloader by returning dummy values
         if dl_clean is None:
             data_iterator = (((b, l), (None, None)) for b, l in dl_train)
@@ -261,7 +267,7 @@ def dataloader_pair_wrapper(
             # check the batch is the correct size, otherwise skip it
             if batch.size(0) != full_batchsize:
                 LOGGER.debug(
-                    "Skipping batch %s in epoch %s (expected batchsize %s, got %s)", t, n, full_batchsize, batch_len
+                    "Skipping batch %s in epoch %s (expected size %s, got %s)", t, n + 1, full_batchsize, batch_len
                 )
                 continue
             # return the batches for this iteration

@@ -51,8 +51,7 @@ def unlearning_certified_training(
 
     # initialise hyperparameters, model, data, optimizer, logging
     device = torch.device(config.device)
-    dtype = dl_train.dataset[0][0].dtype
-    model = model.to(dtype).to(device)  # match the dtype and device of the model and data
+    model = model.to(device)  # match the device of the model and data
     param_n, param_l, param_u = ct_utils.get_parameters(model)
     optimizer = optimizers.SGD(config)
     k_unlearn = config.k_unlearn
@@ -63,14 +62,14 @@ def unlearning_certified_training(
 
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
-    LOGGER.info("Starting Unlearning Certified Training")
+    LOGGER.info("=================== Starting Unlearning Certified Training ===================")
     LOGGER.debug(
-        "Privacy parameters: k_unlearn=%s, clip_gamma=%s, dp_sgd_sigma=%s",
+        "\tPrivacy parameters: k_unlearn=%s, clip_gamma=%s, dp_sgd_sigma=%s",
         config.k_unlearn,
         config.clip_gamma,
         config.dp_sgd_sigma,
     )
-    LOGGER.debug("Bounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
+    LOGGER.debug("\tBounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_wrapper(dl_train, config.n_epochs)
@@ -163,6 +162,14 @@ def unlearning_certified_training(
     network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
-    LOGGER.info("Finished Unlearning Certified Training\n")
+    for i in range(len(param_n)):
+        violations = (param_l[i] > param_n[i]).sum() + (param_n[i] > param_u[i]).sum()
+        max_violation = max((param_l[i] - param_n[i]).max(), (param_n[i] - param_u[i]).max())
+        if violations > 0:
+            LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD noise.", i)
+            LOGGER.debug("\tNumber of violations: %s", violations.item())
+            LOGGER.debug("\tMax violation: %s", max_violation.item())
+
+    LOGGER.info("=================== Finished Unlearning Certified Training ===================")
 
     return param_l, param_n, param_u

@@ -52,23 +52,22 @@ def poison_certified_training(
 
     # initialise hyperparameters, model, data, optimizer, logging
     device = torch.device(config.device)
-    dtype = dl_train.dataset[0][0].dtype
-    model = model.to(dtype).to(device)  # match the dtype and device of the model and data
+    model = model.to(device)  # match the device of the model and data
     param_n, param_l, param_u = ct_utils.get_parameters(model)
     k_poison = max(config.k_poison, config.label_k_poison)
     optimizer = optimizers.SGD(config)
 
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
-    LOGGER.info("Starting Poison Certified Training")
+    LOGGER.info("=================== Starting Poison Certified Training ===================")
     LOGGER.debug(
-        "Adversary budget: epsilon=%s, k_poison=%s, label_epsilon=%s, label_k_poison=%s",
+        "\tAdversary budget: epsilon=%s, k_poison=%s, label_epsilon=%s, label_k_poison=%s",
         config.epsilon,
         config.k_poison,
         config.label_epsilon,
         config.label_k_poison,
     )
-    LOGGER.debug("Bounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
+    LOGGER.debug("\tBounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_clean, config.n_epochs)
@@ -89,8 +88,8 @@ def poison_certified_training(
 
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
-            batch = batch.view(batch.size(0), -1, 1).type(dtype)
-            batch_clean = batch_clean.view(batch_clean.size(0), -1, 1).type(dtype) if dl_clean else None
+            batch = batch.view(batch.size(0), -1, 1).type(param_n[-1].dtype)
+            batch_clean = batch_clean.view(batch_clean.size(0), -1, 1).type(param_n[-1].dtype) if dl_clean else None
 
         # initialise containers to store the nominal and bounds on the gradients for each fragment
         # the bounds are stored as lists of lists indexed by [parameter, fragment]
@@ -171,6 +170,6 @@ def poison_certified_training(
     network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
-    LOGGER.info("Finished Poison Certified Training\n")
+    LOGGER.info("=================== Finished Poison Certified Training ===================")
 
     return param_l, param_n, param_u

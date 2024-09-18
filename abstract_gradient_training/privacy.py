@@ -52,8 +52,7 @@ def privacy_certified_training(
 
     # initialise hyperparameters, model, data, optimizer, logging
     device = torch.device(config.device)
-    dtype = dl_train.dataset[0][0].dtype
-    model = model.to(dtype).to(device)  # match the dtype and device of the model and data
+    model = model.to(device)  # match the device of the model and data
     param_n, param_l, param_u = ct_utils.get_parameters(model)
     optimizer = optimizers.SGD(config)
     gamma = config.clip_gamma
@@ -62,14 +61,14 @@ def privacy_certified_training(
 
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
-    LOGGER.info("Starting Privacy Certified Training")
+    LOGGER.info("=================== Starting Privacy Certified Training ===================")
     LOGGER.debug(
-        "Privacy parameters: k_private=%s, clip_gamma=%s, dp_sgd_sigma=%s",
+        "\tPrivacy parameters: k_private=%s, clip_gamma=%s, dp_sgd_sigma=%s",
         config.k_private,
         config.clip_gamma,
         config.dp_sgd_sigma,
     )
-    LOGGER.debug("Bounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
+    LOGGER.debug("\tBounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_wrapper(dl_train, config.n_epochs)
@@ -154,7 +153,7 @@ def privacy_certified_training(
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
             else:  # unsound update due to noise
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
-            grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), sigma * gamma)
+            grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), sigma)
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=False)
 
@@ -162,9 +161,13 @@ def privacy_certified_training(
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
     for i in range(len(param_n)):
-        if (param_l[i] > param_n[i]).all() or (param_n[i] > param_u[i]).all():
-            LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD.", i)
+        violations = (param_l[i] > param_n[i]).sum() + (param_n[i] > param_u[i]).sum()
+        max_violation = max((param_l[i] - param_n[i]).max(), (param_n[i] - param_u[i]).max())
+        if violations > 0:
+            LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD noise.", i)
+            LOGGER.debug("\tNumber of violations: %s", violations.item())
+            LOGGER.debug("\tMax violation: %s", max_violation.item())
 
-    LOGGER.info("Finished Privacy Certified Training\n")
+    LOGGER.info("=================== Finished Privacy Certified Training ===================")
 
     return param_l, param_n, param_u
