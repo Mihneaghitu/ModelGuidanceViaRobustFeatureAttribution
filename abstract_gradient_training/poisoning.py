@@ -83,7 +83,7 @@ def poison_certified_training(
             break
 
         # log the current network evaluation
-        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
+        LOGGER.info("Training batch %s: %s", n + 1, ct_utils.get_progress_message(network_eval, param_l, param_u))
 
         # calculate batchsize
         batchsize = batch.size(0) if batch_clean is None else batch.size(0) + batch_clean.size(0)

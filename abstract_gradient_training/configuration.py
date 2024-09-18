@@ -6,9 +6,10 @@ pydantic is a data validation library that uses Python type annotations to valid
 import logging
 import json
 import hashlib
-from typing import Dict, Callable
+from typing import Dict, Callable, Literal
 import pydantic
 import pydantic.json
+import torch
 
 from abstract_gradient_training import bounds
 from abstract_gradient_training import test_metrics
@@ -65,41 +66,56 @@ LOSS_BOUNDS = {
 }
 
 
-@pydantic.dataclasses.dataclass(config=dict(extra="forbid"))
+@pydantic.dataclasses.dataclass(config=dict(extra="forbid", arbitrary_types_allowed=True))
 class AGTConfig:
     """Configuration class for the abstract gradient training module."""
 
     # optimizer parameters
-    n_epochs: int = pydantic.Field(..., gt=0)
-    learning_rate: float = pydantic.Field(..., gt=0)
+    n_epochs: int = pydantic.Field(..., gt=0, description="Number of epochs to train the model")
+    learning_rate: float = pydantic.Field(..., gt=0, description="Initial learning rate")
     l1_reg: float = pydantic.Field(0.0, ge=0, description="L1 regularization factor")
     l2_reg: float = pydantic.Field(0.0, ge=0, description="L2 regularization factor")
     lr_decay: float = pydantic.Field(0.0, ge=0, description="Learning rate decay factor")
     lr_min: float = pydantic.Field(0.0, ge=0, description="Minimum learning rate for learning rate scheduler")
-    loss: str = pydantic.Field(..., json_schema_extra={"in_": LOSS_BOUNDS.keys()})
-    device: str = "cpu"
-    log_level: str = pydantic.Field(
-        "INFO", json_schema_extra={"in_": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]}
+    loss: str = pydantic.Field(..., pattern=f"^({'|'.join(LOSS_BOUNDS.keys())})$", description="Loss function")
+    device: str = pydantic.Field("cpu", description="Device to train the model on")
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
+        "INFO", description="Logging level"
     )
     early_stopping: bool = pydantic.Field(True, description="Whether to use early stopping criterion.")
     # bounding parameters
-    forward_bound: str = pydantic.Field("interval", json_schema_extra={"in_": FORWARD_BOUNDS.keys()})
-    backward_bound: str = pydantic.Field("interval", json_schema_extra={"in_": BACKWARD_BOUNDS.keys()})
-    bound_kwargs: Dict = pydantic.Field(default_factory=dict)
-    fragsize: int = pydantic.Field(10000, gt=0)
+    forward_bound: str = pydantic.Field(
+        "interval", pattern=f"^({'|'.join(FORWARD_BOUNDS.keys())})$", description="Forward pass bounding function"
+    )
+    backward_bound: str = pydantic.Field(
+        "interval", pattern=f"^({'|'.join(BACKWARD_BOUNDS.keys())})$", description="Backward pass bounding function"
+    )
+    bound_kwargs: Dict = pydantic.Field(
+        default_factory=dict, description="Additional keyword arguments for bounding functions"
+    )
+    fragsize: int = pydantic.Field(10000, gt=0, description="Size of fragments to split the batch into to avoid OOM")
     # poisoning parameters
-    k_poison: int = pydantic.Field(0, ge=0)
-    epsilon: float = pydantic.Field(0, ge=0)
-    label_k_poison: int = pydantic.Field(0, ge=0)
-    label_epsilon: float = pydantic.Field(0, ge=0)
-    poison_target: int = pydantic.Field(-1, ge=0)
+    k_poison: int = pydantic.Field(0, ge=0, description="Number of samples whose features can be poisoned")
+    epsilon: float = pydantic.Field(0, ge=0, description="Maximum perturbation for feature poisoning")
+    label_k_poison: int = pydantic.Field(0, ge=0, description="Number of samples whose labels can be poisoned")
+    label_epsilon: float = pydantic.Field(
+        0, ge=0, description="Maximum perturbation for label poisoning (in regression settings)"
+    )
+    poison_target: int = pydantic.Field(
+        -1, ge=0, description="If specified, an attacker can only flip labels to this class."
+    )
     # unlearning parameters
-    k_unlearn: int = pydantic.Field(0, ge=0)
+    k_unlearn: int = pydantic.Field(0, ge=0, description="Number of removals per batch to be certified")
     # privacy and dp-sgd parameters
-    k_private: int = pydantic.Field(0, ge=0)
-    clip_gamma: float = pydantic.Field(1e10, gt=0)
-    clip_method: str = pydantic.Field("clamp", json_schema_extra={"in_": ["norm", "clamp"]})
-    dp_sgd_sigma: float = pydantic.Field(0, ge=0)
+    k_private: int = pydantic.Field(0, ge=0, description="Number of removals/insertions per batch to be certified")
+    clip_gamma: float = pydantic.Field(1e10, gt=0, description="Gradient clipping parameter")
+    clip_method: Literal["norm", "clamp"] = pydantic.Field("clamp", description="Method for clipping gradients")
+    dp_sgd_sigma: float = pydantic.Field(
+        0, ge=0, description="Standard deviation of the privacy-preserving noise added to gradients"
+    )
+    noise_type: Literal["gaussian", "laplace"] = pydantic.Field(
+        "gaussian", description="Type of privacy-preserving noise to add to gradients"
+    )
 
     def __post_init__(self):
         k = max(self.k_unlearn, self.k_private, self.k_poison, self.label_k_poison)
@@ -139,3 +155,15 @@ class AGTConfig:
             return test_metrics.test_mse
         else:
             return test_metrics.test_accuracy
+
+    @pydantic.computed_field
+    def noise_distribution(self) -> torch.distributions.Distribution:
+        """Return a function to sample the noise distribution based on the noise_type."""
+        if self.dp_sgd_sigma == 0:
+            return torch.zeros
+        elif self.noise_type == "gaussian":
+            return torch.distributions.Normal(0, self.dp_sgd_sigma).sample
+        elif self.noise_type == "laplace":
+            return torch.distributions.Laplace(0, self.dp_sgd_sigma).sample
+        else:
+            raise ValueError(f"Unknown noise type {self.noise_type}")

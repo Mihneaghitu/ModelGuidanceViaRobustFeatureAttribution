@@ -56,8 +56,8 @@ def unlearning_certified_training(
     optimizer = optimizers.SGD(config)
     k_unlearn = config.k_unlearn
     gamma = config.clip_gamma
-    sigma = config.dp_sgd_sigma
-    sound = sigma == 0.0
+    sound = config.dp_sgd_sigma == 0.0
+    noise_distribution = config.noise_distribution
 
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
@@ -81,7 +81,7 @@ def unlearning_certified_training(
         if config.early_stopping and ct_utils.break_condition(network_eval):
             break
         # log the current network evaluation
-        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
+        LOGGER.info("Training batch %s: %s", n + 1, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
             batch = batch.view(batch.size(0), -1, 1).type(param_n[-1].dtype)
@@ -154,7 +154,7 @@ def unlearning_certified_training(
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
             else:
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
-            grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), sigma)
+            grads_n[i] += noise_distribution(grads_n[i].size()).to(device)
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=sound)
 

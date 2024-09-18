@@ -57,8 +57,9 @@ def privacy_certified_training(
     param_n, param_l, param_u = ct_utils.get_parameters(model)
     optimizer = optimizers.SGD(config)
     gamma = config.clip_gamma
-    sigma = config.dp_sgd_sigma
     k_private = config.k_private
+    sound = config.dp_sgd_sigma == 0.0
+    noise_distribution = config.noise_distribution
 
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
@@ -81,7 +82,7 @@ def privacy_certified_training(
         # get if we should terminate training early
         if config.early_stopping and ct_utils.break_condition(network_eval):
             break
-        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
+        LOGGER.info("Training batch %s: %s", n + 1, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
             batch = batch.view(batch.size(0), -1, 1).type(param_n[-1].dtype)
@@ -150,13 +151,13 @@ def privacy_certified_training(
 
         # check bounds and add noise
         for i in range(len(grads_n)):
-            if sigma == 0.0:  # sound update
+            if sound:  # sound update
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
             else:  # unsound update due to noise
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
-            grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), sigma)
+            grads_n[i] += noise_distribution(grads_n[i].size()).to(device)
 
-        param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=False)
+        param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=sound)
 
     network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
