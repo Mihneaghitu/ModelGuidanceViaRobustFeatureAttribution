@@ -122,7 +122,6 @@ def privacy_certified_training(
                 top_k_l = torch.topk(frag_grads_l[i], min(size, k_private), largest=True, dim=0)[0]
                 grads_l[i] += frag_grads_l[i].sum(dim=0) - top_k_l.sum(dim=0)
                 grads_l_top_ks[i].append(top_k_l)
-
                 # we are guaranteed to take the top s - k from the upper bound, so add the sum to grads_u
                 # the remaining k gradients are stored until all the frags have been processed
                 bottom_k_u = torch.topk(frag_grads_u[i], min(size, k_private), largest=False, dim=0)[0]
@@ -166,7 +165,7 @@ def privacy_certified_training(
         if violations > 0:
             LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD noise.", i)
             LOGGER.debug("\tNumber of violations: %s", violations.item())
-            LOGGER.debug("\tMax violation: %s", max_violation.item())
+            LOGGER.debug("\tMax violation: %.2e", max_violation.item())
 
     LOGGER.info("=================== Finished Privacy Certified Training ===================")
 

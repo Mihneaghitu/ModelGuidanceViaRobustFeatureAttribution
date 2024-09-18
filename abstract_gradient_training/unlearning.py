@@ -57,8 +57,7 @@ def unlearning_certified_training(
     k_unlearn = config.k_unlearn
     gamma = config.clip_gamma
     sigma = config.dp_sgd_sigma
-    noise_level = 0.0 if math.isnan(sigma * gamma) else sigma * gamma  # to account for gamma = inf
-    sound = noise_level == 0.0
+    sound = sigma == 0.0
 
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
@@ -109,22 +108,21 @@ def unlearning_certified_training(
                 batch_frag, batch_frag, label_frag, param_l, param_u, config
             )
 
-            # clip the gradients
-            frag_grads_l = [torch.clamp(g, -gamma, gamma) for g in frag_grads_l]
-            frag_grads_u = [torch.clamp(g, -gamma, gamma) for g in frag_grads_u]
-            frag_grads_n = [torch.clamp(g, -gamma, gamma) for g in frag_grads_n]
-
-            grads_n = [a + b.sum(dim=0) for a, b in zip(grads_n, frag_grads_n)]
-
             # accumulate the results for this batch to save memory
             for i in range(len(grads_n)):
+                # clip the gradients
+                frag_grads_l[i], frag_grads_n[i], frag_grads_u[i] = ct_utils.propagate_clipping(
+                    frag_grads_l[i], frag_grads_n[i], frag_grads_u[i], gamma, config.clip_method
+                )
+                # accumulate the nominal gradients
+                grads_n[i] += frag_grads_n[i].sum(dim=0)
+                # accumulate the top/bottom s - k gradient bounds
                 size = frag_grads_n[i].size(0)
                 # we are guaranteed to take the bottom s - k from the lower bound, so add the sum to grads_l
                 # the remaining k gradients are stored until all the frags have been processed
                 top_k_l = torch.topk(frag_grads_l[i], min(size, k_unlearn), largest=True, dim=0)[0]
                 grads_l[i] += frag_grads_l[i].sum(dim=0) - top_k_l.sum(dim=0)
                 grads_l_top_ks[i].append(top_k_l)
-
                 # we are guaranteed to take the top s - k from the upper bound, so add the sum to grads_u
                 # the remaining k gradients are stored until all the frags have been processed
                 bottom_k_u = torch.topk(frag_grads_u[i], min(size, k_unlearn), largest=False, dim=0)[0]
@@ -155,7 +153,7 @@ def unlearning_certified_training(
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
             else:
                 interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
-            grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), noise_level)
+            grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), sigma)
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=sound)
 
@@ -168,7 +166,7 @@ def unlearning_certified_training(
         if violations > 0:
             LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD noise.", i)
             LOGGER.debug("\tNumber of violations: %s", violations.item())
-            LOGGER.debug("\tMax violation: %s", max_violation.item())
+            LOGGER.debug("\tMax violation: %.2e", max_violation.item())
 
     LOGGER.info("=================== Finished Unlearning Certified Training ===================")
 
