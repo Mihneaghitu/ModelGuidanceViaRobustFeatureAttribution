@@ -1,6 +1,7 @@
 """Poison certified training."""
 
 from __future__ import annotations
+import itertools
 import logging
 from typing import Optional, Callable
 
@@ -71,10 +72,11 @@ def poison_certified_training(
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_clean, config.n_epochs)
+    test_iterator = itertools.cycle(dl_test)
 
     for n, (batch, labels, batch_clean, labels_clean) in enumerate(training_iterator):
         # evaluate the network
-        network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+        network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
 
         # possibly terminate early
         if config.early_stopping and ct_utils.break_condition(network_eval):
@@ -167,7 +169,7 @@ def poison_certified_training(
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u)
 
-    network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+    network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
     LOGGER.info("=================== Finished Poison Certified Training ===================")

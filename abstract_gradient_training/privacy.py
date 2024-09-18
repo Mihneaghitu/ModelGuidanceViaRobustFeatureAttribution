@@ -1,6 +1,7 @@
 """Certified privacy training."""
 
 from __future__ import annotations
+import itertools
 from typing import Optional, Callable
 import logging
 
@@ -72,10 +73,11 @@ def privacy_certified_training(
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_wrapper(dl_train, config.n_epochs)
+    test_iterator = itertools.cycle(dl_test)
 
     for n, (batch, labels) in enumerate(training_iterator):
         # evaluate the network and log the results
-        network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+        network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
         # get if we should terminate training early
         if config.early_stopping and ct_utils.break_condition(network_eval):
             break
@@ -156,7 +158,7 @@ def privacy_certified_training(
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=False)
 
-    network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+    network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
     for i in range(len(param_n)):

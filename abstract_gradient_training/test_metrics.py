@@ -12,7 +12,8 @@ def test_mse(
     param_n: list[torch.Tensor],
     param_l: list[torch.Tensor],
     param_u: list[torch.Tensor],
-    dl_test: torch.utils.data.DataLoader,
+    batch: torch.Tensor,
+    targets: torch.Tensor,
     model: Optional[torch.nn.Sequential] = None,
     transform: Optional[Callable] = None,
     epsilon: float = 0.0,
@@ -25,7 +26,8 @@ def test_mse(
         param_n (list[torch.Tensor]): List of the nominal parameters of the network [W1, b1, ..., Wn, bn].
         param_l (list[torch.Tensor]): List of the lower bound parameters of the network [W1, b1, ..., Wn, bn].
         param_u (list[torch.Tensor]): List of the upper bound parameters of the network [W1, b1, ..., Wn, bn].
-        dl_test (torch.utils.data.DataLoader): Test DataLoader
+        batch (torch.Tensor): Input batch of data (shape [batchsize, ...]).
+        targets (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
         model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
                                         the provided model.
@@ -35,9 +37,8 @@ def test_mse(
         tuple[float, float, float]: worst case, nominal case and best case loss
     """
     # get the test batch and send it to the correct device
-    device = param_n[-1].device
+    device = param_n[-1].get_device()
     device = torch.device(device) if device != -1 else torch.device("cpu")
-    batch, targets = next(iter(dl_test))
     batch, targets = batch.to(device).type(param_n[-1].dtype), targets.squeeze().to(device)
     assert targets.dim() == 1, "Targets must be of shape (batchsize, )"
 
@@ -70,7 +71,8 @@ def test_accuracy(
     param_n: list[torch.Tensor],
     param_l: list[torch.Tensor],
     param_u: list[torch.Tensor],
-    dl_test: torch.utils.data.DataLoader,
+    batch: torch.Tensor,
+    labels: torch.Tensor,
     model: Optional[torch.nn.Sequential] = None,
     transform: Optional[Callable] = None,
     epsilon: float = 0.0,
@@ -83,7 +85,8 @@ def test_accuracy(
         param_n (list[torch.Tensor]): List of the nominal parameters of the network [W1, b1, ..., Wn, bn].
         param_l (list[torch.Tensor]): List of the lower bound parameters of the network [W1, b1, ..., Wn, bn].
         param_u (list[torch.Tensor]): List of the upper bound parameters of the network [W1, b1, ..., Wn, bn].
-        dl_test (torch.utils.data.DataLoader): Test DataLoader
+        batch (torch.Tensor): Input batch of data (shape [batchsize, ...]).
+        labels (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
         model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
                                         the provided model.
@@ -93,9 +96,8 @@ def test_accuracy(
         tuple[float, float, float]: worst case, nominal case and best case loss
     """
     # get the test batch and send it to the correct device
-    device = param_n[-1].device
+    device = param_n[-1].get_device()
     device = torch.device(device) if device != -1 else torch.device("cpu")
-    batch, labels = next(iter(dl_test))
     batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device).type(torch.int64)
     assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
     # for finetuning, we may need to transform the input through the earlier layers of the network
@@ -137,7 +139,8 @@ def test_cross_entropy(
     param_n: list[torch.Tensor],
     param_l: list[torch.Tensor],
     param_u: list[torch.Tensor],
-    dl_test: torch.utils.data.DataLoader,
+    batch: torch.Tensor,
+    labels: torch.Tensor,
     model: Optional[torch.nn.Sequential] = None,
     transform: Optional[Callable] = None,
     epsilon: float = 0.0,
@@ -150,7 +153,8 @@ def test_cross_entropy(
         param_n (list[torch.Tensor]): List of the nominal parameters of the network [W1, b1, ..., Wn, bn].
         param_l (list[torch.Tensor]): List of the lower bound parameters of the network [W1, b1, ..., Wn, bn].
         param_u (list[torch.Tensor]): List of the upper bound parameters of the network [W1, b1, ..., Wn, bn].
-        dl_test (torch.utils.data.DataLoader): Test DataLoader
+        batch (torch.Tensor): Input batch of data (shape [batchsize, ...]).
+        labels (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
         model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
                                         the provided model.
@@ -160,9 +164,8 @@ def test_cross_entropy(
         tuple[float, float, float]: worst case, nominal case and best case loss
     """
     # get the test batch and send it to the correct device
-    device = param_n[-1].device
+    device = param_n[-1].get_device()
     device = torch.device(device) if device != -1 else torch.device("cpu")
-    batch, labels = next(iter(dl_test))
     batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device)
     assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
 
