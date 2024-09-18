@@ -76,11 +76,13 @@ def poison_certified_training(
     for n, (batch, labels, batch_clean, labels_clean) in enumerate(training_iterator):
         # evaluate the network
         network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
-        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
 
         # possibly terminate early
         if config.early_stopping and ct_utils.break_condition(network_eval):
-            return param_l, param_n, param_u
+            break
+
+        # log the current network evaluation
+        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
 
         # calculate batchsize
         batchsize = batch.size(0) if batch_clean is None else batch.size(0) + batch_clean.size(0)
@@ -165,6 +167,9 @@ def poison_certified_training(
         grads_u = [g / batchsize for g in grads_u]
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u)
+
+    network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+    LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
     LOGGER.info("Finished Poison Certified Training\n")
 

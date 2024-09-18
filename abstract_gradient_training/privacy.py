@@ -77,10 +77,10 @@ def privacy_certified_training(
     for n, (batch, labels) in enumerate(training_iterator):
         # evaluate the network and log the results
         network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
-        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # get if we should terminate training early
         if config.early_stopping and ct_utils.break_condition(network_eval):
-            return param_l, param_n, param_u
+            break
+        LOGGER.info("Training batch %s: %s", n, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
             batch = batch.view(batch.size(0), -1, 1).type(param_n[-1].dtype)
@@ -156,6 +156,9 @@ def privacy_certified_training(
             grads_n[i] += torch.normal(torch.zeros_like(grads_n[i]), sigma * gamma)
 
         param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=False)
+
+    network_eval = config.test_loss_fn(param_n, param_l, param_u, dl_test, model, transform)
+    LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
     for i in range(len(param_n)):
         if (param_l[i] > param_n[i]).all() or (param_n[i] > param_u[i]).all():
