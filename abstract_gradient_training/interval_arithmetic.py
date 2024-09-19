@@ -255,7 +255,14 @@ def propagate_norm(x_l: torch.Tensor, x_u: torch.Tensor, p: float = 2) -> tuple[
 
 
 def propagate_conv2d(
-    x_l: torch.Tensor, x_u: torch.Tensor, W: torch.Tensor, b: torch.Tensor, stride: int = 1, padding: int = 0
+    x_l: torch.Tensor,
+    x_u: torch.Tensor,
+    W: torch.Tensor,
+    b: torch.Tensor | None = None,
+    stride: int = 1,
+    padding: int = 0,
+    transpose: bool = False,
+    **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Propagate the interval over x_l and x_u through the convolutional layer with fixed weights and biases.
@@ -267,6 +274,8 @@ def propagate_conv2d(
         b (torch.Tensor): Bias tensor of the convolutional layer.
         stride (int, optional): Stride of the convolutional layer. Defaults to 1.
         padding (int, optional): Padding of the convolutional layer. Defaults to 0.
+        transpose (bool, optional): Whether the convolution is a transposed convolution. Defaults to False.
+        **kwargs: Additional arguments to pass to the convolutional layer.
 
     Returns:
         e_l (torch.Tensor): Lower bound of the output tensor.
@@ -277,18 +286,24 @@ def propagate_conv2d(
     validate_interval(x_l, x_u)
     assert x_l.dim() == 4
     assert W.dim() == 4
-    assert b.dim() == 1  # allow the bias to be a vector, even though for affine layers we require it to be at least 2d
+    if b is not None:
+        assert b.dim() == 1  # require the bias to be a vector, even though for affine layers we require it to be 2d
 
     x_mu = (x_u + x_l) / 2
     x_r = (x_u - x_l) / 2
 
-    H_mu = F.conv2d(x_mu, W, bias=None, stride=stride, padding=padding)
-    H_r = F.conv2d(x_r, torch.abs(W), bias=None, stride=stride, padding=padding)
+    transform = F.conv2d if not transpose else F.conv_transpose2d
+
+    H_mu = transform(x_mu, W, bias=None, stride=stride, padding=padding, **kwargs)
+    H_r = transform(x_r, torch.abs(W), bias=None, stride=stride, padding=padding, **kwargs)
 
     H_l = H_mu - H_r
     H_u = H_mu + H_r
     validate_interval(H_l, H_u)
-    return H_l + b.view(1, -1, 1, 1), H_u + b.view(1, -1, 1, 1)
+    if b is not None:
+        H_l, H_u = H_l + b.view(1, -1, 1, 1), H_u + b.view(1, -1, 1, 1)
+        validate_interval(H_l, H_u)
+    return H_l, H_u
 
 
 def propagate_softmax(A_l: torch.Tensor, A_u: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
