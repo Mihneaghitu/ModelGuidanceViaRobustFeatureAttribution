@@ -225,7 +225,11 @@ def dataloader_wrapper(dl_train: DataLoader, n_epochs: int) -> Iterator[tuple[to
             # check the batch is the correct size, otherwise skip it
             if batch.size(0) != full_batchsize:
                 LOGGER.debug(
-                    "Skipping batch %s in epoch %s (expected size %s, got %s)", t, n + 1, full_batchsize, batch.size(0)
+                    "Skipping batch %s in epoch %s (expected batchsize %s, got %s)",
+                    t + 1,
+                    n + 1,
+                    full_batchsize,
+                    batch.size(0),
                 )
                 continue
             # return the batches for this iteration
@@ -269,7 +273,11 @@ def dataloader_pair_wrapper(
             # check the batch is the correct size, otherwise skip it
             if batch.size(0) != full_batchsize:
                 LOGGER.debug(
-                    "Skipping batch %s in epoch %s (expected size %s, got %s)", t, n + 1, full_batchsize, batch_len
+                    "Skipping batch %s in epoch %s (expected batchsize %s, got %s)",
+                    t + 1,
+                    n + 1,
+                    full_batchsize,
+                    batch_len,
                 )
                 continue
             # return the batches for this iteration
