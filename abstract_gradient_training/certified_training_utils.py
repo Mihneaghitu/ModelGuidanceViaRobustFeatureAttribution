@@ -196,7 +196,7 @@ def propagate_conv_layers(
     # propagate the input through the conv layers
     x_l, x_u = x - epsilon, x + epsilon
     for W, b, stride, padding in conv_parameters:
-        x_l, x_u = interval_arithmetic.propagate_conv2d(x_l, x_u, W, b, stride, padding)
+        x_l, x_u = interval_arithmetic.propagate_conv2d(x_l, x_u, W, W, b, b, stride=stride, padding=padding)
         x_l, x_u = torch.nn.functional.relu(x_l), torch.nn.functional.relu(x_u)
     x_l = x_l.flatten(start_dim=1)
     x_u = x_u.flatten(start_dim=1)

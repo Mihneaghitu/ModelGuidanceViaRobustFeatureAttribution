@@ -257,21 +257,25 @@ def propagate_norm(x_l: torch.Tensor, x_u: torch.Tensor, p: float = 2) -> tuple[
 def propagate_conv2d(
     x_l: torch.Tensor,
     x_u: torch.Tensor,
-    W: torch.Tensor,
-    b: torch.Tensor | None = None,
+    W_l: torch.Tensor,
+    W_u: torch.Tensor,
+    b_l: torch.Tensor | None = None,
+    b_u: torch.Tensor | None = None,
     stride: int = 1,
     padding: int = 0,
     transpose: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Propagate the interval over x_l and x_u through the convolutional layer with fixed weights and biases.
+    Propagate the interval over x_l and x_u through the convolutional layer using Rump's algorithm.
 
     Args:
         x_l (torch.Tensor): Lower bound of the input tensor x.
         x_u (torch.Tensor): Upper bound of the input tensor x.
-        W (torch.Tensor): Weight tensor of the convolutional layer.
-        b (torch.Tensor): Bias tensor of the convolutional layer.
+        W_l (torch.Tensor): Lower bound of the weight tensor of the convolutional layer.
+        W_u (torch.Tensor): Upper bound of the weight tensor of the convolutional layer.
+        b_l (torch.Tensor, optional): Lower bound of the bias tensor of the convolutional layer.
+        b_u (torch.Tensor, optional): Upper bound of the bias tensor of the convolutional layer.
         stride (int, optional): Stride of the convolutional layer. Defaults to 1.
         padding (int, optional): Padding of the convolutional layer. Defaults to 0.
         transpose (bool, optional): Whether the convolution is a transposed convolution. Defaults to False.
@@ -283,26 +287,39 @@ def propagate_conv2d(
     """
 
     # validate shapes and bounds
-    validate_interval(x_l, x_u)
+    validate_interval(x_l, x_u, msg="input interval")
+    validate_interval(W_l, W_u, msg="weight interval")
     assert x_l.dim() == 4
-    assert W.dim() == 4
-    if b is not None:
-        assert b.dim() == 1  # require the bias to be a vector, even though for affine layers we require it to be 2d
+    assert W_l.dim() == 4
+    if b_l is not None:
+        assert b_l.dim() == 1  # require the bias to be a vector, even though for affine layers we require it to be 2d
 
-    x_mu = (x_u + x_l) / 2
-    x_r = (x_u - x_l) / 2
-
+    # get the appropriate conv function to use
     transform = F.conv2d if not transpose else F.conv_transpose2d
 
-    H_mu = transform(x_mu, W, bias=None, stride=stride, padding=padding, **kwargs)
-    H_r = transform(x_r, torch.abs(W), bias=None, stride=stride, padding=padding, **kwargs)
+    # compute the "mean" and "radius" of the intervals
+    x_mu = (x_u + x_l) / 2
+    x_r = (x_u - x_l) / 2
+    W_mu = (W_u + W_l) / 2
+    W_r = (W_u - W_l) / 2
 
+    # compute the "mean" and "radius" of the output
+    H_mu = transform(x_mu, W_mu, bias=None, stride=stride, padding=padding, **kwargs)
+    H_r = transform(torch.abs(x_mu), W_r, bias=None, stride=stride, padding=padding, **kwargs)
+    H_r += transform(x_r, torch.abs(W_mu), bias=None, stride=stride, padding=padding, **kwargs)
+    H_r += transform(x_r, W_r, bias=None, stride=stride, padding=padding, **kwargs)
+
+    # convert to lower and upper bounds
     H_l = H_mu - H_r
     H_u = H_mu + H_r
-    validate_interval(H_l, H_u)
-    if b is not None:
-        H_l, H_u = H_l + b.view(1, -1, 1, 1), H_u + b.view(1, -1, 1, 1)
-        validate_interval(H_l, H_u)
+    validate_interval(H_l, H_u, msg="output interval")
+
+    # add the bias
+    if b_l is not None:
+        validate_interval(b_l, b_u, msg="bias interval")
+        H_l, H_u = H_l + b_l.view(1, -1, 1, 1), H_u + b_u.view(1, -1, 1, 1)
+        validate_interval(H_l, H_u, msg="output interval with bias")
+
     return H_l, H_u
 
 
