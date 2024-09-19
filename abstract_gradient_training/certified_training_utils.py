@@ -169,6 +169,8 @@ def propagate_clipping(
         )
         x = x * clip_factor.view(-1, 1, 1)
         interval_arithmetic.validate_interval(x_l, x_u, msg="clipped input")
+    else:
+        raise ValueError(f"Clipping method {method} not recognised.")
     return x_l, x, x_u
 
 
