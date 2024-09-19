@@ -116,6 +116,7 @@ class AGTConfig:
     noise_type: Literal["gaussian", "laplace"] = pydantic.Field(
         "gaussian", description="Type of privacy-preserving noise to add to gradients"
     )
+    metadata: str = pydantic.Field("", description="Additional metadata to store with the configuration")
 
     def __post_init__(self):
         k = max(self.k_unlearn, self.k_private, self.k_poison, self.label_k_poison)
