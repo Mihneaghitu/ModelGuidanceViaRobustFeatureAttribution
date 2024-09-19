@@ -233,7 +233,7 @@ def proportion_certified(
         epsilon (float, optional): Feature poisoning parameter.
 
     Returns:
-        tuple[float, float, float]: worst case, nominal case and best case loss
+        float: percentage of the test batch with certified predictions
     """
     # get the test batch and send it to the correct device
     device = param_n[-1].get_device()
