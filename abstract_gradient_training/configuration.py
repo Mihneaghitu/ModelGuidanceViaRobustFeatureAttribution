@@ -162,9 +162,13 @@ class AGTConfig:
         """Return a function to sample the noise distribution based on the noise_type."""
         if self.dp_sgd_sigma == 0:
             return torch.zeros
+        elif self.clip_gamma == float("inf"):
+            raise ValueError(f"If clip_gamma is infinite, then dp_sgd_sigma must be 0, but got {self.dp_sgd_sigma}")
         elif self.noise_type == "gaussian":
-            return torch.distributions.Normal(0, self.dp_sgd_sigma).sample
+            LOGGER.debug("\tUsing Gaussian privacy-preserving noise (std %.2g)", self.dp_sgd_sigma * self.clip_gamma)
+            return torch.distributions.Normal(0, self.dp_sgd_sigma * self.clip_gamma).sample
         elif self.noise_type == "laplace":
-            return torch.distributions.Laplace(0, self.dp_sgd_sigma).sample
+            LOGGER.debug("\tUsing Laplacian privacy-preserving noise (scale %.2g)", self.dp_sgd_sigma * self.clip_gamma)
+            return torch.distributions.Laplace(0, self.dp_sgd_sigma * self.clip_gamma).sample
         else:
             raise ValueError(f"Unknown noise type {self.noise_type}")

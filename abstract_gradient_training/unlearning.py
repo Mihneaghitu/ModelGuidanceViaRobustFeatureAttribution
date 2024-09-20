@@ -48,17 +48,6 @@ def unlearning_certified_training(
         param_n (list[torch.Tensor]): List of nominal trained parameters [W1, b1, ..., Wn, bn].
         param_u (list[torch.Tensor]): List of upper bounds of the trained parameters [W1, b1, ..., Wn, bn].
     """
-
-    # initialise hyperparameters, model, data, optimizer, logging
-    device = torch.device(config.device)
-    model = model.to(device)  # match the device of the model and data
-    param_n, param_l, param_u = ct_utils.get_parameters(model)
-    optimizer = optimizers.SGD(config)
-    k_unlearn = config.k_unlearn
-    gamma = config.clip_gamma
-    sound = config.dp_sgd_sigma == 0.0
-    noise_distribution = config.noise_distribution
-
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
     LOGGER.info("=================== Starting Unlearning Certified Training ===================")
@@ -69,6 +58,14 @@ def unlearning_certified_training(
         config.dp_sgd_sigma,
     )
     LOGGER.debug("\tBounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
+
+    # initialise hyperparameters, model, data, optimizer, logging
+    device = torch.device(config.device)
+    model = model.to(device)  # match the device of the model and data
+    param_n, param_l, param_u = ct_utils.get_parameters(model)
+    optimizer = optimizers.SGD(config)
+    k_unlearn = config.k_unlearn
+    noise_distribution = config.noise_distribution
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_wrapper(dl_train, config.n_epochs)
@@ -113,7 +110,7 @@ def unlearning_certified_training(
             for i in range(len(grads_n)):
                 # clip the gradients
                 frag_grads_l[i], frag_grads_n[i], frag_grads_u[i] = ct_utils.propagate_clipping(
-                    frag_grads_l[i], frag_grads_n[i], frag_grads_u[i], gamma, config.clip_method
+                    frag_grads_l[i], frag_grads_n[i], frag_grads_u[i], config.clip_gamma, config.clip_method
                 )
                 # accumulate the nominal gradients
                 grads_n[i] += frag_grads_n[i].sum(dim=0)
@@ -150,13 +147,13 @@ def unlearning_certified_training(
 
         # check bounds and add noise
         for i in range(len(grads_n)):
-            if sound:
-                interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
-            else:
-                interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
-            grads_n[i] += noise_distribution(grads_n[i].size()).to(device)
+            interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
+            noise = noise_distribution(grads_n[i].size()).to(device)
+            grads_l[i] += noise
+            grads_n[i] += noise
+            grads_u[i] += noise
 
-        param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=sound)
+        param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u)
 
     network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
@@ -165,7 +162,7 @@ def unlearning_certified_training(
         violations = (param_l[i] > param_n[i]).sum() + (param_n[i] > param_u[i]).sum()
         max_violation = max((param_l[i] - param_n[i]).max(), (param_n[i] - param_u[i]).max())
         if violations > 0:
-            LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD noise.", i)
+            LOGGER.warning("Nominal parameters not within certified bounds for parameter %s", i)
             LOGGER.debug("\tNumber of violations: %s", violations.item())
             LOGGER.debug("\tMax violation: %.2e", max_violation.item())
 

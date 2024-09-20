@@ -51,16 +51,6 @@ def privacy_certified_training(
         param_u (list[torch.Tensor]): List of upper bounds of the trained parameters [W1, b1, ..., Wn, bn].
     """
 
-    # initialise hyperparameters, model, data, optimizer, logging
-    device = torch.device(config.device)
-    model = model.to(device)  # match the device of the model and data
-    param_n, param_l, param_u = ct_utils.get_parameters(model)
-    optimizer = optimizers.SGD(config)
-    gamma = config.clip_gamma
-    k_private = config.k_private
-    sound = config.dp_sgd_sigma == 0.0
-    noise_distribution = config.noise_distribution
-
     # set up logging
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
     LOGGER.info("=================== Starting Privacy Certified Training ===================")
@@ -71,6 +61,14 @@ def privacy_certified_training(
         config.dp_sgd_sigma,
     )
     LOGGER.debug("\tBounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
+
+    # initialise hyperparameters, model, data, optimizer, logging
+    device = torch.device(config.device)
+    model = model.to(device)  # match the device of the model and data
+    param_n, param_l, param_u = ct_utils.get_parameters(model)
+    optimizer = optimizers.SGD(config)
+    k_private = config.k_private
+    noise_distribution = config.noise_distribution
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
     training_iterator = ct_utils.dataloader_wrapper(dl_train, config.n_epochs)
@@ -114,7 +112,7 @@ def privacy_certified_training(
             for i in range(len(grads_n)):
                 # clip the gradients
                 frag_grads_l[i], frag_grads_n[i], frag_grads_u[i] = ct_utils.propagate_clipping(
-                    frag_grads_l[i], frag_grads_n[i], frag_grads_u[i], gamma, config.clip_method
+                    frag_grads_l[i], frag_grads_n[i], frag_grads_u[i], config.clip_gamma, config.clip_method
                 )
                 # accumulate the nominal gradients
                 grads_n[i] += frag_grads_n[i].sum(dim=0)
@@ -141,8 +139,8 @@ def privacy_certified_training(
             assert size >= k_private, "Not enough samples left after processing batch fragments."
             top_k_l = torch.topk(grads_l_top_ks[i], k_private, largest=True, dim=0)[0]
             bottom_k_u = torch.topk(grads_u_bottom_ks[i], k_private, largest=False, dim=0)[0]
-            grads_l[i] += grads_l_top_ks[i].sum(dim=0) - top_k_l.sum(dim=0) - k_private * gamma
-            grads_u[i] += grads_u_bottom_ks[i].sum(dim=0) - bottom_k_u.sum(dim=0) + k_private * gamma
+            grads_l[i] += grads_l_top_ks[i].sum(dim=0) - top_k_l.sum(dim=0) - k_private * config.clip_gamma
+            grads_u[i] += grads_u_bottom_ks[i].sum(dim=0) - bottom_k_u.sum(dim=0) + k_private * config.clip_gamma
 
         # normalise each by the batchsize
         grads_l = [g / batchsize for g in grads_l]
@@ -151,13 +149,13 @@ def privacy_certified_training(
 
         # check bounds and add noise
         for i in range(len(grads_n)):
-            if sound:  # sound update
-                interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
-            else:  # unsound update due to noise
-                interval_arithmetic.validate_interval(grads_l[i], grads_u[i])
-            grads_n[i] += noise_distribution(grads_n[i].size()).to(device)
+            interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
+            noise = noise_distribution(grads_n[i].size()).to(device)
+            grads_l[i] += noise
+            grads_n[i] += noise
+            grads_u[i] += noise
 
-        param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u, sound=sound)
+        param_n, param_l, param_u = optimizer.step(param_n, param_l, param_u, grads_n, grads_l, grads_u)
 
     network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
@@ -166,7 +164,7 @@ def privacy_certified_training(
         violations = (param_l[i] > param_n[i]).sum() + (param_n[i] > param_u[i]).sum()
         max_violation = max((param_l[i] - param_n[i]).max(), (param_n[i] - param_u[i]).max())
         if violations > 0:
-            LOGGER.info("Nominal parameters not within certified bounds for parameter %s due to DP-SGD noise.", i)
+            LOGGER.warning("Nominal parameters not within certified bounds for parameter %s", i)
             LOGGER.debug("\tNumber of violations: %s", violations.item())
             LOGGER.debug("\tMax violation: %.2e", max_violation.item())
 

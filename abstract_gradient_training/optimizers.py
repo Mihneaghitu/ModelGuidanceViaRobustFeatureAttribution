@@ -36,7 +36,6 @@ class SGD:
         update_n: list[torch.Tensor],
         update_l: list[torch.Tensor],
         update_u: list[torch.Tensor],
-        sound: bool = True,
     ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
         """
         Compute a sound bound on parameters after an SGD update
@@ -49,14 +48,13 @@ class SGD:
             update_n (list[torch.Tensor]): List of the nominal updates of the network [dW1, db1, ..., dWn, dbn].
             update_l (list[torch.Tensor]): List of the lower bound updates of the network [dW1, db1, ..., dWn, dbn].
             update_u (list[torch.Tensor]): List of the upper bound updates of the network [dW1, db1, ..., dWn, dbn].
-            sound (bool, optional): Whether to check if the new param_n falls within the new bounds. Defaults to True.
 
         Returns:
             tuple: The updated parameter lists [param_n, param_l, param_u].
         """
         # apply regularisation
-        param_n, param_l, param_u = l2_update(param_n, param_l, param_u, self.l2_reg, sound=sound)
-        param_n, param_l, param_u = l1_update(param_n, param_l, param_u, self.l1_reg, sound=sound)
+        param_n, param_l, param_u = l2_update(param_n, param_l, param_u, self.l2_reg)
+        param_n, param_l, param_u = l1_update(param_n, param_l, param_u, self.l1_reg)
         lr = self.lr / (1 + self.lr_decay * self.epoch)
         lr = max(lr, self.lr_min)
         for i in range(len(param_n)):
@@ -64,20 +62,13 @@ class SGD:
             param_n[i] -= lr * update_n[i]
             param_l[i] -= lr * update_u[i]
             param_u[i] -= lr * update_l[i]
-            if sound:
-                interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
-            else:
-                interval_arithmetic.validate_interval(param_l[i], param_u[i])
+            interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
         self.epoch += 1
         return param_n, param_l, param_u
 
 
 def l1_update(
-    param_n: list[torch.Tensor],
-    param_l: list[torch.Tensor],
-    param_u: list[torch.Tensor],
-    l1_reg: float,
-    sound: bool = True,
+    param_n: list[torch.Tensor], param_l: list[torch.Tensor], param_u: list[torch.Tensor], l1_reg: float
 ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     """
     Compute a sound bound on the l1 regularisation parameter update
@@ -89,7 +80,6 @@ def l1_update(
         param_l (list[torch.Tensor]): List of the lower bound parameters of the network [W1, b1, ..., Wn, bn].
         param_u (list[torch.Tensor]): List of the upper bound parameters of the network [W1, b1, ..., Wn, bn].
         l1_reg (float): The l1 regularisation parameter.
-        sound (bool, optional): Whether to check if the new param_n falls within the new bounds. Defaults to True.
 
     Returns:
         tuple: The updated parameter lists [param_n, param_l, param_u].
@@ -106,19 +96,12 @@ def l1_update(
         param_u[i] = torch.where(
             crossing, torch.clamp(param_u[i] - l1_reg, min=l1_reg), param_u[i] - l1_reg * torch.sign(param_u[i])
         )
-        if sound:
-            interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
-        else:
-            interval_arithmetic.validate_interval(param_l[i], param_u[i])
+        interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
     return param_n, param_l, param_u
 
 
 def l2_update(
-    param_n: list[torch.Tensor],
-    param_l: list[torch.Tensor],
-    param_u: list[torch.Tensor],
-    l2_reg: float,
-    sound: bool = True,
+    param_n: list[torch.Tensor], param_l: list[torch.Tensor], param_u: list[torch.Tensor], l2_reg: float
 ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     """
     Compute a sound bound on the l2 regularisation parameter update using interval arithmetic.
@@ -128,7 +111,6 @@ def l2_update(
         param_l (list[torch.Tensor]): List of the lower bound parameters of the network [W1, b1, ..., Wn, bn].
         param_u (list[torch.Tensor]): List of the upper bound parameters of the network [W1, b1, ..., Wn, bn].
         l1_reg (float): The l1 regularisation parameter.
-        sound (bool, optional): Whether to check if the new param_n falls within the new bounds. Defaults to True.
 
     Returns:
         tuple: The updated parameter lists [param_n, param_l, param_u].
@@ -138,8 +120,5 @@ def l2_update(
         param_n[i] = (1 - l2_reg) * param_n[i]
         param_l[i] = (1 - l2_reg) * param_l[i]
         param_u[i] = (1 - l2_reg) * param_u[i]
-        if sound:
-            interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
-        else:
-            interval_arithmetic.validate_interval(param_l[i], param_u[i])
+        interval_arithmetic.validate_interval(param_l[i], param_u[i], param_n[i])
     return param_n, param_l, param_u
