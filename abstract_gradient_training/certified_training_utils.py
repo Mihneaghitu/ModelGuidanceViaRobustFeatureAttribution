@@ -192,11 +192,13 @@ def propagate_conv_layers(
     """
     # get the parameters of the conv layers
     conv_layers = [l for l in model.modules() if isinstance(l, torch.nn.Conv2d)]
-    conv_parameters = [(l.weight.detach(), l.bias.detach(), l.stride, l.padding) for l in conv_layers]
+    conv_parameters = [(l.weight.detach(), l.bias.detach(), l.stride, l.padding, l.dilation) for l in conv_layers]
     # propagate the input through the conv layers
     x_l, x_u = x - epsilon, x + epsilon
-    for W, b, stride, padding in conv_parameters:
-        x_l, x_u = interval_arithmetic.propagate_conv2d(x_l, x_u, W, W, b, b, stride=stride, padding=padding)
+    for W, b, stride, padding, dilation in conv_parameters:
+        x_l, x_u = interval_arithmetic.propagate_conv2d(
+            x_l, x_u, W, W, b, b, stride=stride, padding=padding, dilation=dilation
+        )
         x_l, x_u = torch.nn.functional.relu(x_l), torch.nn.functional.relu(x_u)
     x_l = x_l.flatten(start_dim=1)
     x_u = x_u.flatten(start_dim=1)

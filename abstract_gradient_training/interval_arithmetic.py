@@ -2,6 +2,7 @@
 
 import inspect
 import logging
+from typing import Callable
 
 import torch
 import torch.nn.functional as F
@@ -261,8 +262,6 @@ def propagate_conv2d(
     W_u: torch.Tensor,
     b_l: torch.Tensor | None = None,
     b_u: torch.Tensor | None = None,
-    stride: int = 1,
-    padding: int = 0,
     transpose: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -276,8 +275,6 @@ def propagate_conv2d(
         W_u (torch.Tensor): Upper bound of the weight tensor of the convolutional layer.
         b_l (torch.Tensor, optional): Lower bound of the bias tensor of the convolutional layer.
         b_u (torch.Tensor, optional): Upper bound of the bias tensor of the convolutional layer.
-        stride (int, optional): Stride of the convolutional layer. Defaults to 1.
-        padding (int, optional): Padding of the convolutional layer. Defaults to 0.
         transpose (bool, optional): Whether the convolution is a transposed convolution. Defaults to False.
         **kwargs: Additional arguments to pass to the convolutional layer.
 
@@ -295,24 +292,14 @@ def propagate_conv2d(
         assert b_l.dim() == 1  # require the bias to be a vector, even though for affine layers we require it to be 2d
 
     # get the appropriate conv function to use
-    transform = F.conv2d if not transpose else F.conv_transpose2d
+    def transform(x, W):
+        if transpose:
+            return F.conv_transpose2d(x, W, bias=None, **kwargs)
+        else:
+            return F.conv2d(x, W, bias=None, **kwargs)
 
-    # compute the "mean" and "radius" of the intervals
-    x_mu = (x_u + x_l) / 2
-    x_r = (x_u - x_l) / 2
-    W_mu = (W_u + W_l) / 2
-    W_r = (W_u - W_l) / 2
-
-    # compute the "mean" and "radius" of the output
-    H_mu = transform(x_mu, W_mu, bias=None, stride=stride, padding=padding, **kwargs)
-    H_r = transform(torch.abs(x_mu), W_r, bias=None, stride=stride, padding=padding, **kwargs)
-    H_r += transform(x_r, torch.abs(W_mu), bias=None, stride=stride, padding=padding, **kwargs)
-    H_r += transform(x_r, W_r, bias=None, stride=stride, padding=padding, **kwargs)
-
-    # convert to lower and upper bounds
-    H_l = H_mu - H_r
-    H_u = H_mu + H_r
-    validate_interval(H_l, H_u, msg="output interval")
+    # apply the linear transform
+    H_l, H_u = propagate_linear_transform(x_l, x_u, W_l, W_u, transform)
 
     # add the bias
     if b_l is not None:
@@ -320,6 +307,44 @@ def propagate_conv2d(
         H_l, H_u = H_l + b_l.view(1, -1, 1, 1), H_u + b_u.view(1, -1, 1, 1)
         validate_interval(H_l, H_u, msg="output interval with bias")
 
+    return H_l, H_u
+
+
+def propagate_linear_transform(
+    A_l: torch.Tensor, A_u: torch.Tensor, B_l: torch.Tensor, B_u: torch.Tensor, transform: Callable
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Given any linear transformation f (i.e. f(A + B) = f(A) + f(B)), compute the interval bound on the output of the
+    transformation given an interval over the input using Rump's algorithm.
+
+    Args:
+        A_l (torch.Tensor): Lower bound on the first input tensor A.
+        A_u (torch.Tensor): Upper bound on the first input tensor A.
+        B_l (torch.Tensor): Lower bound on the second input tensor B.
+        B_u (torch.Tensor): Upper bound on the second input tensor B.
+        transform (Callable): The linear transformation to apply to the input interval.
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]: Interval over the output of the transformation.
+    """
+    # validate input
+    validate_interval(A_l, A_u, msg="input interval A")
+    validate_interval(B_l, B_u, msg="input interval B")
+
+    # compute the "mean" and "radius" of the input intervals
+    A_mu = (A_u + A_l) / 2
+    A_r = (A_u - A_l) / 2
+    B_mu = (B_u + B_l) / 2
+    B_r = (B_u - B_l) / 2
+
+    # compute the "mean" and "radius" of the output
+    H_mu = transform(A_mu, B_mu)
+    H_r = transform(torch.abs(A_mu), B_r) + transform(A_r, torch.abs(B_mu)) + transform(A_r, B_r)
+
+    # convert to lower and upper bounds
+    H_l = H_mu - H_r
+    H_u = H_mu + H_r
+    validate_interval(H_l, H_u, msg="output interval")
     return H_l, H_u
 
 
