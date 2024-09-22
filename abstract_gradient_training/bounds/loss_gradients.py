@@ -15,7 +15,7 @@ def bound_loss_function_derivative(
     logit_n: torch.Tensor,
     labels: torch.Tensor,
     **kwargs,
-):
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Compute an interval bound for the partial derivative of the loss function with respect to the logits.
 
@@ -33,15 +33,14 @@ def bound_loss_function_derivative(
     """
     if loss == "cross_entropy":
         return bound_cross_entropy_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
-    elif loss == "binary_cross_entropy":
+    if loss == "binary_cross_entropy":
         return bound_bce_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
-    elif loss == "max_margin":
+    if loss == "max_margin":
         return bound_max_margin_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
-    elif loss == "mse":
+    if loss == "mse":
         return bound_mse_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
-    elif loss == "hinge":
+    if loss == "hinge":
         return bound_hinge_derivative(logit_l, logit_u, logit_n, labels, **kwargs)
-
     raise ValueError(f"Loss function {loss} not supported.")
 
 

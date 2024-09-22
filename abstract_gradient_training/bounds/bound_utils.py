@@ -1,6 +1,6 @@
 """Helper functions for bounding functions."""
 
-from typing import Callable
+from collections.abc import Callable
 import torch
 import numpy as np
 
@@ -47,7 +47,7 @@ def validate_backward_bound_input(
     param_u: list[torch.Tensor],
     activations_l: list[torch.Tensor],
     activations_u: list[torch.Tensor],
-) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     """
     Validate and reshape input arguments to forward bounding functions.
     The bounding functions require the following shapes:

@@ -2,14 +2,18 @@
 Helper functions for adding functional constraints to a gurobi model.
 """
 
-from typing import Tuple, Optional
 import gurobipy as gp
 import numpy as np
 
 
 def add_relu_bigm(
-    model: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax: bool = False, triangle: bool = False
-) -> Tuple[gp.MVar, Optional[gp.MVar]]:
+    model: gp.Model,
+    x: gp.MVar | gp.MLinExpr | gp.MQuadExpr,
+    l: np.ndarray,
+    u: np.ndarray,
+    relax: bool = False,
+    triangle: bool = False,
+) -> tuple[gp.MVar, gp.MVar | None]:
     """
     Add the constraints defining the function y = ReLU(x) to the gurobi model.
     If relax is True, then relax the binary variables.
@@ -17,13 +21,13 @@ def add_relu_bigm(
 
     Args:
         model (gp.Model): Gurobi model to add the constraints to.
-        x (gp.MVar): [n x 1] Gurobi MVar for the input variable.
+        x (gp.MVar | gp.MLinExpr | gp.MQuadExpr): [n x 1] Gurobi MVar for the input variable.
         l (np.ndarray): [n x 1] Array of lower bounds for the input variable x.
         u (np.ndarray): [n x 1] Array of upper bounds for the input variable x.
 
     Returns:
         y (gp.MVar): [n x 1] MVar for the output of the ReLU
-        z (Optional[gp.MVar]): MVar for the activation set of the ReLU
+        z (gp.MVar | None): MVar for the activation set of the ReLU
     """
     # Check input shape
     assert x.shape == l.shape == u.shape
@@ -57,13 +61,13 @@ def add_relu_bigm(
 def add_bilinear_matmul(
     model: gp.Model,
     W: gp.MVar,
-    h: gp.MVar,
+    h: gp.MVar | gp.MLinExpr | gp.MQuadExpr,
     W_l: np.ndarray,
     W_u: np.ndarray,
     h_l: np.ndarray,
     h_u: np.ndarray,
     relax: bool = False,
-) -> gp.MVar:
+) -> gp.MVar | gp.MQuadExpr:
     """
     Add the bilinear term s = W @ h to the gurobi model. If relax is True, then the bilinear term is replaced with its
     linear envelope.
@@ -71,7 +75,7 @@ def add_bilinear_matmul(
     Args:
         model (gp.Model): Gurobi model
         W (gp.MVar): [m x n] Gurobi MVar for the weight matrix
-        h (gp.MVar): [n x 1] Gurobi MVar for the input vector
+        h (gp.MVar | gp.MLinExpr | gp.MQuadExpr): [n x 1] Gurobi MVar for the input vector
         W_l (np.ndarray): [m x n] Lower bounds on the weight matrix
         W_u (np.ndarray): [m x n] Upper bounds on the weight matrix
         h_l (np.ndarray): [n x 1] Lower bounds on the input vector
@@ -79,7 +83,7 @@ def add_bilinear_matmul(
         relax (bool, optional): If True, use the linear envelope of the bilinear term. Defaults to False.
 
     Returns:
-        gp.MVar: [m x 1] MVar representing the bilinear variable s.
+        gp.MVar | gp.MQuadExpr: [m x 1] MVar or MQuadExpr representing the bilinear variable s.
     """
     # validate shapes of input
     m, n = W.shape
@@ -114,7 +118,7 @@ def add_bilinear_elementwise(
     b_l: np.ndarray,
     b_u: np.ndarray,
     relax: bool = False,
-) -> gp.MVar:
+) -> gp.MVar | gp.MQuadExpr:
     """
     Add the bilinear term s = a * b to the gurobi model. If relax is True, then the bilinear term is replaced with its
     linear envelope.
@@ -130,7 +134,7 @@ def add_bilinear_elementwise(
         relax (bool, optional): If True, use the linear envelope of the bilinear term. Defaults to False.
 
     Returns:
-        gp.MVar: [m x 1] MVar representing the bilinear variable s.
+        gp.MVar | gp.MQuadExpr: [m x 1] MVar or MQuadExpr representing the bilinear variable s.
     """
     # validate shapes of input
     assert a.shape == a_l.shape == a_u.shape
@@ -152,7 +156,7 @@ def add_bilinear_elementwise(
     return s
 
 
-def add_heaviside(m: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax_binaries: bool):
+def add_heaviside(m: gp.Model, x: gp.MVar, l: np.ndarray, u: np.ndarray, relax_binaries: bool) -> gp.MVar:
     """
     Add the term z = Heaviside(x) to the gurobi model. The Heaviside function is defined as
         z = 1 if x > 0
@@ -190,7 +194,7 @@ def add_softmax(m: gp.Model, x: gp.MVar | gp.MLinExpr | gp.MQuadExpr) -> gp.MVar
     e = m.addMVar(x.shape, lb=0)
     y = m.addMVar(x.shape, lb=0, ub=1)
 
-    if isinstance(x, gp.MLinExpr) or isinstance(x, gp.MQuadExpr):
+    if isinstance(x, (gp.MLinExpr, gp.MQuadExpr)):
         z = m.addMVar(x.shape, lb=-np.inf)
         m.addConstr(z == x)
         x = z
@@ -205,7 +209,7 @@ def add_softmax(m: gp.Model, x: gp.MVar | gp.MLinExpr | gp.MQuadExpr) -> gp.MVar
     return y
 
 
-def add_loss_gradient(m: gp.Model, logits: gp.MVar, label: np.ndarray, loss: str) -> gp.MVar:
+def add_loss_gradient(m: gp.Model, logits: gp.MVar, label: np.ndarray, loss: str) -> gp.MLinExpr:
     """
     Add the gradient of the loss function with respect to the logits to the gurobi model.
 
@@ -216,7 +220,7 @@ def add_loss_gradient(m: gp.Model, logits: gp.MVar, label: np.ndarray, loss: str
         loss (str): Name of the loss function.
 
     Returns:
-        dL (gp.MVar): [n x 1] MVar for the gradient of the loss function with respect to the logits.
+        dL (gp.MLinExpr): [n x 1] MLinExpr for the gradient of the loss function with respect to the logits.
     """
 
     if loss == "cross_entropy":
@@ -224,8 +228,8 @@ def add_loss_gradient(m: gp.Model, logits: gp.MVar, label: np.ndarray, loss: str
         y_t = np.zeros(logits.shape)
         y_t[label] = 1
         y = add_softmax(m, logits)
-        loss = y - y_t
+        loss_val = y - y_t
     else:
         raise NotImplementedError(f"Loss fn {loss} not implemented.")
 
-    return loss
+    return loss_val

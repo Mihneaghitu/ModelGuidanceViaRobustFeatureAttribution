@@ -1,7 +1,7 @@
 """Helper functions for certified training."""
 
 from __future__ import annotations
-from typing import Iterator
+from collections.abc import Iterator
 
 import logging
 import torch
@@ -37,7 +37,7 @@ def grads_helper(
         label_poison (bool, optional): Boolean flag to indicate if the labels are being poisoned. Defaults to False.
 
     Returns:
-        tuple[list[torch.Tensor], list[torch.Tensor]]: _description_
+        tuple[list[torch.Tensor], list[torch.Tensor]]: List of lower and upper bounds on the gradients.
     """
     labels = labels.squeeze()
     assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
@@ -192,7 +192,10 @@ def propagate_conv_layers(
     """
     # get the parameters of the conv layers
     conv_layers = [l for l in model.modules() if isinstance(l, torch.nn.Conv2d)]
-    conv_parameters = [(l.weight.detach(), l.bias.detach(), l.stride, l.padding, l.dilation) for l in conv_layers]
+    conv_parameters = []
+    for l in conv_layers:
+        bias = l.bias.detach() if l.bias is not None else l.bias
+        conv_parameters.append((l.weight.detach(), bias, l.stride, l.padding, l.dilation))
     # propagate the input through the conv layers
     x_l, x_u = x - epsilon, x + epsilon
     for W, b, stride, padding, dilation in conv_parameters:
@@ -239,8 +242,8 @@ def dataloader_wrapper(dl_train: DataLoader, n_epochs: int) -> Iterator[tuple[to
 
 
 def dataloader_pair_wrapper(
-    dl_train: DataLoader, dl_clean: DataLoader, n_epochs: int
-) -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
+    dl_train: DataLoader, dl_clean: DataLoader | None, n_epochs: int
+) -> Iterator[tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]]:
     """
     Return a new generator that iterates over the training dataloaders for a fixed number of epochs.
     For each combined batch, we return one batch from the clean dataloader and one batch from the poisoned dataloader.

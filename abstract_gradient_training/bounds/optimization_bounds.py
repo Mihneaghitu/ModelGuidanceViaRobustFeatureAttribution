@@ -4,7 +4,7 @@ Formulate the bounding problem as an optimization problem and solve it using Gur
 
 import time
 import logging
-from typing import Optional
+from typing import Any
 
 import gurobipy as gp
 import numpy as np
@@ -29,7 +29,7 @@ def bound_forward_pass(
     relax_binaries: bool = False,
     relax_bilinear: bool = False,
     optimize_intermediate_bounds: bool = True,
-    gurobi_kwargs: Optional[dict] = None,
+    gurobi_kwargs: dict[str, Any] | None = None,
     **kwargs,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
@@ -49,14 +49,14 @@ def bound_forward_pass(
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
         optimize_intermediate_bounds (bool): Whether to solve an optimization problem for each intermediate activation
-                                             or to use IBP bounds.
-        gurobi_kwargs (Optional[dict]): Parameters to pass to the gurobi model.
+            or to use IBP bounds.
+        gurobi_kwargs (dict | None): Parameters to pass to the gurobi model.
 
     Returns:
         activations_l (list[torch.Tensor]): list of lower bounds on all (pre-relu) activations [x0, ..., xL] including
-                                            the input and the logits. Each tensor xi has shape [batchsize x dim x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x dim x 1].
         activations_u (list[torch.Tensor]): list of upper bounds on all (pre-relu) activations [x0, ..., xL] including
-                                            the input and the logits. Each tensor xi has shape [batchsize x dim x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x dim x 1].
     """
     # validate the input
     param_l, param_u, x0_l, x0_u = bound_utils.validate_forward_bound_input(param_l, param_u, x0_l, x0_u)
@@ -118,8 +118,8 @@ def _bound_forward_pass_helper(
     relax_binaries: bool,
     relax_bilinear: bool,
     optimize_intermediate_bounds: bool,
-    gurobi_kwargs: dict,
-) -> tuple[np.ndarray, np.ndarray, gp.Model]:
+    gurobi_kwargs: dict | None,
+) -> tuple[list[np.ndarray], list[np.ndarray], gp.Model]:
     """
     Compute bounds on a single input by solving a mixed-integer program using gurobi.
 
@@ -131,20 +131,20 @@ def _bound_forward_pass_helper(
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
         optimize_intermedaite_bounds (bool): Whether to solve an optimization problem for each intermediate activation
-                                             or to use IBP bounds.
+            or to use IBP bounds.
         gurobi_kwargs (dict): Parameters to pass to the gurobi model.
 
     Returns:
         activations_l (list[np.ndarray]): list of lower bounds computed using bilinear programming on the (pre-relu)
-                                            activations [x0, ..., xL] including the input and the logits.
+            activations [x0, ..., xL] including the input and the logits.
         activations_u (list[np.ndarray]): list of upper bounds computed using bilinear programming on the (pre-relu)
-                                            activations [x0, ..., xL] including the input and the logits.
+            activations [x0, ..., xL] including the input and the logits.
         model (gp.Model): The gurobi model used to compute the bounds.
     """
     # define model and set the model parameters
     model = gurobi_utils.init_gurobi_model("Bounds")
     model.setParam("NonConvex", 2)
-    if gurobi_kwargs is not None:
+    if gurobi_kwargs:
         for key, value in gurobi_kwargs.items():
             model.setParam(key, value)
 
@@ -213,8 +213,8 @@ def bound_backward_pass(
     relax_bilinear: bool = False,
     relax_loss: bool = True,
     loss_fn: str = "cross_entropy",
-    labels: Optional[torch.Tensor] = None,
-    gurobi_kwargs: Optional[dict] = None,
+    labels: torch.Tensor | None = None,
+    gurobi_kwargs: dict | None = None,
     **kwargs,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
@@ -227,15 +227,15 @@ def bound_backward_pass(
         param_l (list[torch.Tensor]): list of lower bounds on the parameters [W1, b1, ..., Wm, bm]
         param_u (list[torch.Tensor]): list of upper bounds on the parameters [W1, b1, ..., Wm, bm]
         activations_l (list[torch.Tensor]): list of lower bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
         activations_u (list[torch.Tensor]): list of upper bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
         relax_loss (bool): Whether to relax the loss function to interval propagation.
         loss_fn (str): The loss function to use if relax_loss is False.
-        labels (Optional[torch.Tensor]): Tensor of labels or targets for the batch, needed if relax_loss is False.
-        gurobi_kwargs (Optional[dict]): Parameters to pass to the gurobi model.
+        labels (torch.Tensor | None): Tensor of labels or targets for the batch, needed if relax_loss is False.
+        gurobi_kwargs (dict | None): Parameters to pass to the gurobi model.
 
     Returns:
         grads_l (list[torch.Tensor]): list of lower bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
@@ -309,8 +309,8 @@ def _bound_backward_pass_helper(
     relax_bilinear: bool,
     relax_loss: bool,
     loss_fn: str,
-    label: Optional[np.ndarray],
-    gurobi_kwargs: dict,
+    label: np.ndarray | None,
+    gurobi_kwargs: dict | None,
 ) -> tuple[list[np.ndarray], list[np.ndarray], gp.Model]:
     """
     Compute backward pass bounds for a single input in the batch by formulating and solving an optimization problem
@@ -322,15 +322,15 @@ def _bound_backward_pass_helper(
         W_l (list[np.ndarray]): list of lower bounds on the weight matrices [W1, ..., Wm]
         W_u (list[np.ndarray]): list of upper bounds on the weight matrices [W1, ..., Wm]
         activations_l (list[torch.Tensor]): list of lower bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor has shape [n_i x 1].
+            the input and the logits. Each tensor has shape [n_i x 1].
         activations_u (list[torch.Tensor]): list of upper bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor has shape [n_i x 1].
+            the input and the logits. Each tensor has shape [n_i x 1].
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
         relax_loss (bool): Whether to relax the loss function to interval propagation.
         loss_fn (str): The loss function to use if relax_loss is False.
-        label (Optional[np.ndarray]): The label or target for the input, required if relax_loss is False.
-        gurobi_kwargs (dict): Parameters to pass to the gurobi model.
+        label (np.ndarray | None): The label or target for the input, required if relax_loss is False.
+        gurobi_kwargs (dict | None): Parameters to pass to the gurobi model.
 
     Returns:
         grads_l (list[np.ndarray]): list of lower bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
@@ -341,7 +341,7 @@ def _bound_backward_pass_helper(
     # define model and set the model parameters
     model = gurobi_utils.init_gurobi_model("Bounds")
     model.setParam("NonConvex", 2)
-    if gurobi_kwargs is not None:
+    if gurobi_kwargs:
         for key, value in gurobi_kwargs.items():
             model.setParam(key, value)
 
@@ -349,6 +349,7 @@ def _bound_backward_pass_helper(
     if relax_loss:
         dL = model.addMVar(shape=dL_min.shape, lb=dL_min, ub=dL_max)
     else:
+        assert label is not None, "Label is required if loss is not relaxed."
         act = model.addMVar(shape=activations_l[-1].shape, lb=activations_l[-1], ub=activations_u[-1])
         dL = mip_formulations.add_loss_gradient(model, act, label, loss_fn)
 
@@ -419,7 +420,7 @@ def bound_forward_and_backward_pass(
     relax_bilinear: bool = False,
     relax_loss: bool = True,
     optimize_intermediate_bounds: bool = True,
-    gurobi_kwargs: Optional[dict] = None,
+    gurobi_kwargs: dict | None = None,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
     Given bounds on the parameters of the neural network and an interval over the input, compute bounds on the
@@ -436,9 +437,9 @@ def bound_forward_and_backward_pass(
         relax_binaries (bool): Whether to relax binary to continuous variables in the formulation.
         relax_bilinear (bool): Whether to relax bilinear to linear constraints in the formulation.
         relax_loss (bool): Whether to relax the loss function to interval propagation.
-        optimize_intermedaite_bounds (bool): Whether to solve an optimization problem for each intermediate activation
-                                             or to use IBP bounds.
-        gurobi_kwargs (Optional[dict]): Parameters to pass to the gurobi model.
+        optimize_intermediate_bounds (bool): Whether to solve an optimization problem for each intermediate activation
+            or to use IBP bounds.
+        gurobi_kwargs (dict | None): Parameters to pass to the gurobi model.
 
     Returns:
         grads_l (list[torch.Tensor]): list of lower bounds on the gradients given as a list [dW1, db1, ..., dWm, dbm]
@@ -512,7 +513,7 @@ def _bound_forward_and_backward_pass_helper(
     relax_bilinear: bool,
     relax_loss: bool,
     optimize_intermediate_bounds: bool,
-    gurobi_kwargs: dict,
+    gurobi_kwargs: dict[str, Any] | None,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor], gp.Model]:
     """
     Given bounds on the parameters of the neural network and an interval over a single input point, compute bounds on
@@ -542,7 +543,7 @@ def _bound_forward_and_backward_pass_helper(
     # define model and set the model parameters
     model = gurobi_utils.init_gurobi_model("Bounds")
     model.setParam("NonConvex", 2)
-    if gurobi_kwargs is not None:
+    if gurobi_kwargs:
         for key, value in gurobi_kwargs.items():
             model.setParam(key, value)
 

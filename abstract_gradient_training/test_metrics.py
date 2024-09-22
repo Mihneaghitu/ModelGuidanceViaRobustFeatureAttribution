@@ -1,6 +1,6 @@
 """Test metrics and bounding functions."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
 import torch
 import torch.nn.functional as F
 
@@ -14,8 +14,8 @@ def test_mse(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     targets: torch.Tensor,
-    model: Optional[torch.nn.Sequential] = None,
-    transform: Optional[Callable] = None,
+    model: torch.nn.Sequential | None = None,
+    transform: Callable | None = None,
     epsilon: float = 0.0,
 ) -> tuple[float, float, float]:
     """
@@ -30,7 +30,7 @@ def test_mse(
         targets (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
         model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
-                                        the provided model.
+            the provided model.
         epsilon (float, optional): Feature poisoning parameter.
 
     Returns:
@@ -73,8 +73,8 @@ def test_accuracy(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     labels: torch.Tensor,
-    model: Optional[torch.nn.Sequential] = None,
-    transform: Optional[Callable] = None,
+    model: torch.nn.Sequential | None = None,
+    transform: Callable | None = None,
     epsilon: float = 0.0,
 ) -> tuple[float, float, float]:
     """
@@ -89,7 +89,7 @@ def test_accuracy(
         labels (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
         model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
-                                        the provided model.
+            the provided model.
         epsilon (float, optional): Feature poisoning parameter.
 
     Returns:
@@ -141,8 +141,8 @@ def test_cross_entropy(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     labels: torch.Tensor,
-    model: Optional[torch.nn.Sequential] = None,
-    transform: Optional[Callable] = None,
+    model: torch.nn.Sequential | None = None,
+    transform: Callable | None = None,
     epsilon: float = 0.0,
 ) -> tuple[float, float, float]:
     """
@@ -157,7 +157,7 @@ def test_cross_entropy(
         labels (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
         model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
-                                        the provided model.
+            the provided model.
         epsilon (float, optional): Feature poisoning parameter.
 
     Returns:
@@ -212,8 +212,8 @@ def proportion_certified(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     labels: torch.Tensor,
-    model: Optional[torch.nn.Sequential] = None,
-    transform: Optional[Callable] = None,
+    model: torch.nn.Sequential | None = None,
+    transform: Callable | None = None,
     epsilon: float = 0.0,
 ) -> float:
     """
@@ -229,7 +229,7 @@ def proportion_certified(
         labels (torch.Tensor): Targets for the input batch (shape [batchsize, ]).
         model (torch.nn.Sequential, optional): Model to transform the input data through. Defaults to None.
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
-                                        the provided model.
+            the provided model.
         epsilon (float, optional): Feature poisoning parameter.
 
     Returns:

@@ -1,9 +1,9 @@
 """Certified unlearning training."""
 
 from __future__ import annotations
-from typing import Optional, Callable
 import logging
 import itertools
+from collections.abc import Callable
 
 import torch
 from torch.utils.data import DataLoader
@@ -24,7 +24,7 @@ def unlearning_certified_training(
     config: AGTConfig,
     dl_train: DataLoader,
     dl_test: DataLoader,
-    transform: Optional[Callable] = None,
+    transform: Callable | None = None,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     """
     Train the dense layers of a neural network with the given config and return the unlearning-certified bounds
@@ -32,16 +32,15 @@ def unlearning_certified_training(
 
     Args:
         model (torch.nn.Sequential): Neural network model. Must be a torch.nn.Sequential object with dense layers and
-                                     ReLU activations only. The model may have other layers (e.g. convolutional layers)
-                                     before the dense section, but these must be fixed and are not trained. If fixed
-                                     non-dense layers are provided, then the transform function must be set to propagate
-                                     bounds through these layers.
+            ReLU activations only. The model may have other layers (e.g. convolutional layers) before the dense section,
+            but these must be fixed and are not trained. If fixed non-dense layers are provided, then the transform
+            function must be set to propagate bounds through these layers.
         config (AGTConfig): Configuration object for the abstract gradient training module. See the configuration module
-                            for more details.
+            for more details.
         dl_train (DataLoader): Training data loader.
         dl_test (DataLoader): Testing data loader.
-        transform (Optional[Callable], optional): Optional function to propagate bounds through fixed layers of the
-                                                  neural network (e.g. convolutional layers). Defaults to None.
+        transform (Callable | None, optional): Optional function to propagate bounds through fixed layers of the
+            neural network (e.g. convolutional layers). Defaults to None.
 
     Returns:
         param_l (list[torch.Tensor]): List of lower bounds of the trained parameters [W1, b1, ..., Wn, bn].
@@ -160,11 +159,11 @@ def unlearning_certified_training(
 
     for i in range(len(param_n)):
         violations = (param_l[i] > param_n[i]).sum() + (param_n[i] > param_u[i]).sum()
-        max_violation = max((param_l[i] - param_n[i]).max(), (param_n[i] - param_u[i]).max())
+        max_violation = max((param_l[i] - param_n[i]).max().item(), (param_n[i] - param_u[i]).max().item())
         if violations > 0:
             LOGGER.warning("Nominal parameters not within certified bounds for parameter %s", i)
             LOGGER.debug("\tNumber of violations: %s", violations.item())
-            LOGGER.debug("\tMax violation: %.2e", max_violation.item())
+            LOGGER.debug("\tMax violation: %.2e", max_violation)
 
     LOGGER.info("=================== Finished Unlearning Certified Training ===================")
 

@@ -2,7 +2,8 @@
 
 import inspect
 import logging
-from typing import Callable
+from typing import Literal
+from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
@@ -18,7 +19,7 @@ def propagate_affine(
     W_u: torch.Tensor,
     b_l: torch.Tensor,
     b_u: torch.Tensor,
-    interval_matmul: str = "rump",
+    interval_matmul: Literal["rump", "exact", "nguyen"] = "rump",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Compute an interval bound on the affine transformation A @ x + b using Rump's algorithm.
@@ -42,7 +43,11 @@ def propagate_affine(
 
 
 def propagate_matmul(
-    A_l: torch.Tensor, A_u: torch.Tensor, B_l: torch.Tensor, B_u: torch.Tensor, interval_matmul: str = "rump"
+    A_l: torch.Tensor,
+    A_u: torch.Tensor,
+    B_l: torch.Tensor,
+    B_u: torch.Tensor,
+    interval_matmul: Literal["rump", "exact", "nguyen"] = "rump",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Compute an interval bound on the matrix multiplication A @ B using the specified method.
@@ -289,20 +294,20 @@ def propagate_conv2d(
     assert x_l.dim() == 4
     assert W_l.dim() == 4
     if b_l is not None:
+        assert b_u is not None, "Upper bound of bias tensor must be provided if lower bound is provided"
         assert b_l.dim() == 1  # require the bias to be a vector, even though for affine layers we require it to be 2d
 
     # get the appropriate conv function to use
     def transform(x, W):
         if transpose:
             return F.conv_transpose2d(x, W, bias=None, **kwargs)
-        else:
-            return F.conv2d(x, W, bias=None, **kwargs)
+        return F.conv2d(x, W, bias=None, **kwargs)
 
     # apply the linear transform
     H_l, H_u = propagate_linear_transform(x_l, x_u, W_l, W_u, transform)
 
     # add the bias
-    if b_l is not None:
+    if b_l is not None and b_u is not None:
         validate_interval(b_l, b_u, msg="bias interval")
         H_l, H_u = H_l + b_l.view(1, -1, 1, 1), H_u + b_u.view(1, -1, 1, 1)
         validate_interval(H_l, H_u, msg="output interval with bias")
@@ -370,7 +375,7 @@ def propagate_softmax(A_l: torch.Tensor, A_u: torch.Tensor) -> tuple[torch.Tenso
     return y_l, y_u
 
 
-def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor = None, msg: str = "") -> None:
+def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor | None = None, msg: str = "") -> None:
     """
     Validate an arbitrary interval n in [l, u] and log any violations of the bound at a level based on the size of the
     violation.
@@ -378,7 +383,7 @@ def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor = None, 
     Args:
         l (torch.Tensor): Lower bound of the interval.
         u (torch.Tensor): Upper bound of the interval.
-        n (torch.Tensor, optional): Nominal value of the interval. Defaults to None.
+        n (torch.Tensor | None, optional): Nominal value of the interval. Defaults to None.
         msg (str, optional): Optional message to log with the bound violation for debugging purposes.
     """
     if n is None:
@@ -388,7 +393,10 @@ def validate_interval(l: torch.Tensor, u: torch.Tensor, n: torch.Tensor = None, 
     # this should be negative if all bounds are satisfied
     if diff <= 0:
         return
-    func_name = inspect.currentframe().f_back.f_code.co_name
+    # get caller function name, if available
+    current_frame = inspect.currentframe()
+    f_back = current_frame.f_back if current_frame is not None else None
+    func_name = f_back.f_code.co_name if f_back is not None else ""
     if diff > 1e-3:  # a major infraction of the bound
         LOGGER.error("Violated bound in %s: %.2e (%s)", func_name, diff, msg)
     elif diff > 1e-4:  # a minor infraction of the bound

@@ -3,7 +3,7 @@
 from __future__ import annotations
 import itertools
 import logging
-from typing import Optional, Callable
+from collections.abc import Callable
 
 import torch
 from torch.utils.data import DataLoader
@@ -23,8 +23,8 @@ def poison_certified_training(
     config: AGTConfig,
     dl_train: DataLoader,
     dl_test: DataLoader,
-    dl_clean: Optional[DataLoader] = None,
-    transform: Optional[Callable] = None,
+    dl_clean: DataLoader | None = None,
+    transform: Callable | None = None,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     """
     Train the neural network while tracking lower and upper bounds on all the parameters under a possible poisoning
@@ -32,18 +32,17 @@ def poison_certified_training(
 
     Args:
         model (torch.nn.Sequential): Neural network model to train. Expected to be a Sequential model with linear
-                                     layers and ReLU activations on all layers except the last.
-                                     Models with (fixed) convolutional layers are also accepted but the transform
-                                     function must be provided to handle the propagation through these layers.
+            layers and ReLU activations on all layers except the last. Models with (fixed) convolutional layers are
+            also accepted but the transform function must be provided to handle the propagation through these layers.
         config (ct_config.AGTConfig): Configuration object (see agt.certified_training.configuration.py for details)
-        dl_train (torch.utils.data.DataLoader): Dataloader for the training data.
-        dl_test (torch.utils.data.DataLoader): Dataloader for the testing data.
-        dl_clean (torch.utils.data.DataLoader): Dataloader for "clean" training data. If provided, a batch will be
-                                                taken from both dl_train and dl_clean for each training batch.
-                                                Poisoned bounds will only be calculated for the batches from dl_train.
+        dl_train (DataLoader): Dataloader for the training data.
+        dl_test (DataLoader): Dataloader for the testing data.
+        dl_clean (DataLoader, optional): Dataloader for "clean" training data. If provided, a batch will be taken from
+            both dl_train and dl_clean for each training batch. Poisoned bounds will only be calculated for the batches
+            from dl_train.
         transform (Callable): Function that transforms and bounds the input data for any initial, fixed, non-affine
-                              layers of the neural network. For example, propagating bounds through fixed
-                              convolutional layers. Defaults to None.
+            layers of the neural network. For example, propagating bounds through fixed
+            convolutional layers. Defaults to None.
 
     Returns:
         param_l: list of lower bounds on the parameters of the linear layers of the model [W1, b1, ..., Wm, bm]
@@ -91,7 +90,7 @@ def poison_certified_training(
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
             batch = batch.view(batch.size(0), -1, 1).type(param_n[-1].dtype)
-            batch_clean = batch_clean.view(batch_clean.size(0), -1, 1).type(param_n[-1].dtype) if dl_clean else None
+            batch_clean = batch_clean.view(batch_clean.size(0), -1, 1).type(param_n[-1].dtype) if batch_clean else None
 
         # initialise containers to store the nominal and bounds on the gradients for each fragment
         # the bounds are stored as lists of lists indexed by [parameter, fragment]
@@ -102,8 +101,8 @@ def poison_certified_training(
         grads_diffs_u = [[] for _ in param_n]  # difference of input+weight perturbed and weight perturbed bounds
 
         # process clean data
-        batch_fragments = torch.split(batch_clean, config.fragsize, dim=0) if dl_clean else []
-        label_fragments = torch.split(labels_clean, config.fragsize, dim=0) if dl_clean else []
+        batch_fragments = torch.split(batch_clean, config.fragsize, dim=0) if batch_clean else []
+        label_fragments = torch.split(labels_clean, config.fragsize, dim=0) if labels_clean else []
         for batch_frag, label_frag in zip(batch_fragments, label_fragments):
             batch_frag, label_frag = batch_frag.to(device), label_frag.to(device)
             batch_frag = transform(batch_frag, model, 0)[0] if transform else batch_frag

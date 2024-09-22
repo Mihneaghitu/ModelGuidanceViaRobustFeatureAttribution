@@ -6,14 +6,15 @@ import gurobipy as gp
 import numpy as np
 
 
-def bound_objective(model: gp.Model, objective: gp.MVar | gp.MLinExpr) -> tuple[np.ndarray, np.ndarray]:
+def bound_objective(model: gp.Model, objective: gp.MVar | gp.MLinExpr | gp.MQuadExpr) -> tuple[np.ndarray, np.ndarray]:
     """
     Given a gurobi model and a vector / matrix of objectives, compute the elementwise minimum and maximum value of the
     objective over the model.
 
     Args:
         model (gp.Model): Gurobi model
-        objective (gp.MVar | gp.MLinExpr): Objective to minimize/maximize over, either a gurobi variable or expression.
+        objective (gp.MVar | gp.MLinExpr | gp.MQuadExpr): Objective to minimize/maximize over, either a gurobi variable
+            or expression.
 
     Returns:
         tuple[np.ndarray, np.ndarray]: Tuple of two numpy arrays, the first containing the minimum of each objective

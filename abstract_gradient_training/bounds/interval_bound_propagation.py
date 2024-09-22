@@ -1,5 +1,7 @@
 """Interval bound propagation."""
 
+from typing import Literal
+
 import torch
 import torch.nn.functional as F
 
@@ -12,7 +14,7 @@ def bound_forward_pass(
     param_u: list[torch.Tensor],
     x0_l: torch.Tensor,
     x0_u: torch.Tensor,
-    interval_matmul: str = "rump",
+    interval_matmul: Literal["rump", "exact", "nguyen"] = "rump",
     **kwargs,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
@@ -28,9 +30,9 @@ def bound_forward_pass(
 
     Returns:
         activations_l (list[torch.Tensor]): list of lower bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
         activations_u (list[torch.Tensor]): list of upper bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
     """
 
     # validate the input
@@ -60,7 +62,7 @@ def bound_backward_pass(
     param_u: list[torch.Tensor],
     activations_l: list[torch.Tensor],
     activations_u: list[torch.Tensor],
-    interval_matmul: str = "rump",
+    interval_matmul: Literal["rump", "exact", "nguyen"] = "rump",
     **kwargs,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
     """
@@ -74,9 +76,9 @@ def bound_backward_pass(
         param_l (list[torch.Tensor]): list of lower bounds on the parameters [W1, b1, ..., Wm, bm]
         param_u (list[torch.Tensor]): list of upper bounds on the parameters [W1, b1, ..., Wm, bm]
         activations_l (list[torch.Tensor]): list of lower bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
         activations_u (list[torch.Tensor]): list of upper bounds on the (pre-relu) activations [x0, ..., xL], including
-                                            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
+            the input and the logits. Each tensor xi has shape [batchsize x n_i x 1].
         interval_matmul (str): one of ["rump", "exact", "nguyen"], method to use for interval matrix multiplication.
 
     Returns:

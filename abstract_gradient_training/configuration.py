@@ -6,7 +6,9 @@ pydantic is a data validation library that uses Python type annotations to valid
 import logging
 import json
 import hashlib
-from typing import Dict, Callable, Literal
+from typing import Literal
+from collections.abc import Callable
+
 import pydantic
 import pydantic.json
 import torch
@@ -66,7 +68,7 @@ LOSS_BOUNDS = {
 }
 
 
-@pydantic.dataclasses.dataclass(config=dict(extra="forbid", arbitrary_types_allowed=True))
+@pydantic.dataclasses.dataclass(config=pydantic.ConfigDict(extra="forbid", arbitrary_types_allowed=True))
 class AGTConfig:
     """Configuration class for the abstract gradient training module."""
 
@@ -89,9 +91,6 @@ class AGTConfig:
     )
     backward_bound: str = pydantic.Field(
         "interval", pattern=f"^({'|'.join(BACKWARD_BOUNDS.keys())})$", description="Backward pass bounding function"
-    )
-    bound_kwargs: Dict = pydantic.Field(
-        default_factory=dict, description="Additional keyword arguments for bounding functions"
     )
     fragsize: int = pydantic.Field(10000, gt=0, description="Size of fragments to split the batch into to avoid OOM")
     # poisoning parameters
@@ -117,6 +116,9 @@ class AGTConfig:
         "gaussian", description="Type of privacy-preserving noise to add to gradients"
     )
     metadata: str = pydantic.Field("", description="Additional metadata to store with the configuration")
+    bound_kwargs: dict = pydantic.Field(
+        default_factory=dict, description="Additional keyword arguments for bounding functions"
+    )
 
     def __post_init__(self):
         k = max(self.k_unlearn, self.k_private, self.k_poison, self.label_k_poison)
@@ -135,40 +137,38 @@ class AGTConfig:
         return json.dumps(self, sort_keys=True, indent=4, default=pydantic.json.pydantic_encoder)
 
     @pydantic.computed_field
-    def forward_bound_fn(self) -> Callable:
+    def forward_bound_fn(self) -> Callable[..., tuple[list[torch.Tensor], list[torch.Tensor]]]:
         """Return the forward bound function based on the forward_bound name."""
         return FORWARD_BOUNDS[self.forward_bound]
 
     @pydantic.computed_field
-    def backward_bound_fn(self) -> Callable:
+    def backward_bound_fn(self) -> Callable[..., tuple[list[torch.Tensor], list[torch.Tensor]]]:
         """Return the backward bound function based on the backward_bound name."""
         return BACKWARD_BOUNDS[self.backward_bound]
 
     @pydantic.computed_field
-    def loss_bound_fn(self) -> Callable:
+    def loss_bound_fn(self) -> Callable[..., tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Return the loss bound function based on the loss name."""
         return LOSS_BOUNDS[self.loss]
 
     @pydantic.computed_field
-    def test_loss_fn(self) -> Callable:
+    def test_loss_fn(self) -> Callable[..., tuple[float, float, float]]:
         """Return the test loss function based on the loss name."""
         if self.loss == "mse":
             return test_metrics.test_mse
-        else:
-            return test_metrics.test_accuracy
+        return test_metrics.test_accuracy
 
     @pydantic.computed_field
-    def noise_distribution(self) -> torch.distributions.Distribution:
+    def noise_distribution(self) -> Callable[[torch.Size], torch.Tensor]:
         """Return a function to sample the noise distribution based on the noise_type."""
         if self.dp_sgd_sigma == 0:
             return torch.zeros
-        elif self.clip_gamma == float("inf"):
+        if self.clip_gamma == float("inf"):
             raise ValueError(f"If clip_gamma is infinite, then dp_sgd_sigma must be 0, but got {self.dp_sgd_sigma}")
-        elif self.noise_type == "gaussian":
+        if self.noise_type == "gaussian":
             LOGGER.debug("\tUsing Gaussian privacy-preserving noise (std %.2g)", self.dp_sgd_sigma * self.clip_gamma)
             return torch.distributions.Normal(0, self.dp_sgd_sigma * self.clip_gamma).sample
-        elif self.noise_type == "laplace":
+        if self.noise_type == "laplace":
             LOGGER.debug("\tUsing Laplacian privacy-preserving noise (scale %.2g)", self.dp_sgd_sigma * self.clip_gamma)
             return torch.distributions.Laplace(0, self.dp_sgd_sigma * self.clip_gamma).sample
-        else:
-            raise ValueError(f"Unknown noise type {self.noise_type}")
+        raise ValueError(f"Unknown noise type {self.noise_type}")
