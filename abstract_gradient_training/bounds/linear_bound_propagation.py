@@ -176,10 +176,10 @@ class CrownNode:
 
         # check that we include the batch dimension
         if in_var is not None:
-            assert self.Lambda and len(self.Lambda.shape) == 3
-            assert self.Omega and len(self.Omega.shape) == 3
-            assert self.delta and len(self.delta.shape) == 3
-            assert self.theta and len(self.theta.shape) == 3
+            assert self.Lambda is not None and len(self.Lambda.shape) == 3
+            assert self.Omega is not None and len(self.Omega.shape) == 3
+            assert self.delta is not None and len(self.delta.shape) == 3
+            assert self.theta is not None and len(self.theta.shape) == 3
 
     @torch.no_grad()
     def backpropagate(self) -> None:

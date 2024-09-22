@@ -27,7 +27,7 @@ FORWARD_BOUNDS = {
         *args, interval_matmul="nguyen"
     ),
     "crown": bounds.linear_bound_propagation.bound_forward_pass,
-    "interval+crown": bounds.bound_utils.combine_bounding_methods_elementwise(
+    "interval,crown": bounds.bound_utils.combine_bounding_methods_elementwise(
         bounds.interval_bound_propagation.bound_forward_pass, bounds.linear_bound_propagation.bound_forward_pass
     ),
     "miqp": lambda *args: bounds.optimization_bounds.bound_forward_pass(
@@ -124,8 +124,6 @@ class AGTConfig:
         k = max(self.k_unlearn, self.k_private, self.k_poison, self.label_k_poison)
         if k == 0:
             LOGGER.warning("k=0 suffers from numerical instability, consider using dtype double or setting k > 0.")
-        if self.fragsize <= k:
-            raise ValueError(f"fragsize must be greater than k but got fragsize={self.fragsize} and k={k}")
 
     def hash(self):
         """Return a hash of the configuration, used for tracking experiments. Should not be used for dynamic storage of
