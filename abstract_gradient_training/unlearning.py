@@ -126,18 +126,21 @@ def unlearning_certified_training(
                 grads_u[i] += frag_grads_u[i].sum(dim=0) - bottom_k_u.sum(dim=0)
                 grads_u_bottom_ks[i].append(bottom_k_u)
 
-        # concatenate
-        grads_l_top_ks = [torch.cat(g, dim=0) for g in grads_l_top_ks]
-        grads_u_bottom_ks = [torch.cat(g, dim=0) for g in grads_u_bottom_ks]
-
         # Apply the unlearning update mechanism to the bounds.
         for i in range(len(grads_n)):
-            size = grads_l_top_ks[i].size(0)
-            assert size >= k_unlearn, "Not enough samples left after processing batch fragments."
-            top_k_l = torch.topk(grads_l_top_ks[i], k_unlearn, largest=True, dim=0)[0]
-            bottom_k_u = torch.topk(grads_u_bottom_ks[i], k_unlearn, largest=False, dim=0)[0]
-            grads_l[i] += grads_l_top_ks[i].sum(dim=0) - top_k_l.sum(dim=0)
-            grads_u[i] += grads_u_bottom_ks[i].sum(dim=0) - bottom_k_u.sum(dim=0)
+            # do these separately to conserve memory
+            grads_l_top_ks_i = grads_l_top_ks.pop(0)
+            grads_l_top_ks_i = torch.cat(grads_l_top_ks_i, dim=0)
+            assert grads_l_top_ks_i.size(0) >= k_unlearn, "Not enough samples left after processing batch fragments."
+            top_k_l = torch.topk(grads_l_top_ks_i, k_unlearn, largest=True, dim=0)[0]
+            grads_l[i] += grads_l_top_ks_i.sum(dim=0) - top_k_l.sum(dim=0)
+            del grads_l_top_ks_i
+
+            grads_u_bottom_ks_i = grads_u_bottom_ks.pop(0)
+            grads_u_bottom_ks_i = torch.cat(grads_u_bottom_ks_i, dim=0)
+            bottom_k_u = torch.topk(grads_u_bottom_ks_i, k_unlearn, largest=False, dim=0)[0]
+            grads_u[i] += grads_u_bottom_ks_i.sum(dim=0) - bottom_k_u.sum(dim=0)
+            del grads_u_bottom_ks_i
 
         # normalise each by the batchsize
         grads_l = [g / (batchsize - k_unlearn) for g in grads_l]
