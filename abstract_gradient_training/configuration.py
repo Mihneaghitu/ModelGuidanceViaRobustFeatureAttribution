@@ -107,7 +107,7 @@ class AGTConfig:
     k_unlearn: int = pydantic.Field(0, ge=0, description="Number of removals per batch to be certified")
     # privacy and dp-sgd parameters
     k_private: int = pydantic.Field(0, ge=0, description="Number of removals/insertions per batch to be certified")
-    clip_gamma: float = pydantic.Field(1e10, gt=0, description="Gradient clipping parameter")
+    clip_gamma: float = pydantic.Field(float("inf"), gt=0, description="Gradient clipping parameter")
     clip_method: Literal["norm", "clamp"] = pydantic.Field("clamp", description="Method for clipping gradients")
     dp_sgd_sigma: float = pydantic.Field(
         0, ge=0, description="Standard deviation of the privacy-preserving noise added to gradients"
@@ -125,10 +125,16 @@ class AGTConfig:
         if k == 0:
             LOGGER.warning("k=0 suffers from numerical instability, consider using dtype double or setting k > 0.")
 
-    def hash(self):
+    def hash(  # pylint: disable=dangerous-default-value
+        self, drop_fields: list[str] = ["fragsize", "device", "log_level"]
+    ) -> str:
         """Return a hash of the configuration, used for tracking experiments. Should not be used for dynamic storage of
         configurations, as this object is mutable."""
-        return hashlib.md5(self.json().encode()).hexdigest()
+        self_dict = json.loads(self.json())
+        # drop fields that don't change the results we are trying to store, for example
+        for field in drop_fields:
+            self_dict.pop(field, None)
+        return hashlib.md5(str(self_dict).encode()).hexdigest()
 
     def json(self):
         """Return a JSON representation of the configuration."""
