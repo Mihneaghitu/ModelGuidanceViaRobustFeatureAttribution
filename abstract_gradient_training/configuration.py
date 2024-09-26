@@ -116,6 +116,7 @@ class AGTConfig:
         "gaussian", description="Type of privacy-preserving noise to add to gradients"
     )
     metadata: str = pydantic.Field("", description="Additional metadata to store with the configuration")
+    callback: Callable = pydantic.Field(lambda *args: None, description="Callback function to call after each epoch")
     bound_kwargs: dict = pydantic.Field(
         default_factory=dict, description="Additional keyword arguments for bounding functions"
     )
@@ -126,7 +127,7 @@ class AGTConfig:
             LOGGER.warning("k=0 suffers from numerical instability, consider using dtype double or setting k > 0.")
 
     def hash(  # pylint: disable=dangerous-default-value
-        self, drop_fields: list[str] = ["fragsize", "device", "log_level"]
+        self, drop_fields: list[str] = ["fragsize", "device", "log_level", "callback"]
     ) -> str:
         """Return a hash of the configuration, used for tracking experiments. Should not be used for dynamic storage of
         configurations, as this object is mutable."""

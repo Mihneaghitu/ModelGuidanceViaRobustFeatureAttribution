@@ -258,6 +258,8 @@ def proportion_certified(
         best_case_preds = best_case_logits > 0
     else:  # multi-class classification
         assert labels.max() < logit_l.shape[-1], "Labels must be in the range of the output logit dimension."
+        # still need to check this logic for multi-class classification?
+        assert logit_l.size(1) <= 2, "Only supported for binary classification for now."
         # calculate best and worst case output from the network given the parameter bounds
         v1 = F.one_hot(labels, num_classes=logit_l.size(1))
         v2 = 1 - v1

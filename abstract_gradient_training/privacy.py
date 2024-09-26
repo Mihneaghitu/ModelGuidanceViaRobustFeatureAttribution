@@ -78,6 +78,7 @@ def privacy_certified_training(
         # get if we should terminate training early
         if config.early_stopping and ct_utils.break_condition(network_eval):
             break
+        config.callback(network_eval, param_l, param_n, param_u)
         LOGGER.info("Training batch %s: %s", n + 1, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:

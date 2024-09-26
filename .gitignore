@@ -16,15 +16,9 @@ build
 *.ckpt
 notebooks
 *.log
-examples/datasets/MNIST/MNIST/raw/t10k-images-idx3-ubyte
-examples/datasets/MNIST/MNIST/raw/t10k-images-idx3-ubyte.gz
-examples/datasets/MNIST/MNIST/raw/t10k-labels-idx1-ubyte
-examples/datasets/MNIST/MNIST/raw/t10k-labels-idx1-ubyte.gz
-examples/datasets/MNIST/MNIST/raw/train-images-idx3-ubyte
-examples/datasets/MNIST/MNIST/raw/train-images-idx3-ubyte.gz
-examples/datasets/MNIST/MNIST/raw/train-labels-idx1-ubyte
-examples/datasets/MNIST/MNIST/raw/train-labels-idx1-ubyte.gz
+examples/datasets/MNIST/*
 .tmp
 .results
 .models
 .data
+examples/Paper Plots - Certified Privacy and Unlearning/.datasets/.*

@@ -76,6 +76,7 @@ def unlearning_certified_training(
         # decide whether to terminate training early
         if config.early_stopping and ct_utils.break_condition(network_eval):
             break
+        config.callback(network_eval, param_l, param_n, param_u)
         # log the current network evaluation
         LOGGER.info("Training batch %s: %s", n + 1, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # we want the shape to be [batchsize x input_dim x 1]
