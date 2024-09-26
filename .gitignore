@@ -21,4 +21,4 @@ examples/datasets/MNIST/*
 .results
 .models
 .data
-examples/Paper Plots - Certified Privacy and Unlearning/.datasets/.*
+.datasets
