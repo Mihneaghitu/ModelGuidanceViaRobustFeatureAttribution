@@ -112,12 +112,18 @@ def poison_certified_training(
             _, _, dL_n = config.loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
             frag_grads_n = nominal_pass.nominal_backward_pass(dL_n, param_n, activations_n)
             # weight perturbed bounds
-            grads_weight_perturb_l, grads_weight_perturb_u = ct_utils.grads_helper(
+            frag_grads_wp_l, frag_grads_wp_u = ct_utils.grads_helper(
                 batch_frag, batch_frag, label_frag, param_l, param_u, config, False
             )
-            grads_n = [a + b.sum(dim=0) for a, b in zip(grads_n, frag_grads_n)]
-            grads_l = [a + b.sum(dim=0) for a, b in zip(grads_l, grads_weight_perturb_l)]
-            grads_u = [a + b.sum(dim=0) for a, b in zip(grads_u, grads_weight_perturb_u)]
+            # clip and accumulate the gradients
+            for i in range(len(grads_n)):
+                frag_grads_wp_l[i], frag_grads_n[i], frag_grads_wp_u[i] = ct_utils.propagate_clipping(
+                    frag_grads_wp_l[i], frag_grads_n[i], frag_grads_wp_u[i], config.clip_gamma, config.clip_method
+                )
+                # accumulate the gradients
+                grads_l[i] = grads_l[i] + frag_grads_wp_l[i].sum(dim=0)
+                grads_n[i] = grads_n[i] + frag_grads_n[i].sum(dim=0)
+                grads_u[i] = grads_u[i] + frag_grads_wp_u[i].sum(dim=0)
 
         # process potentially poisoned data
         batch_fragments = torch.split(batch, config.fragsize, dim=0)
@@ -130,36 +136,51 @@ def poison_certified_training(
             _, _, dL_n = config.loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
             frag_grads_n = nominal_pass.nominal_backward_pass(dL_n, param_n, activations_n)
             # weight perturbed bounds
-            grads_weight_perturb_l, grads_weight_perturb_u = ct_utils.grads_helper(
+            frag_grads_wp_l, frag_grads_wp_u = ct_utils.grads_helper(
                 batch_frag_n, batch_frag_n, label_frag, param_l, param_u, config, False
             )
-            grads_n = [a + b.sum(dim=0) for a, b in zip(grads_n, frag_grads_n)]
-            grads_l = [a + b.sum(dim=0) for a, b in zip(grads_l, grads_weight_perturb_l)]
-            grads_u = [a + b.sum(dim=0) for a, b in zip(grads_u, grads_weight_perturb_u)]
+            # clip and accumulate the gradients
+            for i in range(len(grads_n)):
+                frag_grads_wp_l[i], frag_grads_n[i], frag_grads_wp_u[i] = ct_utils.propagate_clipping(
+                    frag_grads_wp_l[i], frag_grads_n[i], frag_grads_wp_u[i], config.clip_gamma, config.clip_method
+                )
+                # accumulate the gradients
+                grads_l[i] = grads_l[i] + frag_grads_wp_l[i].sum(dim=0)
+                grads_n[i] = grads_n[i] + frag_grads_n[i].sum(dim=0)
+                grads_u[i] = grads_u[i] + frag_grads_wp_u[i].sum(dim=0)
+
             # apply input transformation
             if transform:
                 batch_frag_l, batch_frag_u = transform(batch_frag, model, config.epsilon)
             else:
                 batch_frag_l, batch_frag_u = batch_frag - config.epsilon, batch_frag + config.epsilon
             # input + weight perturbed bounds
-            grads_input_weight_perturb_l, grads_input_weight_perturb_u = ct_utils.grads_helper(
+            frag_grads_iwp_l, frag_grads_iwp_u = ct_utils.grads_helper(
                 batch_frag_l, batch_frag_u, label_frag, param_l, param_u, config, True
             )
-            # calculate differences between the input+weight perturbed and weight perturbed bounds
-            diffs_l = [a - b for a, b in zip(grads_input_weight_perturb_l, grads_weight_perturb_l)]  # -ve
-            diffs_u = [a - b for a, b in zip(grads_input_weight_perturb_u, grads_weight_perturb_u)]  # +ve
-
-            # accumulate and store the the top-k diffs from each fragment
+            # clip and accumulate the gradients
             for i in range(len(grads_n)):
-                grads_diffs_l[i].append(torch.topk(diffs_l[i], k_poison, dim=0, largest=False)[0])
-                grads_diffs_u[i].append(torch.topk(diffs_u[i], k_poison, dim=0)[0])
+                frag_grads_iwp_l[i], _, frag_grads_iwp_u[i] = ct_utils.propagate_clipping(
+                    frag_grads_iwp_l[i], torch.zeros(1), frag_grads_iwp_u[i], config.clip_gamma, config.clip_method
+                )
+                # calculate the differences beetween the input+weight perturbed and weight perturbed bounds
+                diffs_l = frag_grads_iwp_l[i] - frag_grads_wp_l[i]
+                diffs_u = frag_grads_iwp_u[i] - frag_grads_wp_u[i]
+                # accumulate and store the the top-k diffs from each fragment
+                grads_diffs_l[i].append(torch.topk(diffs_l, k_poison, dim=0, largest=False)[0])
+                grads_diffs_u[i].append(torch.topk(diffs_u, k_poison, dim=0)[0])
 
         # accumulate the top-k diffs from each fragment then add the overall top-k diffs to the gradient bounds
-        grads_diffs_l = [torch.cat(g, dim=0) for g in grads_diffs_l]
-        grads_diffs_u = [torch.cat(g, dim=0) for g in grads_diffs_u]
         for i in range(len(grads_n)):
-            grads_l[i] += torch.topk(grads_diffs_l[i], k_poison, dim=0, largest=False)[0].sum(dim=0)
-            grads_u[i] += torch.topk(grads_diffs_u[i], k_poison, dim=0)[0].sum(dim=0)
+            # we pop, process and del each one by one to save memory
+            grads_diffs_l_i = grads_diffs_l.pop(0)
+            grads_diffs_l_i = torch.cat(grads_diffs_l_i, dim=0)
+            grads_l[i] += torch.topk(grads_diffs_l_i, k_poison, dim=0, largest=False)[0].sum(dim=0)
+            del grads_diffs_l_i
+            grads_diffs_u_i = grads_diffs_u.pop(0)
+            grads_diffs_u_i = torch.cat(grads_diffs_u_i, dim=0)
+            grads_u[i] += torch.topk(grads_diffs_u_i, k_poison, dim=0)[0].sum(dim=0)
+            del grads_diffs_u_i
             interval_arithmetic.validate_interval(grads_l[i], grads_u[i], grads_n[i])
 
         # normalise each by the batchsize
