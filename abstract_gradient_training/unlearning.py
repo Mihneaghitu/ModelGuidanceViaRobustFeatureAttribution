@@ -51,12 +51,24 @@ def unlearning_certified_training(
     logging.getLogger("abstract_gradient_training").setLevel(config.log_level)
     LOGGER.info("=================== Starting Unlearning Certified Training ===================")
     LOGGER.debug(
-        "\tPrivacy parameters: k_unlearn=%s, clip_gamma=%s, dp_sgd_sigma=%s",
-        config.k_unlearn,
-        config.clip_gamma,
-        config.dp_sgd_sigma,
+        "\tOptimizer params: n_epochs=%s, learning_rate=%s, l1_reg=%s, l2_reg=%s",
+        config.n_epochs,
+        config.learning_rate,
+        config.l1_reg,
+        config.l2_reg,
     )
-    LOGGER.debug("\tBounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
+    LOGGER.debug(
+        "\tLearning rate schedule: lr_decay=%s, lr_min=%s, early_stopping=%s",
+        config.lr_decay,
+        config.lr_min,
+        config.early_stopping,
+    )
+    LOGGER.debug("\tUnlearning parameter: k_unlearn=%s", config.k_unlearn)
+    LOGGER.debug("\tClipping: gamma=%s, method=%s", config.clip_gamma, config.clip_method)
+    LOGGER.debug("\tNoise: type=%s, sigma=%s", config.noise_type, config.dp_sgd_sigma)
+    LOGGER.debug(
+        "\tBounding methods: forward=%s, loss=%s, backward=%s", config.forward_bound, config.loss, config.backward_bound
+    )
 
     # initialise hyperparameters, model, data, optimizer, logging
     device = torch.device(config.device)
