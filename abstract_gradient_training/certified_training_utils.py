@@ -242,7 +242,7 @@ def dataloader_wrapper(dl_train: DataLoader, n_epochs: int) -> Iterator[tuple[to
 
 
 def dataloader_pair_wrapper(
-    dl_train: DataLoader, dl_clean: DataLoader | None, n_epochs: int
+    dl_train: DataLoader, dl_clean: DataLoader | None, n_epochs: int, dtype: torch.dtype
 ) -> Iterator[tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]]:
     """
     Return a new generator that iterates over the training dataloaders for a fixed number of epochs.
@@ -271,6 +271,9 @@ def dataloader_pair_wrapper(
             batch_len = batch.size(0)
             if batch_clean is not None:
                 batch_len += batch_clean.size(0)
+            # convert to expected dtype
+            batch = batch.to(dtype)
+            batch_clean = batch_clean.to(dtype) if batch_clean is not None else None
             # initialise the batchsize variable if this is the first iteration
             if full_batchsize is None:
                 full_batchsize = batch.size(0)

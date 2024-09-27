@@ -70,7 +70,7 @@ def poison_certified_training(
     LOGGER.debug("\tBounding methods: forward=%s, backward=%s", config.forward_bound, config.backward_bound)
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
-    training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_clean, config.n_epochs)
+    training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_clean, config.n_epochs, param_n[-1].dtype)
     test_iterator = itertools.cycle(dl_test)
 
     for n, (batch, labels, batch_clean, labels_clean) in enumerate(training_iterator):
@@ -90,8 +90,8 @@ def poison_certified_training(
 
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
-            batch = batch.view(batch.size(0), -1, 1).type(param_n[-1].dtype)
-            batch_clean = batch_clean.view(batch_clean.size(0), -1, 1).type(param_n[-1].dtype) if batch_clean else None
+            batch = batch.view(batch.size(0), -1, 1)
+            batch_clean = batch_clean.view(batch_clean.size(0), -1, 1) if batch_clean is not None else None
 
         # initialise containers to store the nominal and bounds on the gradients for each fragment
         # the bounds are stored as lists of lists indexed by [parameter, fragment]
@@ -102,8 +102,8 @@ def poison_certified_training(
         grads_diffs_u = [[] for _ in param_n]  # difference of input+weight perturbed and weight perturbed bounds
 
         # process clean data
-        batch_fragments = torch.split(batch_clean, config.fragsize, dim=0) if batch_clean else []
-        label_fragments = torch.split(labels_clean, config.fragsize, dim=0) if labels_clean else []
+        batch_fragments = torch.split(batch_clean, config.fragsize, dim=0) if batch_clean is not None else []
+        label_fragments = torch.split(labels_clean, config.fragsize, dim=0) if labels_clean is not None else []
         for batch_frag, label_frag in zip(batch_fragments, label_fragments):
             batch_frag, label_frag = batch_frag.to(device), label_frag.to(device)
             batch_frag = transform(batch_frag, model, 0)[0] if transform else batch_frag
