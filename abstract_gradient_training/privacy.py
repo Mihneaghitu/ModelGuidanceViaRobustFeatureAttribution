@@ -23,6 +23,7 @@ def privacy_certified_training(
     config: AGTConfig,
     dl_train: DataLoader,
     dl_test: DataLoader,
+    dl_public: DataLoader | None = None,
     transform: Callable | None = None,
 ) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
     """
@@ -40,6 +41,7 @@ def privacy_certified_training(
             for more details.
         dl_train (DataLoader): Training data loader.
         dl_test (DataLoader): Testing data loader.
+        dl_public (DataLoader, optional): Training data considered 'public' for the purposes of privacy certification.
         transform (Callable | None, optional): Optional function to propagate bounds through fixed layers of the
             neural network (e.g. convolutional layers). Defaults to None.
 
@@ -81,10 +83,10 @@ def privacy_certified_training(
     noise_distribution = config.noise_distribution
 
     # returns an iterator of length n_epochs x batches_per_epoch to handle incomplete batch logic
-    training_iterator = ct_utils.dataloader_wrapper(dl_train, config.n_epochs)
+    training_iterator = ct_utils.dataloader_pair_wrapper(dl_train, dl_public, config.n_epochs, param_n[-1].dtype)
     test_iterator = itertools.cycle(dl_test)
 
-    for n, (batch, labels) in enumerate(training_iterator):
+    for n, (batch, labels, batch_public, labels_public) in enumerate(training_iterator):
         # evaluate the network and log the results
         network_eval = config.test_loss_fn(param_n, param_l, param_u, *next(test_iterator), model, transform)
         # get if we should terminate training early
@@ -94,8 +96,11 @@ def privacy_certified_training(
         LOGGER.info("Training batch %s: %s", n + 1, ct_utils.get_progress_message(network_eval, param_l, param_u))
         # we want the shape to be [batchsize x input_dim x 1]
         if transform is None:
-            batch = batch.view(batch.size(0), -1, 1).type(param_n[-1].dtype)
-        batchsize = batch.size(0)
+            batch = batch.view(batch.size(0), -1, 1)
+            batch_public = batch_public.view(batch.size(0), -1, 1) if batch_public is not None else None
+
+        # calculate batchsize
+        batchsize = batch.size(0) if batch_public is None else batch.size(0) + batch_public.size(0)
         # initialise containers to store the nominal and bounds on the gradients for each fragment
         # the bounds are stored as lists of lists indexed by [parameter, fragment]
         grads_n = [torch.zeros_like(p) for p in param_n]  # nominal gradients
@@ -104,6 +109,31 @@ def privacy_certified_training(
         grads_l_top_ks = [[] for _ in param_n]  # top k lower bound gradients from each fragment
         grads_u_bottom_ks = [[] for _ in param_n]  # bottom k upper bound gradients from each fragment
 
+        # process the "public" data first
+        batch_fragments = torch.split(batch_public, config.fragsize, dim=0) if batch_public is not None else []
+        label_fragments = torch.split(labels_public, config.fragsize, dim=0) if labels_public is not None else []
+        for batch_frag, label_frag in zip(batch_fragments, label_fragments):
+            batch_frag, label_frag = batch_frag.to(device), label_frag.to(device)
+            batch_frag = transform(batch_frag, model, 0)[0] if transform else batch_frag
+            # nominal pass
+            activations_n = nominal_pass.nominal_forward_pass(batch_frag, param_n)
+            _, _, dL_n = config.loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
+            frag_grads_n = nominal_pass.nominal_backward_pass(dL_n, param_n, activations_n)
+            # weight perturbed bounds
+            frag_grads_l, frag_grads_u = ct_utils.grads_helper(
+                batch_frag, batch_frag, label_frag, param_l, param_u, config, False
+            )
+            # clip and accumulate the gradients
+            for i in range(len(grads_n)):
+                frag_grads_l[i], frag_grads_n[i], frag_grads_u[i] = ct_utils.propagate_clipping(
+                    frag_grads_l[i], frag_grads_n[i], frag_grads_u[i], config.clip_gamma, config.clip_method
+                )
+                # accumulate the gradients
+                grads_l[i] = grads_l[i] + frag_grads_l[i].sum(dim=0)
+                grads_n[i] = grads_n[i] + frag_grads_n[i].sum(dim=0)
+                grads_u[i] = grads_u[i] + frag_grads_u[i].sum(dim=0)
+
+        # process the "private" data, taking the appropriate bounds
         # split the batch into fragments to avoid running out of GPU memory
         batch_fragments = torch.split(batch, config.fragsize, dim=0)
         label_fragments = torch.split(labels, config.fragsize, dim=0)
