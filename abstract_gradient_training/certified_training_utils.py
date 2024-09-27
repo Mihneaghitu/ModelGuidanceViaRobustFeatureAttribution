@@ -274,12 +274,13 @@ def dataloader_pair_wrapper(
             # convert to expected dtype
             batch = batch.to(dtype)
             batch_clean = batch_clean.to(dtype) if batch_clean is not None else None
+            batchsize = batch.size(0) if batch_clean is None else batch.size(0) + batch_clean.size(0)
             # initialise the batchsize variable if this is the first iteration
             if full_batchsize is None:
-                full_batchsize = batch.size(0)
+                full_batchsize = batchsize
                 LOGGER.debug("Initialising dataloader batchsize to %s", full_batchsize)
             # check the batch is the correct size, otherwise skip it
-            if batch.size(0) != full_batchsize:
+            if batchsize != full_batchsize:
                 LOGGER.debug(
                     "Skipping batch %s in epoch %s (expected batchsize %s, got %s)",
                     t + 1,
