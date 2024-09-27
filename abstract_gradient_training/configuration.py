@@ -67,10 +67,26 @@ LOSS_BOUNDS = {
     "hinge": bounds.loss_gradients.bound_hinge_derivative,
 }
 
+# fields that aren't used when serializing and hashing the configuration
+EXCLUDE_FIELDS = [
+    "fragsize",
+    "device",
+    "log_level",
+    "callback",
+    "model_config",
+    "forward_bound_fn",
+    "backward_bound_fn",
+    "loss_bound_fn",
+    "test_loss_fn",
+    "noise_distribution",
+]
 
-@pydantic.dataclasses.dataclass(config=pydantic.ConfigDict(extra="forbid", arbitrary_types_allowed=True))
-class AGTConfig:
+
+class AGTConfig(pydantic.BaseModel):
     """Configuration class for the abstract gradient training module."""
+
+    # pydantic config
+    model_config: dict = pydantic.ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     # optimizer parameters
     n_epochs: int = pydantic.Field(..., gt=0, description="Number of epochs to train the model")
@@ -126,20 +142,14 @@ class AGTConfig:
         if k == 0:
             LOGGER.warning("k=0 suffers from numerical instability, consider using dtype double or setting k > 0.")
 
-    def hash(  # pylint: disable=dangerous-default-value
-        self, drop_fields: list[str] = ["fragsize", "device", "log_level", "callback"]
-    ) -> str:
+    def hash(self, drop_fields: list[str] = EXCLUDE_FIELDS) -> str:  # pylint: disable=dangerous-default-value
         """Return a hash of the configuration, used for tracking experiments. Should not be used for dynamic storage of
         configurations, as this object is mutable."""
-        self_dict = json.loads(self.json())
+        self_dict = dict(self)
         # drop fields that don't change the results we are trying to store, for example
         for field in drop_fields:
             self_dict.pop(field, None)
         return hashlib.md5(str(self_dict).encode()).hexdigest()
-
-    def json(self):
-        """Return a JSON representation of the configuration."""
-        return json.dumps(self, sort_keys=True, indent=4, default=pydantic.json.pydantic_encoder)
 
     @pydantic.computed_field
     def forward_bound_fn(self) -> Callable[..., tuple[list[torch.Tensor], list[torch.Tensor]]]:
