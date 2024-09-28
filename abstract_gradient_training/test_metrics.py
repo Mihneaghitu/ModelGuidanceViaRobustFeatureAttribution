@@ -76,6 +76,7 @@ def test_accuracy(
     model: torch.nn.Sequential | None = None,
     transform: Callable | None = None,
     epsilon: float = 0.0,
+    noise_level: float = 0.0,
 ) -> tuple[float, float, float]:
     """
     Given bounds on the parameters of a neural network, calculate the best, worst and nominal case prediction accuracy
@@ -91,6 +92,7 @@ def test_accuracy(
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
             the provided model.
         epsilon (float, optional): Feature poisoning parameter.
+        noise_level (float, optional): Noise level for privacy-preserving predictions using the laplace mechanism.
 
     Returns:
         tuple[float, float, float]: worst case, nominal case and best case loss
@@ -114,11 +116,19 @@ def test_accuracy(
     if logit_l.dim() == 1:  # binary classification
         worst_case = (1 - labels) * logit_u + labels * logit_l
         best_case = labels * logit_u + (1 - labels) * logit_l
-        y_n = logit_n > 0
-        y_worst = worst_case > 0
-        y_best = best_case > 0
+        y_n = (logit_n > 0).to(torch.float32)
+        y_worst = (worst_case > 0).to(torch.float32)
+        y_best = (best_case > 0).to(torch.float32)
+        if noise_level != 0.0:
+            noise = torch.distributions.Laplace(0, noise_level).sample(y_n.size()).to(y_n.device)
+            y_n = (y_n + noise) > 0.5
+            y_worst = (y_worst + noise) > 0.5
+            y_best = (y_best + noise) > 0.5
+
     else:  # multi-class classification
         assert labels.max() < logit_l.shape[-1], "Labels must be in the range of the output logit dimension."
+        if noise_level != 0.0:
+            raise NotImplementedError("Noise level is not supported for multi-class classification.")
         # calculate best and worst case output from the network given the parameter bounds
         v1 = F.one_hot(labels, num_classes=logit_l.size(1))
         v2 = 1 - v1
