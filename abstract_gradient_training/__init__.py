@@ -10,6 +10,8 @@ from abstract_gradient_training.configuration import AGTConfig
 from abstract_gradient_training import certified_training_utils
 from abstract_gradient_training import test_metrics
 from abstract_gradient_training import bounds
+from abstract_gradient_training import nominal_pass
+from abstract_gradient_training import interval_arithmetic
 
 logger = logging.getLogger("abstract_gradient_training")
 logger.handlers.clear()
