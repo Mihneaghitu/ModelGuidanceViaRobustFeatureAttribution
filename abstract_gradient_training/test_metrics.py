@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 
 from abstract_gradient_training import nominal_pass
+from abstract_gradient_training import interval_arithmetic
 from abstract_gradient_training.bounds import interval_bound_propagation as ibp
 
 
@@ -14,6 +15,7 @@ def test_mse(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     targets: torch.Tensor,
+    *,
     model: torch.nn.Sequential | None = None,
     transform: Callable | None = None,
     epsilon: float = 0.0,
@@ -36,6 +38,9 @@ def test_mse(
     Returns:
         tuple[float, float, float]: worst case, nominal case and best case loss
     """
+    # validate order of input parameters
+    for p_l, p_n, p_u in zip(param_l, param_n, param_u):
+        interval_arithmetic.validate_interval(p_l, p_u, p_n)
     # get the test batch and send it to the correct device
     device = param_n[-1].get_device()
     device = torch.device(device) if device != -1 else torch.device("cpu")
@@ -52,7 +57,9 @@ def test_mse(
     # nominal, lower and upper bounds for the forward pass
     *_, logit_n = nominal_pass.nominal_forward_pass(batch_n, param_n)
     (*_, logit_l), (*_, logit_u) = ibp.bound_forward_pass(param_l, param_u, batch_l, batch_u)
-    logit_l, logit_n, logit_u = logit_l.squeeze(), logit_n.squeeze(), logit_u.squeeze()
+    logit_l = logit_l.squeeze()
+    logit_n = logit_n.squeeze()
+    logit_u = logit_u.squeeze()
     targets = targets.reshape(logit_l.shape)
     # calculate best and worst case differences
     diffs_l = logit_l - targets
@@ -73,10 +80,12 @@ def test_accuracy(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     labels: torch.Tensor,
+    *,
     model: torch.nn.Sequential | None = None,
     transform: Callable | None = None,
     epsilon: float = 0.0,
-    noise_level: float = 0.0,
+    noise_level: float | torch.Tensor = 0.0,
+    noise_type: str = "laplace",
 ) -> tuple[float, float, float]:
     """
     Given bounds on the parameters of a neural network, calculate the best, worst and nominal case prediction accuracy
@@ -92,16 +101,34 @@ def test_accuracy(
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
             the provided model.
         epsilon (float, optional): Feature poisoning parameter.
-        noise_level (float, optional): Noise level for privacy-preserving predictions using the laplace mechanism.
+        noise_level (float | torch.Tensor, optional): Noise level for privacy-preserving predictions using the laplace
+            mechanism. Can either be a float or a torch.Tensor of shape (batchsize, ).
+        noise_type (str, optional): Type of noise to add to the predictions, one of ["laplace", "cauchy"].
 
     Returns:
         tuple[float, float, float]: worst case, nominal case and best case loss
     """
+    # validate order of input parameters
+    for p_l, p_n, p_u in zip(param_l, param_n, param_u):
+        interval_arithmetic.validate_interval(p_l, p_u, p_n)
     # get the test batch and send it to the correct device
     device = param_n[-1].get_device()
     device = torch.device(device) if device != -1 else torch.device("cpu")
-    batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device).type(torch.int64)
+    batch = batch.to(device).type(param_n[-1].dtype)
+    if labels.dim() > 1:
+        labels = labels.squeeze()
+    labels = labels.to(device).type(torch.int64)
     assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
+    # check the noise
+    assert noise_type in ["laplace", "cauchy"], f"Noise type must be one of ['laplace', 'cauchy'], got {noise_type}"
+    distribution = torch.distributions.Laplace if noise_type == "laplace" else torch.distributions.Cauchy
+    if isinstance(noise_level, float) and noise_level > 0.0:
+        noise_level = torch.ones_like(labels) * noise_level
+        noise_distribution = distribution(0, noise_level)
+    elif isinstance(noise_level, torch.Tensor):
+        noise_distribution = distribution(0, noise_level)
+    else:
+        noise_distribution = None
     # for finetuning, we may need to transform the input through the earlier layers of the network
     if transform:
         batch_n = transform(batch, model, 0)[0]
@@ -112,15 +139,18 @@ def test_accuracy(
     # nominal, lower and upper bounds for the forward pass
     *_, logit_n = nominal_pass.nominal_forward_pass(batch_n, param_n)
     (*_, logit_l), (*_, logit_u) = ibp.bound_forward_pass(param_l, param_u, batch_l, batch_u)
-    logit_l, logit_n, logit_u = logit_l.squeeze(), logit_n.squeeze(), logit_u.squeeze()
+    logit_l = logit_l.squeeze()
+    logit_n = logit_n.squeeze()
+    logit_u = logit_u.squeeze()
     if logit_l.dim() == 1:  # binary classification
         worst_case = (1 - labels) * logit_u + labels * logit_l
         best_case = labels * logit_u + (1 - labels) * logit_l
         y_n = (logit_n > 0).to(torch.float32)
         y_worst = (worst_case > 0).to(torch.float32)
         y_best = (best_case > 0).to(torch.float32)
-        if noise_level != 0.0:
-            noise = torch.distributions.Laplace(0, noise_level).sample(y_n.size()).to(y_n.device)
+        if noise_distribution is not None:
+            noise = noise_distribution.sample().to(y_n.device).squeeze()
+            assert noise.shape == y_n.shape
             y_n = (y_n + noise) > 0.5
             y_worst = (y_worst + noise) > 0.5
             y_best = (y_best + noise) > 0.5
@@ -151,6 +181,7 @@ def test_cross_entropy(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     labels: torch.Tensor,
+    *,
     model: torch.nn.Sequential | None = None,
     transform: Callable | None = None,
     epsilon: float = 0.0,
@@ -173,10 +204,16 @@ def test_cross_entropy(
     Returns:
         tuple[float, float, float]: worst case, nominal case and best case loss
     """
+    # validate order of input parameters
+    for p_l, p_n, p_u in zip(param_l, param_n, param_u):
+        interval_arithmetic.validate_interval(p_l, p_u, p_n)
     # get the test batch and send it to the correct device
     device = param_n[-1].get_device()
     device = torch.device(device) if device != -1 else torch.device("cpu")
-    batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device)
+    batch = batch.to(device).type(param_n[-1].dtype)
+    if labels.dim() > 1:
+        labels = labels.squeeze()
+    labels = labels.to(device).type(torch.int64)
     assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
 
     # for finetuning, we may need to transform the input through the earlier layers of the network
@@ -189,8 +226,9 @@ def test_cross_entropy(
     # nominal, lower and upper bounds for the forward pass
     *_, logit_n = nominal_pass.nominal_forward_pass(batch_n, param_n)
     (*_, logit_l), (*_, logit_u) = ibp.bound_forward_pass(param_l, param_u, batch_l, batch_u)
-    logit_l, logit_n, logit_u = logit_l.squeeze(), logit_n.squeeze(), logit_u.squeeze()
-
+    logit_l = logit_l.squeeze()
+    logit_n = logit_n.squeeze()
+    logit_u = logit_u.squeeze()
     if logit_l.dim() == 1:  # binary classification
         worst_case_logits = (1 - labels) * logit_u + labels * logit_l
         best_case_logits = labels * logit_u + (1 - labels) * logit_l
@@ -222,10 +260,12 @@ def proportion_certified(
     param_u: list[torch.Tensor],
     batch: torch.Tensor,
     labels: torch.Tensor,
+    *,
     model: torch.nn.Sequential | None = None,
     transform: Callable | None = None,
     epsilon: float = 0.0,
-) -> float:
+    reduce: bool = True,
+) -> float | torch.Tensor:
     """
     Given bounds on the parameters of a neural network, calculate the proportion of inputs in the test set that have a
     constant prediction across all parameters in the bounds.
@@ -241,14 +281,23 @@ def proportion_certified(
         transform (Callable, optional): Function that transforms and bounds the input data for any fixed layers of
             the provided model.
         epsilon (float, optional): Feature poisoning parameter.
+        reduce (bool, optional): Whether to return the proportion of points certified or a boolean tensor indicating
+            whether each test point is certified.
 
     Returns:
-        float: percentage of the test batch with certified predictions
+        float | torch.Tensor: percentage of the test batch with certified predictions or a boolean tensor indicating
+            whether each test point is certified.
     """
+    # validate order of input parameters
+    for p_l, p_n, p_u in zip(param_l, param_n, param_u):
+        interval_arithmetic.validate_interval(p_l, p_u, p_n)
     # get the test batch and send it to the correct device
     device = param_n[-1].get_device()
     device = torch.device(device) if device != -1 else torch.device("cpu")
-    batch, labels = batch.to(device).type(param_n[-1].dtype), labels.squeeze().to(device).type(torch.int64)
+    batch = batch.to(device).type(param_n[-1].dtype)
+    if labels.dim() > 1:
+        labels = labels.squeeze()
+    labels = labels.to(device).type(torch.int64)
     assert labels.dim() == 1, "Labels must be of shape (batchsize, )"
     # for finetuning, we may need to transform the input through the earlier layers of the network
     if transform:
@@ -260,7 +309,9 @@ def proportion_certified(
     # nominal, lower and upper bounds for the forward pass
     *_, logit_n = nominal_pass.nominal_forward_pass(batch_n, param_n)
     (*_, logit_l), (*_, logit_u) = ibp.bound_forward_pass(param_l, param_u, batch_l, batch_u)
-    logit_l, _, logit_u = logit_l.squeeze(), logit_n.squeeze(), logit_u.squeeze()
+    logit_l = logit_l.squeeze()
+    logit_n = logit_n.squeeze()
+    logit_u = logit_u.squeeze()
     if logit_l.dim() == 1:  # binary classification
         worst_case_logits = (1 - labels) * logit_u + labels * logit_l
         worst_case_preds = worst_case_logits > 0
@@ -278,5 +329,7 @@ def proportion_certified(
         # calculate post-softmax output
         worst_case_preds = torch.nn.Softmax(dim=1)(worst_case_logits).argmax(dim=1)
         best_case_preds = torch.nn.Softmax(dim=1)(best_case_logits).argmax(dim=1)
-    percent_certified = (worst_case_preds == best_case_preds).float().mean().item()
-    return percent_certified
+    if reduce:
+        return (worst_case_preds == best_case_preds).float().mean().item()
+    else:
+        return worst_case_preds == best_case_preds
