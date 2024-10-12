@@ -16,6 +16,7 @@ setup(
         "torchvision",
         "pydantic",
         "gurobipy",
+        "scipy",
     ],
     platforms=["any"],
 )

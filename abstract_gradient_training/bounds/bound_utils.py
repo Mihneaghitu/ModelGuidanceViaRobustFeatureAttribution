@@ -84,7 +84,7 @@ def validate_backward_bound_input(
     return dL_min, dL_max, param_l, param_u, activations_l, activations_u
 
 
-def combine_bounding_methods_elementwise(method_1: Callable, method_2: Callable) -> Callable:
+def combine_elementwise(method_1: Callable, method_2: Callable) -> Callable:
     """
     Given the two bounding methods (which can be either the forward or backward pass, for example), return a new
     bounding function that calls both methods and takes the elementwise tightest of the two.

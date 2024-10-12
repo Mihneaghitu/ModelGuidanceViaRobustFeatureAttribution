@@ -4,7 +4,6 @@ pydantic is a data validation library that uses Python type annotations to valid
 """
 
 import logging
-import json
 import hashlib
 from typing import Literal
 from collections.abc import Callable
@@ -20,14 +19,8 @@ LOGGER = logging.getLogger(__name__)
 
 FORWARD_BOUNDS = {
     "interval": bounds.interval_bound_propagation.bound_forward_pass,
-    "interval(exact)": lambda *args: bounds.interval_bound_propagation.bound_forward_pass(
-        *args, interval_matmul="exact"
-    ),
-    "interval(nguyen)": lambda *args: bounds.interval_bound_propagation.bound_forward_pass(
-        *args, interval_matmul="nguyen"
-    ),
     "crown": bounds.linear_bound_propagation.bound_forward_pass,
-    "interval,crown": bounds.bound_utils.combine_bounding_methods_elementwise(
+    "interval,crown": bounds.bound_utils.combine_elementwise(
         bounds.interval_bound_propagation.bound_forward_pass, bounds.linear_bound_propagation.bound_forward_pass
     ),
     "miqp": lambda *args: bounds.optimization_bounds.bound_forward_pass(
@@ -44,12 +37,6 @@ FORWARD_BOUNDS = {
 
 BACKWARD_BOUNDS = {
     "interval": bounds.interval_bound_propagation.bound_backward_pass,
-    "interval(exact)": lambda *args: bounds.interval_bound_propagation.bound_backward_pass(
-        *args, interval_matmul="exact"
-    ),
-    "interval(nguyen)": lambda *args: bounds.interval_bound_propagation.bound_backward_pass(
-        *args, interval_matmul="nguyen"
-    ),
     "crown": bounds.linear_bound_propagation.bound_backward_pass,
     "miqp": lambda *args: bounds.optimization_bounds.bound_backward_pass(
         *args, relax_binaries=False, relax_bilinear=False
@@ -82,11 +69,8 @@ EXCLUDE_FIELDS = [
 ]
 
 
-class AGTConfig(pydantic.BaseModel):
+class AGTConfig(pydantic.BaseModel, extra="forbid", arbitrary_types_allowed=True):
     """Configuration class for the abstract gradient training module."""
-
-    # pydantic config
-    model_config: dict = pydantic.ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     # optimizer parameters
     n_epochs: int = pydantic.Field(..., gt=0, description="Number of epochs to train the model")

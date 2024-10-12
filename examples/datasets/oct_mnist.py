@@ -6,7 +6,7 @@ from torchvision import transforms
 from medmnist import OCTMNIST  # python -m pip install git+https://github.com/MedMNIST/MedMNIST.git
 
 
-def get_dataloaders(train_batchsize, test_batchsize=500, exclude_classes=None, balanced=False):
+def get_dataloaders(train_batchsize, test_batchsize=500, exclude_classes=None, balanced=False, shuffle=True):
     """
     Get OCT MedMNIST dataset as a binary classification problem of class 3 (normal) vs classes 0, 1, 2.
     """
@@ -38,12 +38,16 @@ def get_dataloaders(train_batchsize, test_batchsize=500, exclude_classes=None, b
     # balance the dataset such that the number of samples in each class is equal
     if balanced:
         train_imgs, train_labels = balance_dataset(train_imgs, train_labels)
+    if shuffle is False:
+        # if we're not shuffling during dataloading, shuffle it first
+        idx = torch.randperm(len(train_labels))
+        train_imgs, train_labels = train_imgs[idx], train_labels[idx]
 
     # form dataloaders
     train_dataset = TensorDataset(train_imgs, train_labels)
     test_dataset = TensorDataset(test_imgs, test_labels)
-    dl = DataLoader(dataset=train_dataset, batch_size=train_batchsize, shuffle=True)
-    dl_test = DataLoader(dataset=test_dataset, batch_size=test_batchsize, shuffle=True)
+    dl = DataLoader(dataset=train_dataset, batch_size=train_batchsize, shuffle=shuffle)
+    dl_test = DataLoader(dataset=test_dataset, batch_size=test_batchsize, shuffle=shuffle)
     return dl, dl_test
 
 

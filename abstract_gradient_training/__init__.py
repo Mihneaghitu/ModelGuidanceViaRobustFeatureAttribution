@@ -12,6 +12,7 @@ from abstract_gradient_training import test_metrics
 from abstract_gradient_training import bounds
 from abstract_gradient_training import nominal_pass
 from abstract_gradient_training import interval_arithmetic
+from abstract_gradient_training import privacy_utils
 
 logger = logging.getLogger("abstract_gradient_training")
 logger.handlers.clear()
