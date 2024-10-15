@@ -1,18 +1,19 @@
 """Poison certified training."""
 
 from __future__ import annotations
+
 import itertools
 import logging
 from collections.abc import Callable
+from typing import Union
 
 import torch
 from torch.utils.data import DataLoader
 
-from abstract_gradient_training.configuration import AGTConfig
 from abstract_gradient_training import certified_training_utils as ct_utils
-from abstract_gradient_training import nominal_pass
-from abstract_gradient_training import interval_arithmetic
-from abstract_gradient_training import optimizers
+from abstract_gradient_training import (interval_arithmetic, nominal_pass,
+                                        optimizers)
+from abstract_gradient_training.configuration import AGTConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -25,7 +26,9 @@ def poison_certified_training(
     dl_test: DataLoader,
     dl_clean: DataLoader | None = None,
     transform: Callable | None = None,
-) -> tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]:
+    return_input_grad: bool = False
+) -> Union[tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]], # when we return grad_input
+           tuple[list[torch.Tensor], list[torch.Tensor], list[torch.Tensor], list[torch.Tensor], list[torch.Tensor]]]: # when we only want bounds + nominal
     """
     Train the neural network while tracking lower and upper bounds on all the parameters under a possible poisoning
     attack.
@@ -211,6 +214,32 @@ def poison_certified_training(
     network_eval = config.test_loss_fn(
         param_n, param_l, param_u, *next(test_iterator), model=model, transform=transform
     )
+    if return_input_grad:
+        input_grads_per_fragment = []
+        ordered_inputs = []
+        ordered_labels = []
+        # do one last pass and just get the input gradients
+
+        for batch_frag, label_frag in dl_train:
+            batch_frag, label_frag = batch_frag.to(device), label_frag.to(device)
+            input_shape  = param_n[0].shape[1:]
+            batch_size = batch_frag.shape[0]
+            # reshape so it doesn't fail asserts
+            batch_frag = batch_frag.view(batch_size, *input_shape, 1)
+            # nominal pass
+            batch_frag_n = transform(batch_frag, model, 0)[0] if transform else batch_frag
+            activations_n = nominal_pass.nominal_forward_pass(batch_frag_n, param_n)
+            _, _, dl_n = config.loss_bound_fn(activations_n[-1], activations_n[-1], activations_n[-1], label_frag)
+            logits_grad = config.last_layer_activation_grad(activations_n[-1])
+            frag_input_grad = nominal_pass.nominal_input_gradient(param_n, activations_n, logits_grad)
+            frag_grads_n = nominal_pass.nominal_backward_pass(dl_n, param_n, activations_n)
+
+            input_grads_per_fragment.append(frag_input_grad)
+            ordered_inputs.append(batch_frag)
+            ordered_labels.append(label_frag)
+
+
+        return param_l, param_n, param_u, input_grads_per_fragment, ordered_inputs, ordered_labels
     LOGGER.info("Final network eval: %s", ct_utils.get_progress_message(network_eval, param_l, param_u))
 
     LOGGER.info("=================== Finished Poison Certified Training ===================")

@@ -30,7 +30,7 @@ def nominal_forward_pass(x0: torch.Tensor, params: list[torch.Tensor]) -> list[t
 
 
 def nominal_backward_pass(
-    dL: torch.Tensor, params: list[torch.Tensor], activations: list[torch.Tensor]
+    dL: torch.Tensor, params: list[torch.Tensor], activations: list[torch.Tensor], with_input_grad: bool = False
 ) -> list[torch.Tensor]:
     """
     Perform the backward pass through the network with nominal parameters given dL is the first partial derivative of
@@ -56,7 +56,8 @@ def nominal_backward_pass(
     grads = [dL, dW]
 
     # compute gradients for each layer
-    for i in range(len(W) - 1, 0, -1):
+    lim = 0 if with_input_grad else -1
+    for i in range(len(W) - 1, lim, -1):
         dL = W[i].T @ dL
         dL = dL * torch.sign(activations[i])
         dW = dL @ activations[i - 1].transpose(-2, -1)
@@ -65,3 +66,39 @@ def nominal_backward_pass(
 
     grads.reverse()
     return grads
+
+def nominal_input_gradient(
+    params: list[torch.Tensor], activations: list[torch.Tensor], d_l: torch.Tensor,
+) -> torch.Tensor:
+    """
+    Compute the gradient of the loss with respect to the input.
+
+    Args:
+        params (list[torch.Tensor]): List of the nominal parameters of the network [W1, b1, ..., Wn, bn].
+        activations (list[torch.Tensor]): List of tensors [x0, x1, ..., xn] where x0 is the input, xn is the logit and
+                                          x1, ..., xn-1 are the (pre-relu) intermediate activations. Each tensor is of
+                                          shape [batchsize x dim x 1].
+        d_l (torch.Tensor): Tensor of shape [batchsize x output_dim x 1] representing the gradient of the output of the network with
+                           respect to the logits of the network.
+
+    Returns:
+        torch.Tensor: Tensor of shape [batchsize x input_dim x 1] representing the gradient of the network's output with respect to
+                     the input.
+    """
+    # convert the pre-relu activations to post-relu activations
+    activations = [activations[0]] + [F.relu(x) for x in activations[1:-1]] + [activations[-1]]  # x0, x1, ..., xL-1, xL
+
+    # we want to be able to accept biases as either 1 or 2 dimensional tensors
+    params = [p if len(p.shape) == 2 else p.unsqueeze(-1) for p in params]
+    d_l = d_l if len(d_l.shape) == 3 else d_l.unsqueeze(-1)
+    w = params[::2]
+
+    # compute gradients for each layer
+    for i in range(len(w) - 1, 0, -1):
+        d_l = d_l @ w[i] # now we have the derivative with respect to the pre-relu activations
+        # backprop through relu
+        d_l = d_l * torch.sign(activations[i].transpose(-2, -1))
+
+    d_x0 = d_l @ w[0]
+
+    return d_x0

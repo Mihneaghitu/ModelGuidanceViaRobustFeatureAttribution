@@ -3,9 +3,23 @@ This file implements the robust regularisation term from the paper 'Robust Expla
 Nothing about this is 'certified', but we can use it for robust (but un-certified) pre-training.
 """
 
-import torch
-from abstract_gradient_training import interval_arithmetic
+from enum import Enum
 
+import torch
+
+import abstract_gradient_training.certified_training_utils as ct_utils
+from abstract_gradient_training import interval_arithmetic
+from abstract_gradient_training.bounds.loss_gradients import \
+    bound_loss_function_derivative
+from abstract_gradient_training.nominal_pass import (nominal_backward_pass,
+                                                     nominal_forward_pass)
+
+
+class MLXMethod(Enum):
+    """The type of regularizer to use for smoothing the gradient of the irrelevant features
+    """
+    GRAD_CERT = 1
+    R4 = 2
 
 def input_gradient_interval_regularizer(
     model: torch.nn.Sequential,
@@ -15,7 +29,9 @@ def input_gradient_interval_regularizer(
     epsilon: float,
     model_epsilon: float,
     return_grads: bool = False,
-) -> float | list[torch.Tensor]:
+    regularizer_type: MLXMethod = MLXMethod.GRAD_CERT,
+    batch_masks: torch.Tensor = None
+) -> float | list[tuple[torch.Tensor]]:
     """
     Compute an interval over the gradients of the loss with respect to the inputs to the network. Then compute the norm
     of this input gradient interval and return it to be used as a regularization term. This can be used for robust
@@ -34,12 +50,19 @@ def input_gradient_interval_regularizer(
         float | list[torch.Tensor]: The regularization term or the gradient lower bounds.
     """
     # we only support binary cross entropy loss for now
-    if loss_fn != "binary_cross_entropy":
+    if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
-    if not isinstance(model[-1], torch.nn.Sigmoid):
-        raise ValueError(f"Expected last layer to be sigmoid for binary cross entropy loss, got {model[-1]}")
+    #* if not isinstance(model[-1], torch.nn.Sigmoid) and not isinstance(model[-1], torch.nn.Softmax):
+    #*     raise ValueError(f"Expected last layer to be sigmoid for binary cross entropy loss, got {model[-1]}")
     # remove the first module (copy of model) and the last module (sigmoid)
     modules = list(model.modules())[1:-1]
+    params_n = ct_utils.get_parameters(model)[0]
+    # do a forward pass without gradients to be able to call the loss gradient bounding functions in the agt module
+    with torch.no_grad():
+        logits_n = batch
+        for module in modules:
+            logits_n = module(logits_n)
+        logits_n = logits_n.unsqueeze(-1)
 
     # propagate through the forward pass
     intermediate = [(batch - epsilon, batch + epsilon)]
@@ -49,8 +72,10 @@ def input_gradient_interval_regularizer(
 
     # propagate through the loss function
     logits_l, logits_u = intermediate[-1]
-    logits_l, logits_u = logits_l.squeeze(1), logits_u.squeeze(1)
-    dl_l, dl_u = torch.sigmoid(logits_l) - labels, torch.sigmoid(logits_u) - labels
+    #* logits_l, logits_u = logits_l.squeeze(-1), logits_u.squeeze(-1)
+    #* dl_l, dl_u = model[-1](logits_l) - labels, model[-1](logits_u) - labels
+    dl_l, dl_u, dl_n = bound_loss_function_derivative(loss_fn, logits_l, logits_u, logits_n, labels)
+    dl_l, dl_u = dl_l.squeeze(-1), dl_u.squeeze(-1)
     interval_arithmetic.validate_interval(dl_l, dl_u, msg="loss gradient")
 
     # propagate through the backward pass
@@ -58,12 +83,23 @@ def input_gradient_interval_regularizer(
     for i in range(len(modules) - 1, -1, -1):
         dl_l, dl_u = propagate_module_backward(modules[i], dl_l, dl_u, *intermediate[i], model_epsilon)
         interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
-        grads.append(dl_l)
+        grads.append((dl_l, dl_u))
 
     if return_grads:
+        # Need to unsqueeze the batch dimension to satisfy the quirks of this function
+        activations_n = nominal_forward_pass(batch.unsqueeze(-1), params_n)
+        input_grad = nominal_backward_pass(dl_n, params_n, activations_n, with_input_grad=True)
+        grads.append((input_grad, None))
         grads.reverse()
         return grads
-    return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
+
+    if regularizer_type == MLXMethod.GRAD_CERT:
+        # Loss for the interval regularizer
+        return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
+    else:
+        # Loss for R4
+        return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
+            torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
 
 
 def parameter_gradient_interval_regularizer(
@@ -93,9 +129,9 @@ def parameter_gradient_interval_regularizer(
         float | list[torch.Tensor]: The regularization term or the gradient lower bounds.
     """
     # we only support binary cross entropy loss for now
-    if loss_fn != "binary_cross_entropy":
+    if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
-    if not isinstance(model[-1], torch.nn.Sigmoid):
+    if not isinstance(model[-1], torch.nn.Sigmoid) and not isinstance(model[-1], torch.nn.Softmax):
         raise ValueError(f"Expected last layer to be sigmoid for binary cross entropy loss, got {model[-1]}")
     # remove the first module (copy of model) and the last module (sigmoid)
     modules = list(model.modules())[1:-1]
@@ -108,8 +144,8 @@ def parameter_gradient_interval_regularizer(
 
     # propagate through the loss function
     logits_l, logits_u = intermediate[-1]
-    logits_l, logits_u = logits_l.squeeze(1), logits_u.squeeze(1)
-    dl_l, dl_u = torch.sigmoid(logits_l) - labels, torch.sigmoid(logits_u) - labels
+    logits_l, logits_u = logits_l.squeeze(-1), logits_u.squeeze(-1)
+    dl_l, dl_u = model[-1](logits_l) - labels, model[-1](logits_u) - labels
     interval_arithmetic.validate_interval(dl_l, dl_u, msg="loss gradient")
 
     # propagate through the backward pass
@@ -187,7 +223,7 @@ def propagate_module_backward(
     Args:
         module (torch.nn.Module): The module to propagate through.
         dl_l (torch.Tensor): Lower bound on the gradient of the loss wrt the output of this module.
-        dl_u (torch.Tensor): Upper bound on the gradient gradient of the loss wrt the output of this module.
+        dl_u (torch.Tensor): Upper bound on the  gradient of the loss wrt the output of this module.
         x_l (torch.Tensor): Lower bound on the input to the module.
         x_u (torch.Tensor): Upper bound on the input to the module.
         model_epsilon (float): The model perturbation budget.
@@ -287,7 +323,8 @@ if __name__ == "__main__":
     import sys
 
     sys.path.append("..")
-    from datasets.oct_mnist import get_dataloaders  # pylint: disable=import-error
+    from datasets.oct_mnist import \
+        get_dataloaders  # pylint: disable=import-error
     from deepmind import DeepMindSmall
 
     # define model, dataset and optimizer

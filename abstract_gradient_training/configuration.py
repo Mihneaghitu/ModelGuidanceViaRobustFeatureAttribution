@@ -3,17 +3,17 @@ Configuration class for the abstract gradient training module using pydantic dat
 pydantic is a data validation library that uses Python type annotations to validate data.
 """
 
-import logging
 import hashlib
-from typing import Literal
+import logging
 from collections.abc import Callable
+from typing import Literal
 
 import pydantic
 import pydantic.json
 import torch
 
-from abstract_gradient_training import bounds
-from abstract_gradient_training import test_metrics
+from abstract_gradient_training import (activation_gradients, bounds,
+                                        test_metrics)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +54,13 @@ LOSS_BOUNDS = {
     "hinge": bounds.loss_gradients.bound_hinge_derivative,
 }
 
+ACTIVATION_GRADS = {
+    "softmax": activation_gradients.softmax_gradient,
+    "sigmoid": activation_gradients.sigmoid_gradient,
+    "relu": activation_gradients.relu_gradient,
+    "none": activation_gradients.identity_gradient
+}
+
 # fields that aren't used when serializing and hashing the configuration
 EXCLUDE_FIELDS = [
     "fragsize",
@@ -92,6 +99,7 @@ class AGTConfig(pydantic.BaseModel, extra="forbid", arbitrary_types_allowed=True
     backward_bound: str = pydantic.Field(
         "interval", pattern=f"^({'|'.join(BACKWARD_BOUNDS.keys())})$", description="Backward pass bounding function"
     )
+    last_layer_activation: str = pydantic.Field("none", json_schema_extra={"in_": ACTIVATION_GRADS.keys()})
     fragsize: int = pydantic.Field(10000, gt=0, description="Size of fragments to split the batch into to avoid OOM")
     # poisoning parameters
     k_poison: int = pydantic.Field(0, ge=0, description="Number of samples whose features can be poisoned")
@@ -149,6 +157,11 @@ class AGTConfig(pydantic.BaseModel, extra="forbid", arbitrary_types_allowed=True
     def loss_bound_fn(self) -> Callable[..., tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Return the loss bound function based on the loss name."""
         return LOSS_BOUNDS[self.loss]
+
+    @pydantic.computed_field
+    def last_layer_activation_grad(self) -> Callable:
+        """Return the last layer activation function based on the last_layer_activation name."""
+        return ACTIVATION_GRADS[self.last_layer_activation]
 
     @pydantic.computed_field
     def test_loss_fn(self) -> Callable[..., tuple[float, float, float]]:
