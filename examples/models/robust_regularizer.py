@@ -3,16 +3,17 @@ This file implements the robust regularisation term from the paper 'Robust Expla
 Nothing about this is 'certified', but we can use it for robust (but un-certified) pre-training.
 """
 
-from enum import IntEnum
-
 import torch
 
 import abstract_gradient_training.certified_training_utils as ct_utils
 from abstract_gradient_training import interval_arithmetic
+from abstract_gradient_training.activation_gradients import \
+    bound_logits_derivative
 from abstract_gradient_training.bounds.loss_gradients import \
     bound_loss_function_derivative
 from abstract_gradient_training.nominal_pass import (nominal_backward_pass,
-                                                     nominal_forward_pass)
+                                                     nominal_forward_pass,
+                                                     nominal_input_gradient)
 
 
 def input_gradient_interval_regularizer(
@@ -24,8 +25,9 @@ def input_gradient_interval_regularizer(
     model_epsilon: float,
     return_grads: bool = False,
     regularizer_type: str = "grad_cert",
-    batch_masks: torch.Tensor = None
-) -> float | list[tuple[torch.Tensor]]:
+    batch_masks: torch.Tensor = None,
+    device: str = "cuda:0"
+) -> torch.Tensor | list[tuple[torch.Tensor]]:
     """
     Compute an interval over the gradients of the loss with respect to the inputs to the network. Then compute the norm
     of this input gradient interval and return it to be used as a regularization term. This can be used for robust
@@ -73,7 +75,7 @@ def input_gradient_interval_regularizer(
     interval_arithmetic.validate_interval(dl_l, dl_u, msg="loss gradient")
 
     # propagate through the backward pass
-    grads = [dl_l]
+    grads = [(dl_l, dl_u)]
     for i in range(len(modules) - 1, -1, -1):
         dl_l, dl_u = propagate_module_backward(modules[i], dl_l, dl_u, *intermediate[i], model_epsilon)
         interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
@@ -96,12 +98,21 @@ def input_gradient_interval_regularizer(
             return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
         case "r3":
-            # return the gradient of the loss w.r.t. the input squared and summed
-            d_n_sq_masked = torch.mul(input_grad.squeeze(-1), batch_masks) ** 2
-            return torch.sum(d_n_sq_masked)
+            # return the gradient of the logits w.r.t. the input squared and summed
+            d_n_logits = bound_logits_derivative(logits_n, loss_fn)
+            input_grad_logits = nominal_input_gradient(params_n, activations_n, d_n_logits)
+            # input_grad_logits should now be of shape [batchsize x output_dim x input_dim]
+            reg_term = torch.tensor(0).to(device, dtype=torch.float32)
+            reg_term.requires_grad = True
+            for output_idx in range(input_grad_logits.shape[1]):
+                prediction_grad = input_grad_logits[:, output_idx, :].squeeze()
+                reg_term = reg_term + torch.sum((prediction_grad * batch_masks) ** 2)
+            return reg_term
         case "std":
             # In standard training, we basically do not have any regularization
             return 0
+
+    raise ValueError(f"Unsupported regularizer type: {regularizer_type}")
 
 
 def parameter_gradient_interval_regularizer(

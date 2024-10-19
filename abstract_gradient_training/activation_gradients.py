@@ -6,6 +6,16 @@ import torch
 import torch.nn.functional as F
 
 
+def bound_logits_derivative(logits: torch.Tensor, loss_fn: str) -> torch.Tensor:
+    match loss_fn:
+        case 'cross_entropy':
+            return softmax_gradient(logits)
+        case 'binary_cross_entropy':
+            return sigmoid_gradient(logits)
+        case _:
+            raise ValueError(f"Unsupported loss function: {loss_fn}")
+
+
 # TODO: check dims of every other function apart from softmax
 def softmax_gradient(logits: torch.Tensor) -> torch.Tensor:
     """
