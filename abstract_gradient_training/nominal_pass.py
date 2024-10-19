@@ -56,9 +56,12 @@ def nominal_backward_pass(
     grads = [dL, dW]
 
     # compute gradients for each layer
-    lim = 0 if with_input_grad else -1
+    lim = -1 if with_input_grad else 0
     for i in range(len(W) - 1, lim, -1):
         dL = W[i].T @ dL
+        if i == 0:
+            grads.append(dL)
+            break
         dL = dL * torch.sign(activations[i])
         dW = dL @ activations[i - 1].transpose(-2, -1)
         grads.append(dL)

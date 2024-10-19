@@ -3,7 +3,7 @@ This file implements the robust regularisation term from the paper 'Robust Expla
 Nothing about this is 'certified', but we can use it for robust (but un-certified) pre-training.
 """
 
-from enum import Enum
+from enum import IntEnum
 
 import torch
 
@@ -15,12 +15,6 @@ from abstract_gradient_training.nominal_pass import (nominal_backward_pass,
                                                      nominal_forward_pass)
 
 
-class MLXMethod(Enum):
-    """The type of regularizer to use for smoothing the gradient of the irrelevant features
-    """
-    GRAD_CERT = 1
-    R4 = 2
-
 def input_gradient_interval_regularizer(
     model: torch.nn.Sequential,
     batch: torch.Tensor,
@@ -29,7 +23,7 @@ def input_gradient_interval_regularizer(
     epsilon: float,
     model_epsilon: float,
     return_grads: bool = False,
-    regularizer_type: MLXMethod = MLXMethod.GRAD_CERT,
+    regularizer_type: str = "grad_cert",
     batch_masks: torch.Tensor = None
 ) -> float | list[tuple[torch.Tensor]]:
     """
@@ -85,21 +79,29 @@ def input_gradient_interval_regularizer(
         interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
         grads.append((dl_l, dl_u))
 
+    # Need to unsqueeze the batch dimension to satisfy the quirks of this function
+    activations_n = nominal_forward_pass(batch.unsqueeze(-1), params_n)
+    input_grad = nominal_backward_pass(dl_n, params_n, activations_n, with_input_grad=True)[0]
+    grads.append((input_grad, None))
     if return_grads:
-        # Need to unsqueeze the batch dimension to satisfy the quirks of this function
-        activations_n = nominal_forward_pass(batch.unsqueeze(-1), params_n)
-        input_grad = nominal_backward_pass(dl_n, params_n, activations_n, with_input_grad=True)
-        grads.append((input_grad, None))
         grads.reverse()
         return grads
 
-    if regularizer_type == MLXMethod.GRAD_CERT:
-        # Loss for the interval regularizer
-        return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
-    else:
-        # Loss for R4
-        return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
+    match regularizer_type:
+        case "grad_cert":
+            # Loss for the interval regularizer
+            return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
+        case "r4":
+            # Loss for R4
+            return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
+        case "r3":
+            # return the gradient of the loss w.r.t. the input squared and summed
+            d_n_sq_masked = torch.mul(input_grad.squeeze(-1), batch_masks) ** 2
+            return torch.sum(d_n_sq_masked)
+        case "std":
+            # In standard training, we basically do not have any regularization
+            return 0
 
 
 def parameter_gradient_interval_regularizer(
