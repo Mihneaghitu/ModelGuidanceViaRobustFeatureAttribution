@@ -24,10 +24,10 @@ class DeepMindAugmented(torch.nn.Sequential):
         super().__init__(
             torch.nn.Conv2d(in_channels, 16, 4, 2, 0),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(16, 32, 4, 3, 0),
+            torch.nn.Conv2d(16, 32, 4, 4, 0),
             torch.nn.ReLU(),
             torch.nn.Flatten(),
-            torch.nn.Linear(76832, 100),
+            torch.nn.Linear(43808, 100),
             torch.nn.ReLU(),
             torch.nn.Linear(100, out_dim),
             output,
