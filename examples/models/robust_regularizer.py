@@ -7,15 +7,11 @@ import torch
 
 import abstract_gradient_training.certified_training_utils as ct_utils
 from abstract_gradient_training import interval_arithmetic
-from abstract_gradient_training.activation_gradients import \
-    bound_logits_derivative
+from abstract_gradient_training.activation_gradients import bound_logits_derivative
 from abstract_gradient_training.bounds.loss_gradients import \
     bound_loss_function_derivative
 from abstract_gradient_training.nominal_pass import (nominal_backward_pass,
-                                                     nominal_forward_pass,
-                                                     nominal_input_gradient,
-                                                     nominal_backward_pass_with_conv,
-                                                     nominal_forward_pass_with_conv)
+                                                     nominal_forward_pass)
 
 
 def input_gradient_interval_regularizer(
@@ -28,7 +24,7 @@ def input_gradient_interval_regularizer(
     return_grads: bool = False,
     regularizer_type: str = "grad_cert",
     batch_masks: torch.Tensor = None,
-    transform: callable = None,
+    has_conv: bool = False,
     device: str = "cuda:0",
 ) -> torch.Tensor | list[tuple[torch.Tensor]]:
     """
@@ -63,11 +59,13 @@ def input_gradient_interval_regularizer(
 
 
     # ================================= BOUNDS COMPUTATION =================================
-
     # propagate through the forward pass
     intermediate = [(batch - epsilon, batch + epsilon)]
+    # This is needed so that we can use the same uniform interface of the bounds to get the input gradient
+    intermediate_nominal = [(batch, batch)]
     for module in modules:
         intermediate.append(propagate_module_forward(module, *intermediate[-1], model_epsilon))
+        intermediate_nominal.append(propagate_module_forward(module, *intermediate_nominal[-1], 0))
         interval_arithmetic.validate_interval(*intermediate[-1], msg=f"forward pass {module}")
 
     # propagate through the loss function
@@ -87,10 +85,11 @@ def input_gradient_interval_regularizer(
     # ================================= INPUT GRAD COMPUTATION =================================
     # Need to unsqueeze the batch dimension if not conv to satisfy the quirks of this function (experimented on isic and decoy_mnist)
     input_grad = None
-    if transform: # i.e. there exist conv layer
+    if has_conv:
         for i in range(len(modules) - 1, -1, -1):
-            dl_n, _ = propagate_module_backward(modules[i], dl_n, dl_n, *intermediate[i], 0) # model_epsilon = 0
+            dl_n, dl_n_1 = propagate_module_backward(modules[i], dl_n, dl_n, *intermediate_nominal[i], 0) # 0 model epsilon
             interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
+            assert torch.allclose(dl_n, dl_n_1)
         input_grad = dl_n
     else:
         activations_n = nominal_forward_pass(batch.unsqueeze(-1), params_n_dense)
@@ -111,12 +110,17 @@ def input_gradient_interval_regularizer(
             return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
         case "r3":
+            # RRR is also dependent on L2 smoothing
+            weight_smooth_coeff = 0.1
+            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            for module in modules:
+                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
             # return the gradient of the loss w.r.t. the input squared and summed
             # input_grad_logits should now be of shape [batchsize x input_dim]
-            reg_term = torch.tensor(0).to(device, dtype=torch.float32)
-            reg_term.requires_grad = True
+            reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
-            return reg_term
+            return reg_term + weight_smooth_coeff * weight_sum
         case "std":
             # In standard training, we basically do not have any regularization
             return 0
@@ -262,11 +266,15 @@ def propagate_module_backward(
         x_l, x_u = x_l.reshape(dl_l.size()), x_u.reshape(dl_u.size())
         dl_l, dl_u = interval_arithmetic.propagate_elementwise(dl_l, dl_u, (x_l > 0).float(), (x_u > 0).float())
     elif isinstance(module, torch.nn.Conv2d):
-        W, dilation, stride, padding = module.weight, module.dilation, module.stride, module.padding
+        W, dilation, stride = module.weight, module.dilation, module.stride
+        padding, groups = module.padding, module.groups
         W_l, W_u = W - model_epsilon, W + model_epsilon
-        dl_l, dl_u = interval_arithmetic.propagate_conv2d(
-            dl_l, dl_u, W_l, W_u, stride=stride, padding=padding, dilation=dilation, transpose=True
-        )
+
+        # function that computes the gradient of the convolution wrt the input
+        def conv_grad(dl_, W_):
+            return torch.nn.grad.conv2d_input(x_l.shape, W_, dl_, stride, padding, dilation, groups)
+
+        dl_l, dl_u = interval_arithmetic.propagate_linear_transform(dl_l, dl_u, W_l, W_u, transform=conv_grad)
     elif isinstance(module, torch.nn.Flatten):
         dl_l, dl_u = torch.reshape(dl_l, x_l.size()), torch.reshape(dl_u, x_u.size())
     else:

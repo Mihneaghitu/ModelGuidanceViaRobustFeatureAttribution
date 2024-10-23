@@ -196,7 +196,7 @@ def get_isic_masked_dataloaders(input_data: torch.Tensor, input_labels: torch.Te
     randomized_data, randomized_masks, randomized_labels = input_data[rand_perm], input_masks[rand_perm], input_labels[rand_perm]
     # Split the data
     train_data, train_masks, train_labels = randomized_data[:training_size], randomized_masks[:training_size], randomized_labels[:training_size]
-    test_data, test_masks ,test_labels = randomized_data[training_size:], randomized_masks[training_size:], randomized_labels[training_size:]
+    test_data, test_masks, test_labels = randomized_data[training_size:], randomized_masks[training_size:], randomized_labels[training_size:]
 
     # Create the tensor datasets
     tensor_dset_train = TensorDataset(train_data, train_labels, train_masks)
