@@ -13,7 +13,9 @@ from abstract_gradient_training.bounds.loss_gradients import \
     bound_loss_function_derivative
 from abstract_gradient_training.nominal_pass import (nominal_backward_pass,
                                                      nominal_forward_pass,
-                                                     nominal_input_gradient)
+                                                     nominal_input_gradient,
+                                                     nominal_backward_pass_with_conv,
+                                                     nominal_forward_pass_with_conv)
 
 
 def input_gradient_interval_regularizer(
@@ -26,7 +28,8 @@ def input_gradient_interval_regularizer(
     return_grads: bool = False,
     regularizer_type: str = "grad_cert",
     batch_masks: torch.Tensor = None,
-    device: str = "cuda:0"
+    transform: callable = None,
+    device: str = "cuda:0",
 ) -> torch.Tensor | list[tuple[torch.Tensor]]:
     """
     Compute an interval over the gradients of the loss with respect to the inputs to the network. Then compute the norm
@@ -48,17 +51,18 @@ def input_gradient_interval_regularizer(
     # we only support binary cross entropy loss for now
     if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
-    #* if not isinstance(model[-1], torch.nn.Sigmoid) and not isinstance(model[-1], torch.nn.Softmax):
-    #*     raise ValueError(f"Expected last layer to be sigmoid for binary cross entropy loss, got {model[-1]}")
     # remove the first module (copy of model) and the last module (sigmoid)
     modules = list(model.modules())[1:-1]
-    params_n = ct_utils.get_parameters(model)[0]
+    params_n_dense = ct_utils.get_parameters(model)[0]
     # do a forward pass without gradients to be able to call the loss gradient bounding functions in the agt module
     with torch.no_grad():
         logits_n = batch
         for module in modules:
             logits_n = module(logits_n)
         logits_n = logits_n.unsqueeze(-1)
+
+
+    # ================================= BOUNDS COMPUTATION =================================
 
     # propagate through the forward pass
     intermediate = [(batch - epsilon, batch + epsilon)]
@@ -68,8 +72,6 @@ def input_gradient_interval_regularizer(
 
     # propagate through the loss function
     logits_l, logits_u = intermediate[-1]
-    #* logits_l, logits_u = logits_l.squeeze(-1), logits_u.squeeze(-1)
-    #* dl_l, dl_u = model[-1](logits_l) - labels, model[-1](logits_u) - labels
     dl_l, dl_u, dl_n = bound_loss_function_derivative(loss_fn, logits_l, logits_u, logits_n, labels)
     dl_l, dl_u = dl_l.squeeze(-1), dl_u.squeeze(-1)
     interval_arithmetic.validate_interval(dl_l, dl_u, msg="loss gradient")
@@ -81,10 +83,21 @@ def input_gradient_interval_regularizer(
         interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
         grads.append((dl_l, dl_u))
 
-    # Need to unsqueeze the batch dimension to satisfy the quirks of this function
-    activations_n = nominal_forward_pass(batch.unsqueeze(-1), params_n)
-    input_grad = nominal_backward_pass(dl_n, params_n, activations_n, with_input_grad=True)[0]
+
+    # ================================= INPUT GRAD COMPUTATION =================================
+    # Need to unsqueeze the batch dimension if not conv to satisfy the quirks of this function (experimented on isic and decoy_mnist)
+    input_grad = None
+    if transform: # i.e. there exist conv layer
+        for i in range(len(modules) - 1, -1, -1):
+            dl_n, _ = propagate_module_backward(modules[i], dl_n, dl_n, *intermediate[i], 0) # model_epsilon = 0
+            interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
+        input_grad = dl_n
+    else:
+        activations_n = nominal_forward_pass(batch.unsqueeze(-1), params_n_dense)
+        input_grad = nominal_backward_pass(dl_n, params_n_dense, activations_n, with_input_grad=True)[0]
     grads.append((input_grad, None))
+
+
     if return_grads:
         grads.reverse()
         return grads
@@ -98,15 +111,11 @@ def input_gradient_interval_regularizer(
             return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
         case "r3":
-            # return the gradient of the logits w.r.t. the input squared and summed
-            d_n_logits = bound_logits_derivative(logits_n, loss_fn)
-            input_grad_logits = nominal_input_gradient(params_n, activations_n, d_n_logits)
-            # input_grad_logits should now be of shape [batchsize x output_dim x input_dim]
+            # return the gradient of the loss w.r.t. the input squared and summed
+            # input_grad_logits should now be of shape [batchsize x input_dim]
             reg_term = torch.tensor(0).to(device, dtype=torch.float32)
             reg_term.requires_grad = True
-            for output_idx in range(input_grad_logits.shape[1]):
-                prediction_grad = input_grad_logits[:, output_idx, :].squeeze()
-                reg_term = reg_term + torch.sum((prediction_grad * batch_masks) ** 2)
+            reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
             return reg_term
         case "std":
             # In standard training, we basically do not have any regularization
@@ -114,7 +123,7 @@ def input_gradient_interval_regularizer(
 
     raise ValueError(f"Unsupported regularizer type: {regularizer_type}")
 
-
+# This only works for robust explanation constraints
 def parameter_gradient_interval_regularizer(
     model: torch.nn.Sequential,
     batch: torch.Tensor,
@@ -145,7 +154,7 @@ def parameter_gradient_interval_regularizer(
     if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
     if not isinstance(model[-1], torch.nn.Sigmoid) and not isinstance(model[-1], torch.nn.Softmax):
-        raise ValueError(f"Expected last layer to be sigmoid for binary cross entropy loss, got {model[-1]}")
+        raise ValueError(f"Expected last layer to be sigmoid for binary cross entropy loss and softmax for cross entropy, got {model[-1]}")
     # remove the first module (copy of model) and the last module (sigmoid)
     modules = list(model.modules())[1:-1]
 

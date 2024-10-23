@@ -20,15 +20,6 @@ def get_dataloaders(train_batchsize, test_batchsize=500, exclude_classes=None):
     train_imgs, train_labels = train_dset.data, train_dset.targets
     test_imgs, test_labels = test_dset.data, test_dset.targets
 
-    # filter out excluded classes
-    if exclude_classes is not None:
-        for e in exclude_classes:
-            train_imgs = train_imgs[(train_labels != e).squeeze()]
-            train_labels = train_labels[(train_labels != e).squeeze()]
-            test_imgs = test_imgs[(test_labels != e).squeeze()]
-            test_labels = test_labels[(test_labels != e).squeeze()]
-
-
     # apply the appropriate scaling and transposition
     train_imgs = torch.tensor(train_imgs, dtype=torch.float32).unsqueeze(1) / 255
     test_imgs = torch.tensor(test_imgs, dtype=torch.float32).unsqueeze(1) / 255

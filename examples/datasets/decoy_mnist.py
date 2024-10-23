@@ -15,6 +15,8 @@ def get_dataloaders(train_batchsize, test_batchsize=500):
     curr_dir_path = os.path.dirname(os.path.abspath(__file__))
     decoy_mnist_data_root = os.path.join(curr_dir_path, 'data/DECOY_MNIST/decoy-mnist.npz')
     if not os.path.exists(decoy_mnist_data_root):
+        # create dir if it doesn't exist
+        os.makedirs(os.path.dirname(decoy_mnist_data_root), exist_ok=True)
         path, msg = urlretrieve('https://github.com/SIDN-IAP/intro-lab/blob/master/decoy-mnist.npz?raw=true', decoy_mnist_data_root)
         print(f"Msg {msg}, downloaded DECOY MNIST data to {path}")
     # get the datasets

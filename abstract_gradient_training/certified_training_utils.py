@@ -130,6 +130,12 @@ def get_parameters(model: torch.nn.Sequential) -> tuple[list[torch.Tensor], list
     param_u = [p.clone() for p in param_n]
     return param_n, param_l, param_u
 
+def get_nominal_parameters(model: torch.nn.Sequential) -> list[torch.Tensor]:
+    param_n = [(l.weight, l.bias) for l in model.modules() if isinstance(l, torch.nn.Linear) or isinstance(l, torch.nn.Conv2d)]  # get linear and conv params
+    param_n = [item for sublist in param_n for item in sublist]  # flatten the list
+    param_n = [t if len(t.shape) == 2 else t.unsqueeze(-1) for t in param_n]  # reshape bias to [n x 1] instead of [n]
+
+    return param_n
 
 def propagate_clipping(
     x_l: torch.Tensor, x: torch.Tensor, x_u: torch.Tensor, gamma: float, method: str
