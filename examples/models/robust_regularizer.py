@@ -47,8 +47,10 @@ def input_gradient_interval_regularizer(
     # we only support binary cross entropy loss for now
     if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
+    modules = list(model.modules())
     # remove the first module (copy of model) and the last module (sigmoid)
-    modules = list(model.modules())[1:-1]
+    # if the first module is a DataParallel, remove the first two instead
+    modules = modules[2:-1] if isinstance(modules[0], torch.nn.DataParallel) else modules[1:-1]
     params_n_dense = ct_utils.get_parameters(model)[0]
     # do a forward pass without gradients to be able to call the loss gradient bounding functions in the agt module
     with torch.no_grad():
@@ -111,7 +113,7 @@ def input_gradient_interval_regularizer(
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
         case "r3":
             # RRR is also dependent on L2 smoothing
-            weight_smooth_coeff = 0.1
+            weight_smooth_coeff = 0.01
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in modules:
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):

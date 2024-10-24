@@ -29,6 +29,6 @@ def get_dataloaders(train_batchsize, test_batchsize=500, exclude_classes=None):
     # form dataloaders
     train_dset = TensorDataset(train_imgs, train_labels)
     test_dset = TensorDataset(test_imgs, test_labels)
-    dl = DataLoader(dataset=train_dset, batch_size=train_batchsize, shuffle=True)
+    dl_train = DataLoader(dataset=train_dset, batch_size=train_batchsize, shuffle=True)
     dl_test = DataLoader(dataset=test_dset, batch_size=test_batchsize, shuffle=True)
-    return dl, dl_test
+    return dl_train, dl_test
