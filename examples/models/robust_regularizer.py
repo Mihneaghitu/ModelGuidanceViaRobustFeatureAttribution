@@ -12,8 +12,9 @@ from abstract_gradient_training.bounds.loss_gradients import \
     bound_loss_function_derivative
 from abstract_gradient_training.nominal_pass import (nominal_backward_pass,
                                                      nominal_forward_pass)
+import copy
 
-
+#TODO it seems that for r3, ibp_ex and pgd_ex the smoothing does all the job? Is there something wrong in my code?
 def input_gradient_interval_regularizer(
     model: torch.nn.Sequential,
     batch: torch.Tensor,
@@ -22,7 +23,7 @@ def input_gradient_interval_regularizer(
     epsilon: float,
     model_epsilon: float,
     return_grads: bool = False,
-    regularizer_type: str = "grad_cert",
+    regularizer_type: str = "std",
     batch_masks: torch.Tensor = None,
     has_conv: bool = False,
     device: str = "cuda:0",
@@ -40,6 +41,10 @@ def input_gradient_interval_regularizer(
         epsilon (float): The training time input perturbation budget.
         model_epsilon (float): The training time model perturbation budget.
         return_grads (bool): Whether to return the gradients directly, instead of the regularization term.
+        regularizer_type (str): The type of regularizer to use. Can be "grad_cert", "r4", "r3", "std" or "ibp_ex".
+        batch_masks (torch.Tensor): The salient image masks for the input data batch, should match the shape of the input.
+        has_conv (bool): Whether the model has convolutional layers.
+        device (str): The device to use for computation.
 
     Returns:
         float | list[torch.Tensor]: The regularization term or the gradient lower bounds.
@@ -47,7 +52,12 @@ def input_gradient_interval_regularizer(
     # we only support binary cross entropy loss for now
     if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
+    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex"]
+    assert batch_masks is not None
     modules = list(model.modules())
+    assert isinstance(modules[-1], torch.nn.Sigmoid) or isinstance(modules[-1], torch.nn.Softmax)
+    last_layer_act_func = modules[-1]
+    criterion = torch.nn.BCELoss() if loss_fn == "binary_cross_entropy" else torch.nn.CrossEntropyLoss()
     # remove the first module (copy of model) and the last module (sigmoid)
     # if the first module is a DataParallel, remove the first two instead
     modules = modules[2:-1] if isinstance(modules[0], torch.nn.DataParallel) else modules[1:-1]
@@ -63,6 +73,8 @@ def input_gradient_interval_regularizer(
     # ================================= BOUNDS COMPUTATION =================================
     # propagate through the forward pass
     intermediate = [(batch - epsilon, batch + epsilon)]
+    if regularizer_type == "ibp_ex":
+        intermediate = [(batch - epsilon * batch_masks, batch + epsilon * batch_masks)]
     # This is needed so that we can use the same uniform interface of the bounds to get the input gradient
     intermediate_nominal = [(batch, batch)]
     for module in modules:
@@ -94,7 +106,8 @@ def input_gradient_interval_regularizer(
             assert torch.allclose(dl_n, dl_n_1)
         input_grad = dl_n
     else:
-        activations_n = nominal_forward_pass(batch.unsqueeze(-1), params_n_dense)
+        #TODO see if we can just let the flatten here or we need to to something more general
+        activations_n = nominal_forward_pass(batch.flatten(start_dim=1).unsqueeze(-1), params_n_dense)
         input_grad = nominal_backward_pass(dl_n, params_n_dense, activations_n, with_input_grad=True)[0]
     grads.append((input_grad, None))
 
@@ -104,6 +117,20 @@ def input_gradient_interval_regularizer(
         return grads
 
     match regularizer_type:
+        case "ibp_ex":
+            y_bar = None
+            if loss_fn == "binary_cross_entropy":
+                y_bar = last_layer_act_func(logits_l)
+            else: # cross entropy
+                labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
+                # squeeze because logits are [batchsize x output_dim x 1]
+                y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
+            weight_smooth_coeff = 0.01
+            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            for module in modules:
+                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
+            return weight_smooth_coeff * weight_sum + criterion(y_bar, labels)
         case "grad_cert":
             # Loss for the interval regularizer
             return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
@@ -128,6 +155,78 @@ def input_gradient_interval_regularizer(
             return 0
 
     raise ValueError(f"Unsupported regularizer type: {regularizer_type}")
+
+def input_gradient_pgd_regularizer(
+    batch: torch.Tensor,
+    labels: torch.Tensor,
+    model: torch.nn.Module,
+    batch_masks: torch.Tensor,
+    loss_fn: torch.nn.Module,
+    epsilon: float,
+    num_iterations: int = 10,
+    regularizer_type: str = "std",
+    device: str = "cuda:0"
+) -> torch.Tensor:
+    """This function is used to compute the adversarial perturbation budget for the input data batch and return it to be used as a regularization term
+    in order to optimize the behaviour of a model to ignore irrelevant features. This is not a certification technique, but does provide a minimal level
+    of robustness to the model to perturbations of the unsalient features.
+
+    Args:
+        batch (torch.Tensor): The input data batch, should have shape [batchsize x ... ].
+        labels (torch.Tensor): The labels for the input data batch, should have shape [batchsize x output_dim] if cross entropy,
+            [batchsize] if binary cross entropy.
+        model (torch.nn.Module): The neural network model.
+        batch_masks (torch.Tensor): The salient image masks for the input data batch, should match the shape of the input.
+        loss_fn (str): The loss function to use. Supported: "binary_cross_entropy", "cross_entropy".
+        epsilon (float): The adversarial perturbation budget.
+        num_iterations (int, optional): Number of PGD iterations. Defaults to 10. If the number of iterations is 1, the attack is FGSM
+        regularizer_type (str, optional): The type of regularizer to use. Can be "grad_cert", "r4", "r3", "std" or "pgd". Defaults to "std".
+        device (_type_, optional): The device to use for computation. Defaults to "cuda:0".
+
+    """
+    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "pgd_ex"]
+    assert batch_masks is not None
+
+    pgd_adv_input = batch
+    perturbation_masks = batch_masks if regularizer_type == "pgd_ex" else torch.ones_like(batch_masks).to(device)
+    for _ in range(num_iterations) :
+        pgd_adv_input.requires_grad = True
+        # We need it because otherwise the gradients will be accumulated with previous iterations
+        #@ This also means we need to perform the regularization BEFORE the normal training step
+        model.zero_grad()
+
+        y_hat = model(pgd_adv_input)
+        loss = loss_fn(y_hat, labels)
+        loss.backward()
+
+        adv_batch_step = pgd_adv_input + epsilon * perturbation_masks * torch.sign(pgd_adv_input.grad.data)
+        delta = torch.clamp(adv_batch_step - batch, min=-epsilon, max=epsilon)
+        adv_batch_step = torch.clamp(batch + delta, min=0, max=1).detach_()
+        pgd_adv_input = adv_batch_step
+
+    # Compute the loss for the interval regularizer
+    match regularizer_type:
+    #TODO verify with Matthew this is the correct (it's not certification per se)
+        case "pgd_ex":
+            weight_smooth_coeff = 0.001
+            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            for module in model.modules():
+                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
+            return loss_fn(pgd_adv_input, labels) + weight_smooth_coeff * weight_sum
+        case "r4":
+            # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
+            pgd_adv_input.requires_grad = True
+            model.zero_grad()
+            y_hat = model(pgd_adv_input)
+            loss = loss_fn(y_hat, labels)
+            loss.backward()
+            model.zero_grad()
+
+            return torch.sum(torch.abs(torch.mul(pgd_adv_input.grad.data, batch_masks))) / pgd_adv_input.nelement()
+        case "std":
+            return 0
+
 
 # This only works for robust explanation constraints
 def parameter_gradient_interval_regularizer(
