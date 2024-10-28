@@ -93,6 +93,9 @@ def input_gradient_interval_regularizer(
     for i in range(len(modules) - 1, -1, -1):
         dl_l, dl_u = propagate_module_backward(modules[i], dl_l, dl_u, *intermediate[i], model_epsilon)
         interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
+        # This will happen when we have a Flatten() module at the beginning of the model
+        if i == 0 and dl_l.shape != batch_masks.shape:
+            dl_l, dl_u = dl_l.reshape(batch_masks.shape), dl_u.reshape(batch_masks.shape)
         grads.append((dl_l, dl_u))
 
 
@@ -109,8 +112,10 @@ def input_gradient_interval_regularizer(
         #TODO see if we can just let the flatten here or we need to to something more general
         activations_n = nominal_forward_pass(batch.flatten(start_dim=1).unsqueeze(-1), params_n_dense)
         input_grad = nominal_backward_pass(dl_n, params_n_dense, activations_n, with_input_grad=True)[0]
+    # This will happen when we have a Flatten() module at the beginning of the model
+    if input_grad.shape != batch_masks.shape:
+        input_grad = input_grad.reshape(batch_masks.shape)
     grads.append((input_grad, None))
-
 
     if return_grads:
         grads.reverse()
@@ -125,7 +130,7 @@ def input_gradient_interval_regularizer(
                 labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
                 # squeeze because logits are [batchsize x output_dim x 1]
                 y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
-            weight_smooth_coeff = 0.01
+            weight_smooth_coeff = 0.002
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in modules:
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
@@ -140,7 +145,7 @@ def input_gradient_interval_regularizer(
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
         case "r3":
             # RRR is also dependent on L2 smoothing
-            weight_smooth_coeff = 0.01
+            weight_smooth_coeff = 0.002
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in modules:
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
@@ -148,6 +153,7 @@ def input_gradient_interval_regularizer(
             # return the gradient of the loss w.r.t. the input squared and summed
             # input_grad_logits should now be of shape [batchsize x input_dim]
             reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            # make sure the input_grad is of the same shape as the input
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
             return reg_term + weight_smooth_coeff * weight_sum
         case "std":
@@ -161,7 +167,7 @@ def input_gradient_pgd_regularizer(
     labels: torch.Tensor,
     model: torch.nn.Module,
     batch_masks: torch.Tensor,
-    loss_fn: torch.nn.Module,
+    criterion: torch.nn.Module,
     epsilon: float,
     num_iterations: int = 10,
     regularizer_type: str = "std",
@@ -196,7 +202,8 @@ def input_gradient_pgd_regularizer(
         model.zero_grad()
 
         y_hat = model(pgd_adv_input)
-        loss = loss_fn(y_hat, labels)
+        # We need to squeeze the logits when the loss is BCELoss because labels has size [batchsize] and y_hat [batchsize x 1]
+        loss = criterion(y_hat.squeeze(), labels)
         loss.backward()
 
         adv_batch_step = pgd_adv_input + epsilon * perturbation_masks * torch.sign(pgd_adv_input.grad.data)
@@ -208,20 +215,22 @@ def input_gradient_pgd_regularizer(
     match regularizer_type:
     #TODO verify with Matthew this is the correct (it's not certification per se)
         case "pgd_ex":
-            weight_smooth_coeff = 0.001
+            weight_smooth_coeff = 0.0001
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in model.modules():
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
                     weight_sum = weight_sum + torch.sum(module.weight ** 2)
-            return loss_fn(pgd_adv_input, labels) + weight_smooth_coeff * weight_sum
+
+            return criterion(model(pgd_adv_input), labels) + weight_smooth_coeff * weight_sum
         case "r4":
+            #TODO do we need regularization here as well (see last experiment of DecoyMNIST)
             # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
             pgd_adv_input.requires_grad = True
             model.zero_grad()
             y_hat = model(pgd_adv_input)
-            loss = loss_fn(y_hat, labels)
+            # We squeeze here for the same reason as above
+            loss = criterion(y_hat.squeeze(), labels)
             loss.backward()
-            model.zero_grad()
 
             return torch.sum(torch.abs(torch.mul(pgd_adv_input.grad.data, batch_masks))) / pgd_adv_input.nelement()
         case "std":
