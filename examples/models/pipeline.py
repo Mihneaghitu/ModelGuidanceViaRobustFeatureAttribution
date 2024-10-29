@@ -2,6 +2,8 @@ import torch
 import tqdm
 import sys
 from .robust_regularizer import input_gradient_interval_regularizer, input_gradient_pgd_regularizer
+import os
+import yaml
 
 def train_model_with_certified_input_grad(
     dl_train: torch.utils.data.DataLoader,
@@ -14,7 +16,8 @@ def train_model_with_certified_input_grad(
     k: float, # input reg weight
     device: str,
     has_conv: bool,
-    k_schedule: callable = None
+    k_schedule: callable = None,
+    weight_reg_coeff: float = 0.0
 ) -> None:
     loss_fn = None
     if isinstance(criterion, torch.nn.BCELoss):
@@ -34,7 +37,8 @@ def train_model_with_certified_input_grad(
 
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_interval_regularizer(
-                model, x, u, loss_fn, epsilon, 0.0, regularizer_type=mlx_method, batch_masks=m, has_conv=has_conv, device=device
+                model, x, u, loss_fn, epsilon, 0.0, regularizer_type=mlx_method, batch_masks=m, has_conv=has_conv,
+                device=device, weight_reg_coeff=weight_reg_coeff
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
@@ -65,6 +69,7 @@ def train_model_with_pgd_robust_input_grad(
     mlx_method: str, # one of ["std", "grad_cert", "ibp_ex", "r3" or "r4"]
     k: float, # input reg weight
     device: str,
+    weight_reg_coeff: float = 0.0
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
@@ -81,7 +86,7 @@ def train_model_with_pgd_robust_input_grad(
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_pgd_regularizer(
-                x, u, model, m, criterion, epsilon, num_iterations=10, regularizer_type=mlx_method, device=device
+                x, u, model, m, criterion, epsilon, num_iterations=10, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
@@ -96,7 +101,7 @@ def train_model_with_pgd_robust_input_grad(
             if i % 100 == 0:
                 progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
 
-def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str, multi_class: bool = False) -> None:
+def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str, multi_class: bool = False) -> float:
     all_acc = 0
     for test_batch, test_labels, _ in dl_test:
         # Just do a simple forward and compare the output to the labels
@@ -112,8 +117,10 @@ def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.Da
     print("--- Model accuracy ---")
     print(f"Nominal = {all_acc:.2g}")
 
+    return round(all_acc, 3)
+
 def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: torch.nn.Sequential, epsilon: float, delta: float,
-                                loss_fn: str, device: str, has_conv: bool = False) -> None:
+                                loss_fn: str, device: str, has_conv: bool = False) -> tuple[float, float]:
     assert loss_fn in ["binary_cross_entropy", "cross_entropy"], "Only binary_cross_entropy and cross_entropy supported"
     # The model needs to be delta input robust only in the irrelevant features
     num_robust, min_robust_delta, num_test_samples = 0, 0, 0
@@ -139,3 +146,21 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
     print(f"Delta Input Robustness = {num_robust:.2g}")
     print("--- Mininimum delta for which the test set is certifiably 1-delta-input-robust ---")
     print(f"Min robust delta = {min_robust_delta:.3g}")
+    # truncate to 3 decimal places
+    num_robust, min_robust_delta = round(num_robust, 3), round(min_robust_delta, 3)
+    return num_robust, min_robust_delta
+
+def write_results_to_file(filename: str, results: dict, method: str) -> None:
+    assert filename.endswith(".yaml"), "Only yaml files supported"
+    if not os.path.exists(filename):
+        # Create a new file and write the dict to it
+        with open(filename, "w") as f:
+            yaml.dump({method: results}, f)
+    else:
+        # Load the existing yaml file, append to it and write it back
+        new_results = None
+        with open(filename, "r") as f:
+            new_results = yaml.load(f, Loader=yaml.FullLoader) or {}
+            new_results[method] = results
+        with open(filename, "w") as f:
+            yaml.dump(new_results, f)

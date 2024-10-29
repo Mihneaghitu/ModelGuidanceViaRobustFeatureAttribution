@@ -27,6 +27,7 @@ def input_gradient_interval_regularizer(
     batch_masks: torch.Tensor = None,
     has_conv: bool = False,
     device: str = "cuda:0",
+    weight_reg_coeff: float = 0.0
 ) -> torch.Tensor | list[tuple[torch.Tensor]]:
     """
     Compute an interval over the gradients of the loss with respect to the inputs to the network. Then compute the norm
@@ -130,12 +131,11 @@ def input_gradient_interval_regularizer(
                 labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
                 # squeeze because logits are [batchsize x output_dim x 1]
                 y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
-            weight_smooth_coeff = 0.002
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in modules:
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
                     weight_sum = weight_sum + torch.sum(module.weight ** 2)
-            return weight_smooth_coeff * weight_sum + criterion(y_bar, labels)
+            return weight_reg_coeff * weight_sum + criterion(y_bar, labels)
         case "grad_cert":
             # Loss for the interval regularizer
             return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
@@ -145,7 +145,6 @@ def input_gradient_interval_regularizer(
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
         case "r3":
             # RRR is also dependent on L2 smoothing
-            weight_smooth_coeff = 0.002
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in modules:
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
@@ -155,7 +154,7 @@ def input_gradient_interval_regularizer(
             reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             # make sure the input_grad is of the same shape as the input
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
-            return reg_term + weight_smooth_coeff * weight_sum
+            return reg_term + weight_reg_coeff * weight_sum
         case "std":
             # In standard training, we basically do not have any regularization
             return 0
@@ -171,7 +170,8 @@ def input_gradient_pgd_regularizer(
     epsilon: float,
     num_iterations: int = 10,
     regularizer_type: str = "std",
-    device: str = "cuda:0"
+    device: str = "cuda:0",
+    weight_reg_coeff: float = 0.0
 ) -> torch.Tensor:
     """This function is used to compute the adversarial perturbation budget for the input data batch and return it to be used as a regularization term
     in order to optimize the behaviour of a model to ignore irrelevant features. This is not a certification technique, but does provide a minimal level
@@ -215,13 +215,12 @@ def input_gradient_pgd_regularizer(
     match regularizer_type:
     #TODO verify with Matthew this is the correct (it's not certification per se)
         case "pgd_ex":
-            weight_smooth_coeff = 0.0001
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in model.modules():
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
                     weight_sum = weight_sum + torch.sum(module.weight ** 2)
 
-            return criterion(model(pgd_adv_input), labels) + weight_smooth_coeff * weight_sum
+            return criterion(model(pgd_adv_input), labels) + weight_reg_coeff * weight_sum
         case "r4":
             #TODO do we need regularization here as well (see last experiment of DecoyMNIST)
             # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
