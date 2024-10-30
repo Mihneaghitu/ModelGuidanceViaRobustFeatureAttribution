@@ -1,0 +1,112 @@
+ibp_ex+r3_20:
+  max_upper_bound_avg: 2.265
+  min_lower_bound_avg: -2.101
+  min_robust_delta: 3.326
+  num_robust: 0.0
+  test_acc: 0.929
+  train_acc: 0.938
+ibp_ex+r3_40:
+  max_upper_bound_avg: 2.265
+  min_lower_bound_avg: -2.101
+  min_robust_delta: 3.326
+  num_robust: 0.0
+  test_acc: 0.929
+  train_acc: 0.938
+ibp_ex+r3_60:
+  max_upper_bound_avg: 2.265
+  min_lower_bound_avg: -2.101
+  min_robust_delta: 3.326
+  num_robust: 0.0
+  test_acc: 0.929
+  train_acc: 0.938
+ibp_ex+r3_80:
+  max_upper_bound_avg: 2.265
+  min_lower_bound_avg: -2.101
+  min_robust_delta: 3.326
+  num_robust: 0.0
+  test_acc: 0.929
+  train_acc: 0.938
+ibp_ex_20:
+  max_upper_bound_avg: 3.113
+  min_lower_bound_avg: -2.813
+  min_robust_delta: 4.798
+  num_robust: 0.0
+  test_acc: 0.925
+  train_acc: 0.947
+ibp_ex_40:
+  max_upper_bound_avg: 3.113
+  min_lower_bound_avg: -2.813
+  min_robust_delta: 4.798
+  num_robust: 0.0
+  test_acc: 0.925
+  train_acc: 0.947
+ibp_ex_60:
+  max_upper_bound_avg: 3.113
+  min_lower_bound_avg: -2.813
+  min_robust_delta: 4.798
+  num_robust: 0.0
+  test_acc: 0.925
+  train_acc: 0.947
+ibp_ex_80:
+  max_upper_bound_avg: 3.113
+  min_lower_bound_avg: -2.813
+  min_robust_delta: 4.798
+  num_robust: 0.0
+  test_acc: 0.925
+  train_acc: 0.947
+r3_20:
+  max_upper_bound_avg: 0.365
+  min_lower_bound_avg: -0.335
+  min_robust_delta: 0.494
+  num_robust: 0.0
+  test_acc: 0.768
+  train_acc: 0.765
+r3_40:
+  max_upper_bound_avg: 0.475
+  min_lower_bound_avg: -0.443
+  min_robust_delta: 0.501
+  num_robust: 0.0
+  test_acc: 0.726
+  train_acc: 0.726
+r3_60:
+  max_upper_bound_avg: 0.576
+  min_lower_bound_avg: -0.546
+  min_robust_delta: 0.522
+  num_robust: 0.0
+  test_acc: 0.798
+  train_acc: 0.797
+r3_80:
+  max_upper_bound_avg: 0.372
+  min_lower_bound_avg: -0.341
+  min_robust_delta: 0.578
+  num_robust: 0.0
+  test_acc: 0.829
+  train_acc: 0.825
+r4_20:
+  max_upper_bound_avg: 758.361
+  min_lower_bound_avg: -603.017
+  min_robust_delta: 705.982
+  num_robust: 0.0
+  test_acc: 0.731
+  train_acc: 0.964
+r4_40:
+  max_upper_bound_avg: 449.196
+  min_lower_bound_avg: -400.209
+  min_robust_delta: 399.784
+  num_robust: 0.0
+  test_acc: 0.686
+  train_acc: 0.892
+r4_60:
+  max_upper_bound_avg: 221.549
+  min_lower_bound_avg: -209.921
+  min_robust_delta: 206.426
+  num_robust: 0.0
+  test_acc: 0.702
+  train_acc: 0.893
+r4_80:
+  max_upper_bound_avg: 190.272
+  min_lower_bound_avg: -177.826
+  min_robust_delta: 249.451
+  num_robust: 0.0
+  test_acc: 0.721
+  train_acc: 0.919

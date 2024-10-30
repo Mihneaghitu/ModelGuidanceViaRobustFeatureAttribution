@@ -48,16 +48,16 @@ def remove_masks(ratio_preserved: float, dloader: DataLoader) -> DataLoader:
     # group by label
     labels = dloader.dataset.tensors[1]
     flatten = lambda l: [item for sublist in l for item in sublist]
-    indices_per_label = [flatten((labels == i).nonzero(), i) for i in range(10)]
+    indices_per_label = [flatten((labels == i).nonzero()) for i in range(10)]
     indices_per_label = [np.array(idx) for idx in indices_per_label]
 
+    indices_per_label_removed = [None] * 10
     for i in range(10):
-        indices_of_indices_kept = np.random.choice(indices_per_label[i].shape[0], int(ratio_removed * indices_per_label[i].shape[0]), replace=False)
-        indices_per_label[i] = indices_per_label[i][indices_of_indices_kept]
-
-    zero_masks_indices = np.concatenate(indices_per_label)
+        indices_of_indices_removed = np.random.choice(indices_per_label[i].shape[0], int(ratio_removed * indices_per_label[i].shape[0]), replace=False)
+        indices_per_label_removed[i] = indices_per_label[i][indices_of_indices_removed]
+    zero_masks_indices = np.concatenate(indices_per_label_removed)
     for zero_mask_index in zero_masks_indices:
-        dloader.dataset.tensors[3][zero_mask_index] = torch.zeros_like(dloader.dataset.tensors[3][zero_mask_index])
+        dloader.dataset.tensors[2][zero_mask_index] = torch.zeros_like(dloader.dataset.tensors[2][zero_mask_index])
 
     return dloader
 

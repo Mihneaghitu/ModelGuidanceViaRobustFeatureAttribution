@@ -94,3 +94,15 @@ class PlantDataset(Dataset):
 
 def get_dataloader(plant_dset: PlantDataset, batch_size: int):
     return DataLoader(plant_dset, batch_size=batch_size, shuffle=False)
+
+def make_soft_masks(plant_dloader: DataLoader, alpha: float) -> DataLoader:
+    new_masks = plant_dloader.dataset.data_masks
+    # Compute the intersection of the masks
+    intersection = torch.sum(new_masks, dim=0)
+    num_masks = new_masks.shape[0]
+    intersection /= num_masks
+    # Compute the soft masks - 0 if the initial mask is 0, otherwise the weighted intersection
+    for i in range(num_masks):
+        new_masks[i] = alpha * (intersection * new_masks[i]) + (1 - alpha) * new_masks[i]
+
+    plant_dloader.dataset.data_masks = new_masks

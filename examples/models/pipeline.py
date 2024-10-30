@@ -101,7 +101,8 @@ def train_model_with_pgd_robust_input_grad(
             if i % 100 == 0:
                 progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
 
-def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str, multi_class: bool = False) -> float:
+def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str,
+                        multi_class: bool = False, suppress_log: bool = False) -> float:
     all_acc = 0
     num_inputs = 0
     for test_batch, test_labels, _ in dl_test:
@@ -116,16 +117,18 @@ def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.Da
         all_acc += correct
         num_inputs += test_batch.shape[0]
     all_acc /= num_inputs
-    print("--- Model accuracy ---")
-    print(f"Nominal = {all_acc:.2g}")
+    if not suppress_log:
+        print("--- Model accuracy ---")
+        print(f"Nominal = {all_acc:.2g}")
 
     return round(all_acc, 3)
 
 def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: torch.nn.Sequential, epsilon: float, delta: float,
-                                loss_fn: str, device: str, has_conv: bool = False) -> tuple[float, float]:
+    loss_fn: str, device: str, has_conv: bool = False, suppress_log: bool = False) -> tuple[float, float, float, float]:
     assert loss_fn in ["binary_cross_entropy", "cross_entropy"], "Only binary_cross_entropy and cross_entropy supported"
     # The model needs to be delta input robust only in the irrelevant features
     num_robust, min_robust_delta, num_test_samples = 0, 0, 0
+    max_upper_bound, min_lower_bound = 0, 0
     model = model.to(device).eval()
     for test_batch, test_labels, test_masks in dl_masked:
         test_batch, test_labels, test_masks = test_batch.to(device), test_labels.to(device), test_masks.to(device)
@@ -139,18 +142,21 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
             # keep the dimensions, but remove the elements which are 0
             abs_diff = torch.abs(d_l[idx] - d_u[idx])
             min_robust_delta = max(min_robust_delta, abs_diff.max().item())
+            max_upper_bound = max(max_upper_bound, d_u[idx].max().item())
+            min_lower_bound = min(min_lower_bound, d_l[idx].min().item())
             robust_grad_inputs = torch.where(abs_diff <= delta, 1, 0)
             num_robust_salient_features = robust_grad_inputs.sum().item()
             num_robust += int(num_robust_salient_features == num_salient_features)
             num_test_samples += 1
     num_robust /= num_test_samples
-    print("--- Delta input robustness ---")
-    print(f"Delta Input Robustness = {num_robust:.2g}")
-    print("--- Mininimum delta for which the test set is certifiably 1-delta-input-robust ---")
-    print(f"Min robust delta = {min_robust_delta:.3g}")
+    if not suppress_log:
+        print("--- Delta input robustness ---")
+        print(f"Delta Input Robustness = {num_robust:.2g}")
+        print("--- Mininimum delta for which the test set is certifiably 1-delta-input-robust ---")
+        print(f"Min robust delta = {min_robust_delta:.3g}")
     # truncate to 3 decimal places
     num_robust, min_robust_delta = round(num_robust, 3), round(min_robust_delta, 3)
-    return num_robust, min_robust_delta
+    return num_robust, min_robust_delta, min_lower_bound, max_upper_bound
 
 def uniformize_magnitudes_schedule(curr_epoch: int, max_epochs: int, std_loss: float, rrr_loss: float) -> float:
     if curr_epoch <= max_epochs // 5:
