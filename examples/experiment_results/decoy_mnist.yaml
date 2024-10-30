@@ -1,8 +1,13 @@
-std:
-  min_robust_delta: 470.434
+ibp_ex:
+  min_robust_delta: 4.798
   num_robust: 0.0
-  test_acc: 0.67
-  train_acc: 0.997
+  test_acc: 0.925
+  train_acc: 0.947
+ibp_ex+r3:
+  min_robust_delta: 3.326
+  num_robust: 0.0
+  test_acc: 0.929
+  train_acc: 0.938
 r3:
   min_robust_delta: 10.6
   num_robust: 0.0
@@ -13,8 +18,8 @@ r4:
   num_robust: 0.0
   test_acc: 0.978
   train_acc: 0.992
-ibp_ex:
-  min_robust_delta: 4.798
+std:
+  min_robust_delta: 470.434
   num_robust: 0.0
-  test_acc: 0.925
-  train_acc: 0.947
+  test_acc: 0.67
+  train_acc: 0.997

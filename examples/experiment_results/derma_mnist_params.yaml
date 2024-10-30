@@ -1,0 +1,24 @@
+r3:
+  delta_threshold: 1
+  epsilon: 0.01
+  k: 0.02
+  lr: 0.0001
+  num_epochs: 10
+  restarts: 4
+  weight_coeff: 0.0005
+r4:
+  delta_threshold: 1
+  epsilon: 0.01
+  k: 0.05
+  lr: 0.0001
+  num_epochs: 12
+  restarts: 4
+  weight_coeff: -1
+std:
+  delta_threshold: 1
+  epsilon: 0.1
+  k: 0.2
+  lr: 0.0001
+  num_epochs: 20
+  restarts: 4
+  weight_coeff: -1

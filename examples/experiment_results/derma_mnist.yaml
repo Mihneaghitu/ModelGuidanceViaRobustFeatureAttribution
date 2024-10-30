@@ -1,0 +1,15 @@
+r3:
+  min_robust_delta: 699.386
+  num_robust: 0.0
+  test_acc: 0.738
+  train_acc: 0.833
+r4:
+  min_robust_delta: 11.443
+  num_robust: 0.0
+  test_acc: 0.784
+  train_acc: 0.806
+std:
+  min_robust_delta: 9748.357
+  num_robust: 0.0
+  test_acc: 0.415
+  train_acc: 1.0

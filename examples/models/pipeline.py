@@ -103,6 +103,7 @@ def train_model_with_pgd_robust_input_grad(
 
 def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str, multi_class: bool = False) -> float:
     all_acc = 0
+    num_inputs = 0
     for test_batch, test_labels, _ in dl_test:
         # Just do a simple forward and compare the output to the labels
         test_batch, test_labels = test_batch.to(device), test_labels.to(device)
@@ -113,7 +114,8 @@ def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.Da
         else:
             correct = ((output > 0.5) == (test_labels)).sum().item()
         all_acc += correct
-    all_acc /= len(dl_test.dataset)
+        num_inputs += test_batch.shape[0]
+    all_acc /= num_inputs
     print("--- Model accuracy ---")
     print(f"Nominal = {all_acc:.2g}")
 
@@ -129,7 +131,7 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
         test_batch, test_labels, test_masks = test_batch.to(device), test_labels.to(device), test_masks.to(device)
         # The MLX method does not really matter, as we return the grads
         grad_bounds = input_gradient_interval_regularizer(model, test_batch, test_labels, loss_fn, epsilon, 0.0, return_grads=True,
-                                                          regularizer_type="std", batch_masks=test_masks, has_conv=has_conv, device=device)
+                                                          regularizer_type="r4", batch_masks=test_masks, has_conv=has_conv, device=device)
         d_l, d_u = grad_bounds[1]
         d_l, d_u = d_l * test_masks, d_u * test_masks
         for idx in range(len(test_batch)):
@@ -150,6 +152,18 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
     num_robust, min_robust_delta = round(num_robust, 3), round(min_robust_delta, 3)
     return num_robust, min_robust_delta
 
+def uniformize_magnitudes_schedule(curr_epoch: int, max_epochs: int, std_loss: float, rrr_loss: float) -> float:
+    if curr_epoch <= max_epochs // 5:
+        return 0.0
+    else:
+        # get magnitude difference in terms of order of magnitude
+        loss_diff = rrr_loss - std_loss
+        if loss_diff < 0:
+            return 1.0
+        orders_of_mag = torch.floor(torch.log10(loss_diff))
+        # the 2 is there to allow for a bit of a margin
+        return 1 / (2 * (10 ** (orders_of_mag - 1)))
+
 def write_results_to_file(filename: str, results: dict, method: str) -> None:
     assert filename.endswith(".yaml"), "Only yaml files supported"
     if not os.path.exists(filename):
@@ -164,3 +178,12 @@ def write_results_to_file(filename: str, results: dict, method: str) -> None:
             new_results[method] = results
         with open(filename, "w") as f:
             yaml.dump(new_results, f)
+
+def load_params_or_results_from_file(filename: str, method: str) -> dict:
+    assert filename.endswith(".yaml"), "Only yaml files supported"
+    assert os.path.exists(filename), "File does not exist"
+    results = None
+    with open(filename, "r") as f:
+        results = yaml.load(f, Loader=yaml.FullLoader)
+
+    return results[method] if results is not None else None

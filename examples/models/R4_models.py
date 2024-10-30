@@ -35,3 +35,24 @@ class PlantNet(torch.nn.Sequential):
             torch.nn.Linear(1024, out_dim),
             output,
         )
+
+class DermaNet(torch.nn.Sequential):
+    def __init__(self, in_channels, feature_size, out_dim):
+        self.latent_dim = {28: 2304, 64: 14400, 128: 61504, 224: 193600}
+        super().__init__(
+            torch.nn.Conv2d(in_channels, 32, 3, 1, 1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(32, 32, 4, 2, 1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(32, 64, 4, 1, 1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(64, 64, 4, 2, 1),
+            torch.nn.ReLU(),
+            torch.nn.Flatten(start_dim=1, end_dim=-1),
+            torch.nn.Linear(self.latent_dim[feature_size], 1024, bias=True),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 1024, bias=True),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, out_dim),
+            torch.nn.Sigmoid()
+        )

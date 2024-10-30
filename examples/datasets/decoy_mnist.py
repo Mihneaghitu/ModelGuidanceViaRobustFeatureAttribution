@@ -43,6 +43,23 @@ def get_dataloaders(train_batchsize, test_batchsize=500):
 
     return dl_train, dl_test
 
+def remove_masks(ratio_preserved: float, dloader: DataLoader) -> DataLoader:
+    ratio_removed = 1 - ratio_preserved
+    # group by label
+    labels = dloader.dataset.tensors[1]
+    flatten = lambda l: [item for sublist in l for item in sublist]
+    indices_per_label = [flatten((labels == i).nonzero(), i) for i in range(10)]
+    indices_per_label = [np.array(idx) for idx in indices_per_label]
+
+    for i in range(10):
+        indices_of_indices_kept = np.random.choice(indices_per_label[i].shape[0], int(ratio_removed * indices_per_label[i].shape[0]), replace=False)
+        indices_per_label[i] = indices_per_label[i][indices_of_indices_kept]
+
+    zero_masks_indices = np.concatenate(indices_per_label)
+    for zero_mask_index in zero_masks_indices:
+        dloader.dataset.tensors[3][zero_mask_index] = torch.zeros_like(dloader.dataset.tensors[3][zero_mask_index])
+
+    return dloader
 
 def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[DataLoader, DataLoader]:
     # Extract the swatches values for each different label

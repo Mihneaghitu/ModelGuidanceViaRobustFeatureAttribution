@@ -53,7 +53,7 @@ def input_gradient_interval_regularizer(
     # we only support binary cross entropy loss for now
     if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
-    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex"]
+    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex", "ibp_ex+r3"]
     assert batch_masks is not None
     modules = list(model.modules())
     assert isinstance(modules[-1], torch.nn.Sigmoid) or isinstance(modules[-1], torch.nn.Softmax)
@@ -155,6 +155,25 @@ def input_gradient_interval_regularizer(
             # make sure the input_grad is of the same shape as the input
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
             return reg_term + weight_reg_coeff * weight_sum
+        case "ibp_ex+r3":
+            # smoothing
+            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            for module in modules:
+                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
+            # ibp_ex term
+            y_bar = None
+            if loss_fn == "binary_cross_entropy":
+                y_bar = last_layer_act_func(logits_l)
+            else: # cross entropy
+                labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
+                # squeeze because logits are [batchsize x output_dim x 1]
+                y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
+            # r3 term
+            reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
+            # combine
+            return weight_reg_coeff * weight_sum + criterion(y_bar, labels) + reg_term
         case "std":
             # In standard training, we basically do not have any regularization
             return 0
@@ -190,7 +209,7 @@ def input_gradient_pgd_regularizer(
         device (_type_, optional): The device to use for computation. Defaults to "cuda:0".
 
     """
-    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "pgd_ex"]
+    assert regularizer_type in ["r4", "pgd_ex+r3", "std", "pgd_ex"]
     assert batch_masks is not None
 
     pgd_adv_input = batch
@@ -213,7 +232,6 @@ def input_gradient_pgd_regularizer(
 
     # Compute the loss for the interval regularizer
     match regularizer_type:
-    #TODO verify with Matthew this is the correct (it's not certification per se)
         case "pgd_ex":
             weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             for module in model.modules():
@@ -222,7 +240,6 @@ def input_gradient_pgd_regularizer(
 
             return criterion(model(pgd_adv_input), labels) + weight_reg_coeff * weight_sum
         case "r4":
-            #TODO do we need regularization here as well (see last experiment of DecoyMNIST)
             # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
             pgd_adv_input.requires_grad = True
             model.zero_grad()
@@ -232,6 +249,22 @@ def input_gradient_pgd_regularizer(
             loss.backward()
 
             return torch.sum(torch.abs(torch.mul(pgd_adv_input.grad.data, batch_masks))) / pgd_adv_input.nelement()
+        case "pgd_ex+r3":
+            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            for module in model.modules():
+                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
+            # r3 term
+            reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+            batch = batch.requires_grad_()
+            #TODO see if we need to zero_grad this (grad accumulation)
+            # model.zero_grad()
+            y_hat = model(batch)
+            loss = criterion(y_hat.squeeze(), labels)
+            loss.backward()
+            reg_term = reg_term + torch.sum((batch.grad.data.reshape(batch_masks) * batch_masks) ** 2)
+            # combine
+            return weight_reg_coeff * weight_sum + criterion(model(pgd_adv_input), labels) + reg_term
         case "std":
             return 0
 
