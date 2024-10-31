@@ -35,11 +35,12 @@ def ablate(dset_name: str, methods: list[str] = ["r4", "ibp_ex", "ibp_ex+r3", "r
                 # We could try to just reinitialize the weights, but we can throw away the previous model for now as we do not need it
                 torch.manual_seed(i + SEED)
                 curr_model = DermaNet(3, IMG_SIZE, 1) if dset_name == "derma_mnist" else PlantNet(3, 1)
+                curr_model = torch.nn.DataParallel(curr_model, device_ids=[1, 0] if dset_name == "plant" else [0])
 
                 print(f"========== Training model with method {method} restart {i} and mask ratio {mask_ratio} ==========")
-                k_schedule = uniformize_magnitudes_schedule if method in ["r3", "ibp_ex", "ibp_ex+r3"] else None
+                k_schedule = uniformize_magnitudes_schedule if method == "r3" else None
                 train_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
-                                                      k, device, True, weight_reg_coeff=weight_coeff, k_schedule=k_schedule)
+                    k, device, True, weight_reg_coeff=weight_coeff, k_schedule=k_schedule, suppress_tqdm=True)
                 train_acc += test_model_accuracy(curr_model, new_dl_train, device, suppress_log=True)
                 test_acc += test_model_accuracy(curr_model, dl_test, device, suppress_log=True)
                 n_r, min_delta, m_l, m_u = test_delta_input_robustness(dl_test, curr_model, epsilon, delta_threshold,
@@ -64,8 +65,8 @@ if sys.argv[1] == "derma_mnist":
     dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 256)
     criterion = torch.nn.BCELoss()
     device = torch.device("cuda:0")
-    ablate("derma_mnist")
-if sys.argv[1] == "plant":
+    ablate("derma_mnist", ["r3"])
+elif sys.argv[1] == "plant":
     SPLIT_ROOT = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
     DATA_ROOT = "/vol/bitbucket/mg2720/plant/rgb_data"
     MASKS_FILE = "/vol/bitbucket/mg2720/plant/mask/preprocessed_masks.pyu"
@@ -75,6 +76,6 @@ if sys.argv[1] == "plant":
     dl_train, dl_test = plant.get_dataloader(plant_train_2, 50), plant.get_dataloader(plant_test_2, 25)
     criterion = torch.nn.BCELoss()
     device = torch.device("cuda:1")
-    ablate("plant")
+    ablate("plant", ["ibp_ex", "ibp_ex+r3", "r3"])
 else:
     raise ValueError("Only 'derma_mnist' and 'plant' are supported")

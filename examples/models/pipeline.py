@@ -17,7 +17,8 @@ def train_model_with_certified_input_grad(
     device: str,
     has_conv: bool,
     k_schedule: callable = None,
-    weight_reg_coeff: float = 0.0
+    weight_reg_coeff: float = 0.0,
+    suppress_tqdm: bool = False
 ) -> None:
     loss_fn = None
     if isinstance(criterion, torch.nn.BCELoss):
@@ -28,7 +29,7 @@ def train_model_with_certified_input_grad(
         raise ValueError("Criterion not supported")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     # pre-train the model
-    progress_bar = tqdm.trange(n_epochs, desc="Epoch", )
+    progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
     model = model.to(device)
     for curr_epoch in progress_bar:
         for i, (x, u, m) in enumerate(dl_train):
@@ -56,7 +57,10 @@ def train_model_with_certified_input_grad(
             loss.backward()
             optimizer.step()
             if i % 100 == 0:
-                progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+                if not suppress_tqdm:
+                    progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+                else:
+                    print(f"Epoch {curr_epoch}, loss: {loss.item()}, reg: {inp_grad_reg}")
 
 
 def train_model_with_pgd_robust_input_grad(
