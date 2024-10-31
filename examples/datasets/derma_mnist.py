@@ -92,7 +92,7 @@ def get_dataloader(dset: DecoyDermaMNIST, batch_size: int):
     return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=True)
 
 
-def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader) -> torch.utils.data.DataLoader:
+def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, with_data_removal: bool = False, r4_soft: bool = False) -> torch.utils.data.DataLoader:
     assert isinstance(dloader.dataset, DecoyDermaMNIST), "The dataset must be an instance of DecoyDermaMNIST"
     ratio_removed = 1 - ratio_preserved
     num_classes = 2
@@ -103,11 +103,23 @@ def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader) -
     indices_per_label = [np.array(idx) for idx in indices_per_label]
 
     indices_per_label_removed = [None] * num_classes
+    indices_per_label_preserved = [None] * num_classes
     for i in range(num_classes):
         indices_of_indices_removed = np.random.choice(indices_per_label[i].shape[0], int(ratio_removed * indices_per_label[i].shape[0]), replace=False)
+        indices_of_indices_preserved = np.delete(np.arange(indices_per_label[i].shape[0]), indices_of_indices_removed)
         indices_per_label_removed[i] = indices_per_label[i][indices_of_indices_removed]
+        indices_per_label_preserved[i] = indices_per_label[i][indices_of_indices_preserved]
     zero_masks_indices = np.concatenate(indices_per_label_removed).astype(int)
+    non_zero_masks_indices = np.concatenate(indices_per_label_preserved).astype(int)
+    if with_data_removal:
+        dloader.dataset.dset_inputs = dloader.dataset.dset_inputs[non_zero_masks_indices]
+        dloader.dataset.dset_labels = dloader.dataset.dset_labels[non_zero_masks_indices]
+        dloader.dataset.dset_masks = dloader.dataset.dset_masks[non_zero_masks_indices]
     for zero_mask_index in zero_masks_indices:
-        dloader.dataset.dset_masks[zero_mask_index] = torch.zeros_like(dloader.dataset.dset_masks[zero_mask_index])
+        if r4_soft:
+            dloader.dataset.dset_masks[zero_mask_index] = torch.ones_like(dloader.dataset.dset_masks[zero_mask_index])
+            dloader.dataset.dset_masks[zero_mask_index] /= 100
+        else:
+            dloader.dataset.dset_masks[zero_mask_index] = torch.zeros_like(dloader.dataset.dset_masks[zero_mask_index])
 
     return dloader

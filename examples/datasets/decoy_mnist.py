@@ -43,21 +43,36 @@ def get_dataloaders(train_batchsize, test_batchsize=500):
 
     return dl_train, dl_test
 
-def remove_masks(ratio_preserved: float, dloader: DataLoader) -> DataLoader:
+def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal: bool = False, r4_soft: bool = False) -> DataLoader:
     ratio_removed = 1 - ratio_preserved
+    num_classes = 10
     # group by label
     labels = dloader.dataset.tensors[1]
     flatten = lambda l: [item for sublist in l for item in sublist]
     indices_per_label = [flatten((labels == i).nonzero()) for i in range(10)]
     indices_per_label = [np.array(idx) for idx in indices_per_label]
 
-    indices_per_label_removed = [None] * 10
-    for i in range(10):
+    indices_per_label_removed = [None] * num_classes
+    indices_per_label_preserved = [None] * num_classes
+    for i in range(num_classes):
         indices_of_indices_removed = np.random.choice(indices_per_label[i].shape[0], int(ratio_removed * indices_per_label[i].shape[0]), replace=False)
+        indices_of_indices_preserved = np.delete(np.arange(indices_per_label[i].shape[0]), indices_of_indices_removed)
         indices_per_label_removed[i] = indices_per_label[i][indices_of_indices_removed]
-    zero_masks_indices = np.concatenate(indices_per_label_removed)
-    for zero_mask_index in zero_masks_indices:
-        dloader.dataset.tensors[2][zero_mask_index] = torch.zeros_like(dloader.dataset.tensors[2][zero_mask_index])
+        indices_per_label_preserved[i] = indices_per_label[i][indices_of_indices_preserved]
+    zero_masks_indices = np.concatenate(indices_per_label_removed).astype(int)
+    non_zero_masks_indices = np.concatenate(indices_per_label_preserved).astype(int)
+    if with_data_removal:
+        # remove data, labels and masks completely - sample complexity across the board
+        dloader.dataset.tensors[0] = dloader.dataset.tensors[0][non_zero_masks_indices]
+        dloader.dataset.tensors[1] = dloader.dataset.tensors[1][non_zero_masks_indices]
+        dloader.dataset.tensors[2] = dloader.dataset.tensors[2][non_zero_masks_indices]
+    else:
+        for zero_mask_index in zero_masks_indices:
+            if r4_soft:
+                dloader.dataset.tensors[2][zero_mask_index] = torch.ones_like(dloader.dataset.tensors[2][zero_mask_index])
+                dloader.dataset.tensors[2][zero_mask_index] /= 100
+            else:
+                dloader.dataset.tensors[2][zero_mask_index] = torch.zeros_like(dloader.dataset.tensors[2][zero_mask_index])
 
     return dloader
 
@@ -91,8 +106,8 @@ def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[D
     train_data_inputs, train_data_labels = dl_train.dataset.tensors[0], dl_train.dataset.tensors[1] # i.e. the first tuple element, which is the input
     # So, mark as 1 the irrelevant features
     train_masks = torch.empty_like(train_data_inputs)
-    for idx, (input, label) in enumerate(zip(train_data_inputs, train_data_labels)):
-        train_masks[idx] = torch.where(torch.isclose(input, swatches_color_dict[int(label)], atol=1e-5), 1, 0)
+    for idx, (data_input, label) in enumerate(zip(train_data_inputs, train_data_labels)):
+        train_masks[idx] = torch.where(torch.isclose(data_input, swatches_color_dict[int(label)], atol=1e-5), 1, 0)
         train_masks[idx] *= check_mask
     masks_dset = torch.utils.data.TensorDataset(train_data_inputs, train_data_labels, train_masks)
     dl_masks_train = torch.utils.data.DataLoader(masks_dset, batch_size=dl_train.batch_size, shuffle=True)
@@ -102,7 +117,7 @@ def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[D
     test_data_inputs, test_data_labels = dl_test.dataset.tensors[0], dl_test.dataset.tensors[1]
     test_masks = torch.ones_like(test_data_inputs)
     # The test masks have to be in all four corners. I.e. we want the classification to be invariant to ANY swatch
-    for idx, (input, label) in enumerate(zip(test_data_inputs, test_data_labels)):
+    for idx, (data_input, label) in enumerate(zip(test_data_inputs, test_data_labels)):
         test_masks[idx] *= check_mask
     masks_dset = torch.utils.data.TensorDataset(test_data_inputs, test_data_labels, test_masks)
     dl_masks_test = torch.utils.data.DataLoader(masks_dset, batch_size=dl_test.batch_size, shuffle=True)
