@@ -1,0 +1,21 @@
+28:
+  max_upper_bound: 37.484
+  min_lower_bound: -37.436
+  min_robust_delta: 74.921
+  num_robust: 0.0
+  test_acc: 0.775
+  train_acc: 0.783
+64:
+  max_upper_bound: 16.355
+  min_lower_bound: -16.352
+  min_robust_delta: 11.648
+  num_robust: 0.0
+  test_acc: 0.784
+  train_acc: 0.805
+128:
+  max_upper_bound: 10.967
+  min_lower_bound: -10.967
+  min_robust_delta: 21.934
+  num_robust: 0.0
+  test_acc: 0.758
+  train_acc: 0.761

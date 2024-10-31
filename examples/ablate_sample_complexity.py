@@ -53,8 +53,8 @@ def ablate(dset_name: str, methods: list[str] = ["r4", "ibp_ex", "ibp_ex+r3", "r
                                 {"train_acc": round(train_acc / restarts, 3),
                                  "test_acc": round(test_acc / restarts, 3),
                                  "num_robust": round(num_robust / restarts, 3),
-                                 "min_lower_bound_avg": round(min_lower_bound / restarts, 3),
-                                 "max_upper_bound_avg": round(max_upper_bound / restarts, 3),
+                                 "min_lower_bound": round(min_lower_bound / restarts, 3),
+                                 "max_upper_bound": round(max_upper_bound / restarts, 3),
                                  "min_robust_delta": min_robust_delta}, method + f"_{int(mask_ratio * 100)}")
 
 if sys.argv[1] == "derma_mnist":
