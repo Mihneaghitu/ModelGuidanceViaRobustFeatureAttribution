@@ -4,6 +4,7 @@ import torchvision.transforms as transforms
 from torchvision.ops import Permute
 import os
 from torch.utils.data import Dataset
+import numpy as np
 
 class DecoyDermaMNIST(Dataset):
     def __init__(self, is_train: bool, size: int = 28):
@@ -89,3 +90,24 @@ class DecoyDermaMNIST(Dataset):
 
 def get_dataloader(dset: DecoyDermaMNIST, batch_size: int):
     return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=True)
+
+
+def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader) -> torch.utils.data.DataLoader:
+    assert isinstance(dloader.dataset, DecoyDermaMNIST), "The dataset must be an instance of DecoyDermaMNIST"
+    ratio_removed = 1 - ratio_preserved
+    num_classes = 2
+    # group by label
+    labels = dloader.dataset.dset_labels
+    flatten = lambda l: [item for sublist in l for item in sublist]
+    indices_per_label = [flatten((labels == i).nonzero()) for i in range(num_classes)]
+    indices_per_label = [np.array(idx) for idx in indices_per_label]
+
+    indices_per_label_removed = [None] * num_classes
+    for i in range(num_classes):
+        indices_of_indices_removed = np.random.choice(indices_per_label[i].shape[0], int(ratio_removed * indices_per_label[i].shape[0]), replace=False)
+        indices_per_label_removed[i] = indices_per_label[i][indices_of_indices_removed]
+    zero_masks_indices = np.concatenate(indices_per_label_removed).astype(int)
+    for zero_mask_index in zero_masks_indices:
+        dloader.dataset.dset_masks[zero_mask_index] = torch.zeros_like(dloader.dataset.dset_masks[zero_mask_index])
+
+    return dloader

@@ -70,7 +70,6 @@ def input_gradient_interval_regularizer(
             logits_n = module(logits_n)
         logits_n = logits_n.unsqueeze(-1)
 
-
     # ================================= BOUNDS COMPUTATION =================================
     # propagate through the forward pass
     intermediate = [(batch - epsilon, batch + epsilon)]
@@ -135,7 +134,7 @@ def input_gradient_interval_regularizer(
             for module in modules:
                 if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
                     weight_sum = weight_sum + torch.sum(module.weight ** 2)
-            return weight_reg_coeff * weight_sum + criterion(y_bar, labels)
+            return weight_reg_coeff * weight_sum + criterion(y_bar.squeeze(), labels)
         case "grad_cert":
             # Loss for the interval regularizer
             return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
@@ -173,7 +172,7 @@ def input_gradient_interval_regularizer(
             reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
             # combine
-            return weight_reg_coeff * weight_sum + criterion(y_bar, labels) + reg_term
+            return weight_reg_coeff * weight_sum + criterion(y_bar.squeeze(), labels) + reg_term
         case "std":
             # In standard training, we basically do not have any regularization
             return 0
