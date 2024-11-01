@@ -32,10 +32,11 @@ def make_performance_plots_for_dset(dset_name: str) -> None:
 
     plt.show()
 
-def make_sample_complexity_plots_for_dset(dset_name: str) -> None:
+def make_sample_complexity_plots_for_dset(dset_name: str, with_data_removal: bool = False) -> None:
     curr_dirname = os.path.dirname(os.path.realpath(__file__))
     perf_fname = os.path.join(curr_dirname, f"{dset_name}.yaml")
-    ablation_fname = os.path.join(curr_dirname, f"{dset_name}_sample_complexity.yaml")
+    suffix =  "" if not with_data_removal else "_data_removal"
+    ablation_fname = os.path.join(curr_dirname, f"{dset_name}_sample_complexity{suffix}.yaml")
     x_ticks = np.array([0, 0.2, 0.4, 0.6, 0.8, 1.0])
     results_for_methods, results_perf, results_abl = {}, None, None
     all_methods = ["r3", "ibp_ex", "ibp_ex+r3", "r4"]
