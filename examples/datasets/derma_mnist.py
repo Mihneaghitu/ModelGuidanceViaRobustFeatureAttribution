@@ -88,6 +88,18 @@ class DecoyDermaMNIST(Dataset):
 
         return masks
 
+class BasicDermaMNIST(Dataset):
+    def __init__(self, dset_inputs: torch.Tensor, dset_labels: torch.Tensor, dset_masks: torch.Tensor):
+        self.dset_inputs = dset_inputs
+        self.dset_labels = dset_labels
+        self.dset_masks = dset_masks
+
+    def __len__(self):
+        return self.dset_inputs.shape[0]
+
+    def __getitem__(self, idx):
+        return self.dset_inputs[idx], self.dset_labels[idx], self.dset_masks[idx]
+
 def get_dataloader(dset: DecoyDermaMNIST, batch_size: int):
     return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=True)
 
@@ -112,9 +124,11 @@ def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, w
     zero_masks_indices = np.concatenate(indices_per_label_removed).astype(int)
     non_zero_masks_indices = np.concatenate(indices_per_label_preserved).astype(int)
     if with_data_removal:
-        dloader.dataset.dset_inputs = dloader.dataset.dset_inputs[non_zero_masks_indices]
-        dloader.dataset.dset_labels = dloader.dataset.dset_labels[non_zero_masks_indices]
-        dloader.dataset.dset_masks = dloader.dataset.dset_masks[non_zero_masks_indices]
+        ds = dloader.dataset.dset_inputs[non_zero_masks_indices].clone()
+        ls = dloader.dataset.dset_labels[non_zero_masks_indices].clone()
+        ms = dloader.dataset.dset_masks[non_zero_masks_indices].clone()
+        new_dset = BasicDermaMNIST(ds, ls, ms)
+        dloader = torch.utils.data.DataLoader(new_dset, batch_size=dloader.batch_size, shuffle=True)
     else:
         for zero_mask_index in zero_masks_indices:
             if r4_soft:

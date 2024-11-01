@@ -44,8 +44,8 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
                     curr_model = DermaNet(3, img_size, 1)
                     curr_model.to(device)
                 elif dset_name == "plant":
-                    curr_model = PlantNet(3, 1)
-                    curr_model = torch.nn.DataParallel(curr_model, device_ids=[1, 0])
+                    curr_model = PlantNet(3, 1).to(device)
+                    # curr_model = torch.nn.DataParallel(curr_model, device_ids=[1, 0])
                 else:
                     curr_model = FCNAugmented(784, 10, 512, 1)
                     curr_model = curr_model.to(device)

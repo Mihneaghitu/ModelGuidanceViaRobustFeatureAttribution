@@ -92,6 +92,19 @@ class PlantDataset(Dataset):
     def __getitem__(self, idx):
         return self.data_tensors[idx], self.data_labels[idx], self.data_masks[idx]
 
+class BasicPlantDataset(PlantDataset):
+    def __init__(self, data: torch.Tensor, labels: torch.Tensor, masks: torch.Tensor):
+        self.data_tensors = data
+        self.data_labels = labels
+        self.data_masks = masks
+
+    def __len__(self):
+        return self.data_tensors.shape[0]
+
+    def __getitem__(self, idx):
+        return self.data_tensors[idx], self.data_labels[idx], self.data_masks[idx]
+
+
 def get_dataloader(plant_dset: PlantDataset, batch_size: int):
     return DataLoader(plant_dset, batch_size=batch_size, shuffle=False)
 
@@ -130,9 +143,11 @@ def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, w
     zero_masks_indices = np.concatenate(indices_per_label_removed).astype(int)
     non_zero_masks_indices = np.concatenate(indices_per_label_preserved).astype(int)
     if with_data_removal:
-        dloader.dataset.data_tensors = dloader.dataset.data_tensors[non_zero_masks_indices]
-        dloader.dataset.data_labels = dloader.dataset.data_labels[non_zero_masks_indices]
-        dloader.dataset.data_masks = dloader.dataset.data_masks[non_zero_masks_indices]
+        ds = dloader.dataset.data_tensors[non_zero_masks_indices].clone()
+        ls = dloader.dataset.data_labels[non_zero_masks_indices].clone()
+        ms = dloader.dataset.data_masks[non_zero_masks_indices].clone()
+        new_dataset = BasicPlantDataset(ds, ls, ms)
+        dloader = DataLoader(new_dataset, batch_size=dloader.batch_size, shuffle=True)
     else:
         for zero_mask_index in zero_masks_indices:
             if r4_soft:
