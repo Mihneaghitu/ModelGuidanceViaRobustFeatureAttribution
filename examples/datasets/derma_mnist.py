@@ -115,11 +115,12 @@ def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, w
         dloader.dataset.dset_inputs = dloader.dataset.dset_inputs[non_zero_masks_indices]
         dloader.dataset.dset_labels = dloader.dataset.dset_labels[non_zero_masks_indices]
         dloader.dataset.dset_masks = dloader.dataset.dset_masks[non_zero_masks_indices]
-    for zero_mask_index in zero_masks_indices:
-        if r4_soft:
-            dloader.dataset.dset_masks[zero_mask_index] = torch.ones_like(dloader.dataset.dset_masks[zero_mask_index])
-            dloader.dataset.dset_masks[zero_mask_index] /= 100
-        else:
-            dloader.dataset.dset_masks[zero_mask_index] = torch.zeros_like(dloader.dataset.dset_masks[zero_mask_index])
+    else:
+        for zero_mask_index in zero_masks_indices:
+            if r4_soft:
+                dloader.dataset.dset_masks[zero_mask_index] = torch.ones_like(dloader.dataset.dset_masks[zero_mask_index])
+                dloader.dataset.dset_masks[zero_mask_index] /= 100
+            else:
+                dloader.dataset.dset_masks[zero_mask_index] = torch.zeros_like(dloader.dataset.dset_masks[zero_mask_index])
 
     return dloader

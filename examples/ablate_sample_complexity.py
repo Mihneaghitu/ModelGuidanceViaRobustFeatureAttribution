@@ -89,7 +89,7 @@ elif sys.argv[1] == "plant":
     plant_test_2 = plant.PlantDataset(SPLIT_ROOT, DATA_ROOT, MASKS_FILE, 2, False)
     dl_train, dl_test = plant.get_dataloader(plant_train_2, 50), plant.get_dataloader(plant_test_2, 25)
     dev = torch.device("cuda:1")
-    ablate("plant", 0, True,  torch.nn.BCELoss(), dev, methods=["r4"], with_data_removal=bool(int(sys.argv[2])))
+    ablate("plant", 0, True,  torch.nn.BCELoss(), dev, with_data_removal=bool(int(sys.argv[2])))
 elif sys.argv[1] == "decoy_mnist":
     SEED = 0
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
