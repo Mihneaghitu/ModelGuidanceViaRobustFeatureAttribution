@@ -7,13 +7,15 @@ from torch.utils.data import Dataset
 import numpy as np
 
 class DecoyDermaMNIST(Dataset):
-    def __init__(self, is_train: bool, size: int = 28):
+    def __init__(self, is_train: bool, size: int = 28, override_dir: str = None):
         self.size = size
         curr_dir = os.path.dirname(os.path.realpath(__file__))
         data_dir = os.path.join(curr_dir, "data")
 
         input_transform = lambda x: torch.tensor(x, dtype=torch.float32).permute(0, 3, 1, 2) / 255
         output_transform = lambda x: torch.tensor(x, dtype=torch.int8).squeeze()
+        if override_dir is not None:
+            data_dir = override_dir
 
         train_data = DermaMNIST(root=data_dir, split="train", download=True, size=self.size)
         test_data = DermaMNIST(root=data_dir, split="test", download=True, size=self.size)

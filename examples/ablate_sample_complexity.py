@@ -79,8 +79,8 @@ if sys.argv[1] == "derma_mnist":
     train_dset = derma_mnist.DecoyDermaMNIST(True, size=IMG_SIZE)
     test_dset = derma_mnist.DecoyDermaMNIST(False, size=IMG_SIZE)
     dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 256)
-    dev = torch.device("cuda:0")
-    ablate("derma_mnist", 0, True, torch.nn.BCELoss(), dev, methods=["r3"], img_size=IMG_SIZE, with_data_removal=bool(int(sys.argv[2])))
+    dev = torch.device("cuda:1")
+    ablate("derma_mnist", 0, True, torch.nn.BCELoss(), dev, img_size=IMG_SIZE, with_data_removal=bool(int(sys.argv[2])))
 elif sys.argv[1] == "plant":
     SPLIT_ROOT = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
     DATA_ROOT = "/vol/bitbucket/mg2720/plant/rgb_data"
@@ -88,7 +88,7 @@ elif sys.argv[1] == "plant":
     plant_train_2 = plant.PlantDataset(SPLIT_ROOT, DATA_ROOT, MASKS_FILE, 2, True)
     plant_test_2 = plant.PlantDataset(SPLIT_ROOT, DATA_ROOT, MASKS_FILE, 2, False)
     dl_train, dl_test = plant.get_dataloader(plant_train_2, 50), plant.get_dataloader(plant_test_2, 25)
-    dev = torch.device("cuda:1")
+    dev = torch.device("cuda:0")
     ablate("plant", 0, True,  torch.nn.BCELoss(), dev, with_data_removal=bool(int(sys.argv[2])))
 elif sys.argv[1] == "decoy_mnist":
     SEED = 0

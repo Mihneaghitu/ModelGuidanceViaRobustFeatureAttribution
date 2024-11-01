@@ -1,24 +1,24 @@
 28:
   delta_threshold: 1
-  epsilon: 0.1
+  epsilon: 0.05
   k: 0.02
-  lr: 5.0e-05
+  lr: 0.0001
   num_epochs: 30
-  restarts: 1
+  restarts: 4
   weight_coeff: -1
 64:
   delta_threshold: 1
-  epsilon: 0.01
-  k: 0.055
+  epsilon: 0.05
+  k: 0.02
   lr: 0.0001
   num_epochs: 12
   restarts: 4
   weight_coeff: -1
 128:
   delta_threshold: 1
-  epsilon: 0.1
+  epsilon: 0.05
   k: 0.08
-  lr: 2.0e-05
-  num_epochs: 7
-  restarts: 1
+  lr: 0.0001
+  num_epochs: 10
+  restarts: 4
   weight_coeff: -1
