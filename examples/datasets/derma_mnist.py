@@ -46,8 +46,8 @@ class DecoyDermaMNIST(Dataset):
 
     def __generate_swatches_and_masks(self, data: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         masks = torch.zeros_like(data, dtype=torch.float32)
-        swatch_label_0_values, swatch_label_1_values = [0, 0, 1], [0, 1, 0]
-        corner_size = self.size // 5
+        swatch_label_0_values, swatch_label_1_values = [0.5, 0.5, 0.7], [0.5, 0.7, 0.5]
+        corner_size = self.size // 4
         corner_base = torch.zeros(3, self.size, self.size, dtype=torch.float32)
         corner = torch.ones(3, corner_size, corner_size, dtype=torch.float32)
         corner_tl, corner_tr, corner_bl, corner_br = corner_base.clone(), corner_base.clone(), corner_base.clone(), corner_base.clone()

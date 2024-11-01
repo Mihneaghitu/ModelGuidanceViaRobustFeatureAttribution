@@ -39,10 +39,10 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
             train_acc, test_acc, num_robust, min_robust_delta, min_lower_bound, max_upper_bound = 0, 0, 0, 1e+8, 0, 0
             for i in range(restarts):
                 torch.manual_seed(i + seed)
-                curr_model, loss_fn, multi_class = "binary_cross_entropy", None, False
+                curr_model, loss_fn, multi_class = None, "binary_cross_entropy", False
                 if dset_name == "derma_mnist":
                     curr_model = DermaNet(3, img_size, 1)
-                    curr_model = torch.nn.DataParallel(curr_model, device_ids=[1, 0])
+                    curr_model.to(device)
                 elif dset_name == "plant":
                     curr_model = PlantNet(3, 1)
                     curr_model = torch.nn.DataParallel(curr_model, device_ids=[1, 0])
@@ -95,6 +95,6 @@ elif sys.argv[1] == "decoy_mnist":
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
     dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
     dev = torch.device("cuda:0")
-    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, methods=["r4"], with_data_removal=bool(int(sys.argv[2])))
+    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, methods=["r3", "ibp_ex", "ibp_ex+r3"], with_data_removal=bool(int(sys.argv[2])))
 else:
     raise ValueError("Only 'derma_mnist' and 'plant' are supported")

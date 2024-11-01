@@ -63,9 +63,10 @@ def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal:
     non_zero_masks_indices = np.concatenate(indices_per_label_preserved).astype(int)
     if with_data_removal:
         # remove data, labels and masks completely - sample complexity across the board
-        dloader.dataset.tensors[0] = dloader.dataset.tensors[0][non_zero_masks_indices]
-        dloader.dataset.tensors[1] = dloader.dataset.tensors[1][non_zero_masks_indices]
-        dloader.dataset.tensors[2] = dloader.dataset.tensors[2][non_zero_masks_indices]
+        new_data = dloader.dataset.tensors[0][non_zero_masks_indices]
+        new_labels = dloader.dataset.tensors[1][non_zero_masks_indices]
+        new_masks = dloader.dataset.tensors[2][non_zero_masks_indices]
+        dloader = DataLoader(TensorDataset(new_data, new_labels, new_masks), batch_size=dloader.batch_size, shuffle=True)
     else:
         for zero_mask_index in zero_masks_indices:
             if r4_soft:

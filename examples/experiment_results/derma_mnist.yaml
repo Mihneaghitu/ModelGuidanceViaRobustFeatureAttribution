@@ -13,12 +13,12 @@ ibp_ex+r3:
   test_acc: 0.5
   train_acc: 1.0
 r3:
-  max_upper_bound: 627.276
-  min_lower_bound: -627.276
-  min_robust_delta: 714.123
+  max_upper_bound: 925.086
+  min_lower_bound: -925.082
+  min_robust_delta: 1532.752
   num_robust: 0.0
-  test_acc: 0.737
-  train_acc: 0.824
+  test_acc: 0.725
+  train_acc: 0.734
 r4:
   max_upper_bound: 16.355
   min_lower_bound: -16.352
@@ -27,9 +27,9 @@ r4:
   test_acc: 0.784
   train_acc: 0.805
 std:
-  max_upper_bound: 5070.126
-  min_lower_bound: -5069.885
-  min_robust_delta: 10016.525
+  max_upper_bound: 8679.269
+  min_lower_bound: -8689.283
+  min_robust_delta: 15730.93
   num_robust: 0.0
-  test_acc: 0.416
+  test_acc: 0.585
   train_acc: 1.0

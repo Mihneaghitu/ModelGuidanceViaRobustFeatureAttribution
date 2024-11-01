@@ -163,7 +163,7 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
     return num_robust, min_robust_delta, min_lower_bound, max_upper_bound
 
 def uniformize_magnitudes_schedule(curr_epoch: int, max_epochs: int, std_loss: float, rrr_loss: float) -> float:
-    if curr_epoch < 0: # max_epochs // 5:
+    if curr_epoch < max_epochs // 5:
         return 0.0
     else:
         # get magnitude difference in terms of order of magnitude
