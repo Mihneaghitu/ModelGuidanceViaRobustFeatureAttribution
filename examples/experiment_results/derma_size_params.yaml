@@ -22,3 +22,11 @@
   num_epochs: 10
   restarts: 4
   weight_coeff: -1
+224:
+  delta_threshold: 0.1
+  epsilon: 0.05
+  k: 0.08
+  lr: 4.0e-05
+  num_epochs: 10
+  restarts: 4
+  weight_coeff: -1

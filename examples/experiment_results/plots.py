@@ -44,12 +44,20 @@ def make_sample_complexity_plots_for_dset(dset_name: str, with_data_removal: boo
         results_perf = yaml.load(f, Loader=yaml.FullLoader)
     with open(ablation_fname, "r", encoding="utf8") as f:
         results_abl = yaml.load(f, Loader=yaml.FullLoader)
+    t = set()
+    for k in results_abl.keys():
+        if k.startswith("r3"):
+            t.add(k.rsplit("_", 1)[1])
+    x_ticks = np.array(sorted([int(i) / 100 for i in t]))
+    x_ticks = np.insert(x_ticks, 0, 0)
+    x_ticks = np.append(x_ticks, 1)
     for method_ratio in results_abl.keys():
         method, ratio = method_ratio.rsplit("_", 1)
         ratio = int(ratio) / 100
         if method not in results_for_methods:
             results_for_methods[method] = {}
         results_for_methods[method][ratio] = results_abl[method_ratio]
+
 
     fig, ax = plt.subplots(2, 2, figsize=(20, 15))
     for method in all_methods:
@@ -110,16 +118,16 @@ def make_size_ablation_plots_for_medmnist() -> None:
     upper_bounds_avg = np.array([results[tick]["max_upper_bound"] for tick in ticks])
     ticks = np.array([f"img size {str(tick)}" for tick in ticks])
 
-    ax[0, 0].bar(ticks, test_accs, color="#0000FF", width=0.5)
+    ax[0, 0].bar(ticks, test_accs, color="#0000FF", width=0.75)
     ax[0, 0].set_title("Test Accuracy")
 
-    ax[0, 1].bar(ticks, robust_delta, color="#00FF00", width=0.5)
+    ax[0, 1].bar(ticks, robust_delta, color="#00FF00", width=0.75)
     ax[0, 1].set_title("Delta for which test set is certifiably 1-delta-input-robust")
 
-    ax[1, 0].bar(ticks, lower_bounds_avg, color="#FF0000", width=0.5)
+    ax[1, 0].bar(ticks, lower_bounds_avg, color="#FF0000", width=0.75)
     ax[1, 0].set_title("Minimum lower bound (averaged over the number of runs)")
 
-    ax[1, 1].bar(ticks, upper_bounds_avg, color="#0000FF", width=0.5)
+    ax[1, 1].bar(ticks, upper_bounds_avg, color="#0000FF", width=0.75)
     ax[1, 1].set_title("Maximum upper bound (averaged over the number of runs)")
 
 

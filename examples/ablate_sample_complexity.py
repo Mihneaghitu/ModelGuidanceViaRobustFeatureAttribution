@@ -10,10 +10,9 @@ from datasets import derma_mnist, plant, decoy_mnist
 from models.R4_models import DermaNet, PlantNet
 from models.fully_connected import FCNAugmented
 
-def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module, device: torch.device,
+def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module, device: torch.device, mask_ratios: list[float] = [0.8, 0.6, 0.4, 0.2],
     methods: list[str] = ["r4", "ibp_ex", "ibp_ex+r3", "r3"], img_size: int = None, with_data_removal: bool = False) -> None:
     suffix = "" if  not with_data_removal else "_data_removal"
-    mask_ratios = [0.8, 0.6, 0.4, 0.2]
     for method in methods:
         # Load the params
         params_dict = load_params_or_results_from_file(f"experiment_results/{dset_name}_params.yaml", method)
@@ -95,6 +94,6 @@ elif sys.argv[1] == "decoy_mnist":
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
     dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
     dev = torch.device("cuda:0")
-    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, methods=["r3", "ibp_ex", "ibp_ex+r3"], with_data_removal=bool(int(sys.argv[2])))
+    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, mask_ratios=[0.067], with_data_removal=bool(int(sys.argv[2])))
 else:
     raise ValueError("Only 'derma_mnist' and 'plant' are supported")
