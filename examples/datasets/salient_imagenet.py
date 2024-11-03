@@ -31,41 +31,54 @@ class ImageNetDataset(Dataset):
         ])
         label_transform = lambda label_idx: torch.nn.functional.one_hot(torch.tensor([label_idx]), num_classes=6).float()
 
-        self.data_tensors = []
-        self.label_tensors = []
-        self.mask_tensors = []
+        init_data_tensors = []
+        init_label_tensors = []
+        init_mask_tensors = []
         for wnid in self.relevant_classes[:1]:
             data_subdir_path = os.path.join(data_dir, wnid)
             for fname in os.listdir(data_subdir_path):
                 data_img = Image.open(os.path.join(data_subdir_path, fname))
                 data_img = data_transform(data_img)
-                self.data_tensors.append(data_img)
-                assert self.data_tensors == [] or self.data_tensors[-1].shape == data_img.shape
+                init_data_tensors.append(data_img)
+                assert init_data_tensors == [] or init_data_tensors[-1].shape == data_img.shape
                 # Now search for the masks
                 masks_subdir = os.path.join(masks_dir, wnid)
                 masks_for_input = []
-                for feature_dir in os.listdir(masks_subdir):
-                    if not feature_dir.endswith(".csv"): # just ignore the map
-                        feature_dir_path = os.path.join(masks_subdir, feature_dir)
-                        # Need to split because of the extension
-                        if fname.split(".")[0] in os.listdir(feature_dir_path):
-                            print(f"Found mask for {fname} in {feature_dir_path}")
-                            mask = Image.open(os.path.join(feature_dir_path, fname))
-                            mask = data_transform(mask)
-                            masks_for_input.append(mask)
-                self.mask_tensors.append(masks_for_input)
-                self.label_tensors.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
+                # read the csv
+                mmaps = pd.read_csv(os.path.join(masks_subdir, "image_names_map.csv"))
+                for c in mmaps.columns:
+                    # get the column as a list of strings
+                    mask_names = mmaps[c].tolist()
+                    if fname.split(".")[0] in mask_names:
+                        mask = Image.open(os.path.join(masks_subdir, f"feature_{c}", fname))
+                        mask = data_transform(mask)
+                        masks_for_input.append(mask)
+                init_mask_tensors.append(masks_for_input)
+                init_label_tensors.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
 
-        self.data_tensors = np.array(self.data_tensors)
-        self.label_tensors = np.array(self.label_tensors)
-        self.mask_tensors = np.array(self.mask_tensors)
-        all_split_indices = np.random.permutation(len(self.data_tensors))
-        num_train = int(train_proportion * len(self.data_tensors))
+        all_split_indices = np.random.permutation(len(init_data_tensors))
+        num_train = int(train_proportion * len(init_data_tensors))
         split_indices = all_split_indices[:num_train] if is_train else all_split_indices[num_train:]
 
-        self.data_tensors = torch.tensor(self.data_tensors[split_indices])
-        self.label_tensors = torch.tensor(self.label_tensors[split_indices])
-        self.mask_tensors = torch.tensor(self.mask_tensors[split_indices])
+        self.data_tensors, self.label_tensors, self.mask_tensors = [], [], []
+        for split_idx in split_indices:
+            # get the number of masks for this particular input
+            num_masks = len(init_mask_tensors[split_idx])
+            if num_masks == 0:
+                self.data_tensors.append(init_data_tensors[split_idx])
+                self.label_tensors.append(init_label_tensors[split_idx])
+                # small value so r4 can work
+                self.mask_tensors.append(torch.zeros(1, 224, 224)) / 100
+                continue
+            # make the same amount of data and label tensors as the number of masks -- nice hack to work well with the DataLoader
+            for m_feature in range(num_masks):
+                self.data_tensors.append(init_data_tensors[split_idx])
+                self.label_tensors.append(init_label_tensors[split_idx])
+                self.mask_tensors.append(1 - init_mask_tensors[split_idx][m_feature])
+
+        self.data_tensors = torch.stack(self.data_tensors)
+        self.label_tensors = torch.stack(self.label_tensors)
+        self.mask_tensors = torch.stack(self.mask_tensors)
 
     def __len__(self):
         return self.data_tensors.size(0)
