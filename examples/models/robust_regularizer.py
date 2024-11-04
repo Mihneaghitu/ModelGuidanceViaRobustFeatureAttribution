@@ -103,6 +103,8 @@ def input_gradient_interval_regularizer(
     # Need to unsqueeze the batch dimension if not conv to satisfy the quirks of this function (experimented on isic and decoy_mnist)
     input_grad = None
     if has_conv:
+        if loss_fn == "cross_entropy":
+            dl_n = dl_n.squeeze(-1)
         for i in range(len(modules) - 1, -1, -1):
             dl_n, dl_n_1 = propagate_module_backward(modules[i], dl_n, dl_n, *intermediate_nominal[i], 0) # 0 model epsilon
             interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")

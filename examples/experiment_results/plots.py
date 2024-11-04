@@ -17,17 +17,23 @@ def make_performance_plots_for_dset(dset_name: str) -> None:
     lower_bounds_avg = np.array([results[tick]["min_lower_bound"] for tick in ticks_rob])
     upper_bounds_avg = np.array([results[tick]["max_upper_bound"] for tick in ticks_rob])
 
+    ticks_acc = np.array(["STD", "R3", "IBP_EX", "IBP_EX+R3", "R4"])
+    ticks_rob = ticks_acc[1:]
     _, ax = plt.subplots(2, 2, figsize=(15, 15))
     ax[0, 0].bar(ticks_acc, test_accs, color="#0000FF")
+    ax[0, 0].set_ylim([min(test_accs) - 0.1, max(test_accs) + 0.1])
     ax[0, 0].set_title("Test Accuracy")
 
     ax[0, 1].bar(ticks_rob, robust_delta, color="#00FF00")
+    ax[0, 1].set_yscale("symlog")
     ax[0, 1].set_title("Delta for which test set is certifiably 1-delta-input-robust")
 
     ax[1, 0].bar(ticks_rob, lower_bounds_avg, color="#FF0000")
+    ax[1, 0].set_yscale("symlog")
     ax[1, 0].set_title("Minimum lower bound (averaged over the number of runs)")
 
     ax[1, 1].bar(ticks_rob, upper_bounds_avg, color="#0000FF")
+    ax[1, 1].set_yscale("symlog")
     ax[1, 1].set_title("Maximum upper bound (averaged over the number of runs)")
 
     plt.show()

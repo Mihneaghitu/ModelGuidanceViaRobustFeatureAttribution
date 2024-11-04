@@ -71,7 +71,7 @@ class SalientImageNet(torch.nn.Sequential):
             torch.nn.Conv2d(64, 64, 4, 2, 1),
             torch.nn.ReLU(),
             torch.nn.Flatten(start_dim=1, end_dim=-1),
-            torch.nn.Linear(173056, 1024, bias=True),
+            torch.nn.Linear(193600, 1024, bias=True),
             torch.nn.ReLU(),
             torch.nn.Linear(1024, 1024, bias=True),
             torch.nn.ReLU(),

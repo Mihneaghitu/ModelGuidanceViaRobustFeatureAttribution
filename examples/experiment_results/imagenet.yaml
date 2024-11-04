@@ -1,0 +1,14 @@
+r3:
+  max_upper_bound: 798.247
+  min_lower_bound: -798.251
+  min_robust_delta: 628.424
+  num_robust: 0.0
+  test_acc: 0.552
+  train_acc: 0.578
+std:
+  max_upper_bound: 43401.133
+  min_lower_bound: -43406.766
+  min_robust_delta: 77562.719
+  num_robust: 0.0
+  test_acc: 0.628
+  train_acc: 0.711

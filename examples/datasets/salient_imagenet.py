@@ -71,16 +71,16 @@ class ImageNetDataset(Dataset):
                 self.data_tensors.append(init_data_tensors[split_idx])
                 self.label_tensors.append(init_label_tensors[split_idx])
                 # small value so r4 can work
-                self.mask_tensors.append(torch.zeros(1, 224, 224, dtype=torch.float32) / 100)
+                self.mask_tensors.append(torch.zeros(3, 224, 224, dtype=torch.float32) / 100)
                 continue
             # make the same amount of data and label tensors as the number of masks -- nice hack to work well with the DataLoader
             for m_feature in range(num_masks):
                 self.data_tensors.append(init_data_tensors[split_idx])
                 self.label_tensors.append(init_label_tensors[split_idx])
-                self.mask_tensors.append(1 - init_mask_tensors[split_idx][m_feature])
+                self.mask_tensors.append((1 - init_mask_tensors[split_idx][m_feature]).repeat(3, 1, 1))
 
         self.data_tensors = torch.stack(self.data_tensors)
-        self.label_tensors = torch.stack(self.label_tensors)
+        self.label_tensors = torch.stack(self.label_tensors).squeeze()
         self.mask_tensors = torch.stack(self.mask_tensors)
 
     def __len__(self):
@@ -100,7 +100,7 @@ class LazyImageNetDataset(Dataset):
             transforms.ToTensor(),
             transforms.Resize((224, 224))
         ])
-        label_transform = lambda label_idx: torch.nn.functional.one_hot(torch.tensor([label_idx]), num_classes=6).float()
+        label_transform = lambda label_idx: torch.tensor([label_idx])
 
         self.labels = []
         masks_paths = []
@@ -134,7 +134,7 @@ class LazyImageNetDataset(Dataset):
 
 
         self.data_paths = [data_paths[i] for i in split_indices]
-        self.label_tensors = torch.stack([self.labels[i] for i in split_indices])
+        self.label_tensors = torch.stack([self.labels[i] for i in split_indices]).squeeze()
         self.mask_paths = [masks_paths[i] for i in split_indices]
 
     def __len__(self):
@@ -143,13 +143,16 @@ class LazyImageNetDataset(Dataset):
     def __getitem__(self, idx):
         data_img = Image.open(self.data_paths[idx])
         data_tensor = self.data_transform(data_img)
-        assert data_tensor.shape == (3, 224, 224)
+        if data_tensor.shape[0] == 1:
+            # skip
+            return self.__getitem__(idx + 1)
         mask_tensor = torch.zeros(1, 224, 224, dtype=torch.float32) / 100
         if not self.mask_paths[idx] == "-1":
             mask_img = Image.open(self.mask_paths[idx])
             mask_img = self.data_transform(mask_img)
             mask_tensor = 1 - mask_img
             assert mask_tensor.shape == (1, 224, 224)
+        mask_tensor = mask_tensor.repeat(3, 1, 1)
         return data_tensor, self.label_tensors[idx], mask_tensor
 
 def get_dataloader(plant_dset: ImageNetDataset, batch_size: int):
