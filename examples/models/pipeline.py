@@ -197,3 +197,70 @@ def load_params_or_results_from_file(filename: str, method: str) -> dict:
         results = yaml.load(f, Loader=yaml.FullLoader)
 
     return results[method] if results is not None else None
+
+def accumulate_model_with_certified_input_grad(
+    dl_train: torch.utils.data.DataLoader,
+    n_epochs: int,
+    model: torch.nn.Module,
+    learning_rate: float,
+    criterion: torch.nn.Module,
+    epsilon: float,
+    mlx_method: str, # one of ["std", "grad_cert", "ibp_ex", "r3" or "r4"]
+    k: float, # input reg weight
+    device: str,
+    has_conv: bool,
+    k_schedule: callable = None,
+    weight_reg_coeff: float = 0.0,
+    suppress_tqdm: bool = False,
+    num_accs = 1
+) -> None:
+    loss_fn = None
+    if isinstance(criterion, torch.nn.BCELoss):
+        loss_fn = "binary_cross_entropy"
+    elif isinstance(criterion, torch.nn.CrossEntropyLoss):
+        loss_fn = "cross_entropy"
+    else:
+        raise ValueError("Criterion not supported")
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # pre-train the model
+    progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
+    model = model.to(device)
+    loss = None
+    for curr_epoch in progress_bar:
+        for i, (x, u, m) in enumerate(dl_train):
+            if (i > 0 and i % num_accs == 0) or i == len(dl_train) - 1:
+                # Backward and optimize
+                optimizer.zero_grad()
+                loss = loss / num_accs
+                loss.backward()
+                optimizer.step()
+                if i % 100 == 0:
+                    if not suppress_tqdm:
+                        progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+                    else:
+                        print(f"Epoch {curr_epoch}, loss: {loss.item()}, reg: {inp_grad_reg}")
+                loss = None
+            # Forward pass
+            u, x, m = u.to(device), x.to(device), m.to(device)
+
+            # For std, we will waste some time doing the bounds, but at least it is consistent across methods
+            inp_grad_reg = input_gradient_interval_regularizer(
+                model, x, u, loss_fn, epsilon, 0.0, regularizer_type=mlx_method, batch_masks=m, has_conv=has_conv,
+                device=device, weight_reg_coeff=weight_reg_coeff
+            )
+            if mlx_method == "std":
+                assert inp_grad_reg == 0
+                if loss_fn == "cross_entropy":
+                # The last module is either Softmax or Sigmoid, hence why the [-2] is used
+                    u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
+            # output is [batch_size, 1], u is [bach_size] but BCELoss does not support different target and source sizes
+            output = model(x).squeeze()
+            std_loss = criterion(output, u)
+            if k_schedule is not None:
+                k = k_schedule(curr_epoch, n_epochs, std_loss.item(), inp_grad_reg)
+            loss = std_loss + k * inp_grad_reg
+            if i % 100 == 0:
+                if not suppress_tqdm:
+                    progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+                else:
+                    print(f"Epoch {curr_epoch}, loss: {loss.item()}, reg: {inp_grad_reg}")

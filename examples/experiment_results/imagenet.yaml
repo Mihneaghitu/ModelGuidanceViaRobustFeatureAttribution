@@ -19,3 +19,17 @@ std:
   num_robust: 0.0
   test_acc: 0.628
   train_acc: 0.711
+ibp_ex:
+  max_upper_bound: 0.0
+  min_lower_bound: 0.0
+  min_robust_delta: 0.0
+  num_robust: 0.0
+  test_acc: 0.0
+  train_acc: 0.0
+ibp_ex+r3:
+  max_upper_bound: 0.0
+  min_lower_bound: 0.0
+  min_robust_delta: 0.0
+  num_robust: 0.0
+  test_acc: 0.0
+  train_acc: 0.0

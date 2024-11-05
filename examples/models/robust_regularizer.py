@@ -71,12 +71,14 @@ def input_gradient_interval_regularizer(
         logits_n = logits_n.unsqueeze(-1)
 
     # ================================= BOUNDS COMPUTATION =================================
-    # propagate through the forward pass
-    intermediate = [(batch - epsilon, batch + epsilon)]
+    intermediate = None
     if regularizer_type == "ibp_ex" or regularizer_type == "ibp_ex+r3":
         intermediate = [(batch - epsilon * batch_masks, batch + epsilon * batch_masks)]
+    else:
+        intermediate = [(batch - epsilon, batch + epsilon)]
     # This is needed so that we can use the same uniform interface of the bounds to get the input gradient
     intermediate_nominal = [(batch, batch)]
+    # propagate through the forward pass
     for module in modules:
         intermediate.append(propagate_module_forward(module, *intermediate[-1], model_epsilon))
         intermediate_nominal.append(propagate_module_forward(module, *intermediate_nominal[-1], 0))
@@ -491,66 +493,67 @@ def compute_module_parameter_gradients(
     return grads_l, grads_u
 
 
-if __name__ == "__main__":
-    # test the gradient calculations vs torch autograd
-    import sys
-
-    sys.path.append("..")
-    from datasets.oct_mnist import \
-        get_dataloaders  # pylint: disable=import-error
-    from deepmind import DeepMindSmall
-
-    # define model, dataset and optimizer
-    device = "cuda:0"
-    torch.manual_seed(0)
-    test_model = DeepMindSmall(1, 1)
-    dataloader, _ = get_dataloaders(64)
-    criterion = torch.nn.BCELoss(reduction="sum")
-    test_model = test_model.to(device)
-
-    # get the input data and pass through the model and loss
-    test_batch, test_labels = next(iter(dataloader))
-    test_batch, test_labels = test_batch.to(device), test_labels.to(device)
-    test_batch.requires_grad = True
-    intermediates = [test_batch]
-    for layer in list(test_model.modules())[1:]:
-        intermediates.append(layer(intermediates[-1]))
-        intermediates[-1].retain_grad()
-    loss = criterion(intermediates[-1].squeeze().float(), test_labels.squeeze().float())
-    loss.backward()
-    autograds_intermediate = [inter.grad for inter in intermediates]
-    autograds_parameters = [param.grad for param in test_model.parameters()]
-
-    # ======================== test the input_gradient_interval_regularizer ========================
-
-    # pass the data through our gradient interval regularizer with zero epsilon, which should match the exact grads
-    custom_grads = input_gradient_interval_regularizer(
-        test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.0, return_grads=True
-    )
-
-    for j in range(len(custom_grads)):
-        print(f"Layer {j}: matching gradients = {torch.allclose(custom_grads[j], autograds_intermediate[j])}")
-
-    # gradient regularization term:
-    reg = input_gradient_interval_regularizer(test_model, test_batch, test_labels, "binary_cross_entropy", 0.1, 0.0)
-    print("Input gradient interval regularization term (input perturbation):", reg)
-    reg = input_gradient_interval_regularizer(test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.001)
-    print("Input gradient interval regularization term (model perturbation):", reg)
-
-    # ======================== test the parameter_gradient_interval_regularizer ========================
-
-    # pass the data through our gradient interval regularizer with zero epsilon, which should match the exact grads
-    custom_grads = parameter_gradient_interval_regularizer(
-        test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.0, return_grads=True
-    )
-
-    for j in range(len(custom_grads)):
-        print(f"Parameter {j}: matching gradients = {torch.allclose(custom_grads[j], autograds_parameters[j])}")
-
-    # gradient regularization term:
-    reg = parameter_gradient_interval_regularizer(test_model, test_batch, test_labels, "binary_cross_entropy", 0.1, 0.0)
-    print("Parameter gradient interval regularization term (input perturbation):", reg)
-    reg = parameter_gradient_interval_regularizer(
-        test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.001
-    )
-    print("Parameter gradient interval regularization term (model perturbation):", reg)
+# if __name__ == "__main__":
+#     # test the gradient calculations vs torch autograd
+#     import sys
+#
+#     sys.path.append("..")
+#     from datasets.oct_mnist import \
+#         get_dataloaders  # pylint: disable=import-error
+#     from deepmind import DeepMindSmall
+#
+#     # define model, dataset and optimizer
+#     device = "cuda:0"
+#     torch.manual_seed(0)
+#     test_model = DeepMindSmall(1, 1)
+#     dataloader, _ = get_dataloaders(64)
+#     criterion = torch.nn.BCELoss(reduction="sum")
+#     test_model = test_model.to(device)
+#
+#     # get the input data and pass through the model and loss
+#     test_batch, test_labels = next(iter(dataloader))
+#     test_batch, test_labels = test_batch.to(device), test_labels.to(device)
+#     test_batch.requires_grad = True
+#     intermediates = [test_batch]
+#     for layer in list(test_model.modules())[1:]:
+#         intermediates.append(layer(intermediates[-1]))
+#         intermediates[-1].retain_grad()
+#     loss = criterion(intermediates[-1].squeeze().float(), test_labels.squeeze().float())
+#     loss.backward()
+#     autograds_intermediate = [inter.grad for inter in intermediates]
+#     autograds_parameters = [param.grad for param in test_model.parameters()]
+#
+#     # ======================== test the input_gradient_interval_regularizer ========================
+#
+#     # pass the data through our gradient interval regularizer with zero epsilon, which should match the exact grads
+#     custom_grads = input_gradient_interval_regularizer(
+#         test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.0, return_grads=True
+#     )
+#
+#     for j in range(len(custom_grads)):
+#         print(f"Layer {j}: matching gradients = {torch.allclose(custom_grads[j], autograds_intermediate[j])}")
+#
+#     # gradient regularization term:
+#     reg = input_gradient_interval_regularizer(test_model, test_batch, test_labels, "binary_cross_entropy", 0.1, 0.0)
+#     print("Input gradient interval regularization term (input perturbation):", reg)
+#     reg = input_gradient_interval_regularizer(test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.001)
+#     print("Input gradient interval regularization term (model perturbation):", reg)
+#
+#     # ======================== test the parameter_gradient_interval_regularizer ========================
+#
+#     # pass the data through our gradient interval regularizer with zero epsilon, which should match the exact grads
+#     custom_grads = parameter_gradient_interval_regularizer(
+#         test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.0, return_grads=True
+#     )
+#
+#     for j in range(len(custom_grads)):
+#         print(f"Parameter {j}: matching gradients = {torch.allclose(custom_grads[j], autograds_parameters[j])}")
+#
+#     # gradient regularization term:
+#     reg = parameter_gradient_interval_regularizer(test_model, test_batch, test_labels, "binary_cross_entropy", 0.1, 0.0)
+#     print("Parameter gradient interval regularization term (input perturbation):", reg)
+#     reg = parameter_gradient_interval_regularizer(
+#         test_model, test_batch, test_labels, "binary_cross_entropy", 0.0, 0.001
+#     )
+#     print("Parameter gradient interval regularization term (model perturbation):", reg)
+#
