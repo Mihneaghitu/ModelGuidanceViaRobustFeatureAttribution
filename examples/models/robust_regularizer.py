@@ -73,7 +73,7 @@ def input_gradient_interval_regularizer(
     # ================================= BOUNDS COMPUTATION =================================
     # propagate through the forward pass
     intermediate = [(batch - epsilon, batch + epsilon)]
-    if regularizer_type == "ibp_ex":
+    if regularizer_type == "ibp_ex" or regularizer_type == "ibp_ex+r3":
         intermediate = [(batch - epsilon * batch_masks, batch + epsilon * batch_masks)]
     # This is needed so that we can use the same uniform interface of the bounds to get the input gradient
     intermediate_nominal = [(batch, batch)]

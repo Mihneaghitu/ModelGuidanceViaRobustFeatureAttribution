@@ -6,12 +6,12 @@ ibp_ex:
   test_acc: 0.848
   train_acc: 0.879
 ibp_ex+r3:
-  max_upper_bound: 158.416
-  min_lower_bound: -158.417
-  min_robust_delta: 254.708
+  max_upper_bound: 167.988
+  min_lower_bound: -167.988
+  min_robust_delta: 295.591
   num_robust: 0.0
-  test_acc: 0.86
-  train_acc: 0.905
+  test_acc: 0.825
+  train_acc: 0.876
 r3:
   max_upper_bound: 8.626
   min_lower_bound: -8.627

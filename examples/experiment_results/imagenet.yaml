@@ -5,6 +5,13 @@ r3:
   num_robust: 0.0
   test_acc: 0.552
   train_acc: 0.578
+r4:
+  max_upper_bound: 31.107
+  min_lower_bound: -30.482
+  min_robust_delta: 48.142
+  num_robust: 0.0
+  test_acc: 0.544
+  train_acc: 0.582
 std:
   max_upper_bound: 43401.133
   min_lower_bound: -43406.766
