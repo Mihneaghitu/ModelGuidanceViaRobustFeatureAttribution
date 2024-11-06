@@ -22,14 +22,14 @@ r3:
   worst_group: 1
   worst_group_acc: 0.6019
 r4:
-  max_upper_bound: 4.595
-  min_lower_bound: -4.607
-  min_robust_delta: 7.925
+  max_upper_bound: 4.656
+  min_lower_bound: -4.684
+  min_robust_delta: 7.766
   num_robust: 0.0
-  test_acc: 0.877
-  train_acc: 0.902
+  test_acc: 0.878
+  train_acc: 0.886
   worst_group: 0
-  worst_group_acc: 0.568
+  worst_group_acc: 0.547
 std:
   max_upper_bound: 3745.819
   min_lower_bound: -3745.636
