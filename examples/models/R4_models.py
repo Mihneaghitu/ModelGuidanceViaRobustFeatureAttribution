@@ -37,25 +37,81 @@ class PlantNet(torch.nn.Sequential):
         )
 
 class DermaNet(torch.nn.Sequential):
-    def __init__(self, in_channels, feature_size, out_dim):
+    def __init__(self, in_channels, feature_size, out_dim, arch_type: str = "large_medium"):
         self.latent_dim = {28: 2304, 64: 14400, 128: 61504, 224: 193600}
+        self.in_channels = in_channels
+        self.feature_size = feature_size
+        self.out_dim = out_dim
         super().__init__(
-            torch.nn.Conv2d(in_channels, 32, 3, 1, 1),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(32, 32, 4, 2, 1),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(32, 64, 4, 1, 1),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(64, 64, 4, 2, 1),
-            torch.nn.ReLU(),
-            torch.nn.Flatten(start_dim=1, end_dim=-1),
-            torch.nn.Linear(self.latent_dim[feature_size], 1024, bias=True),
-            torch.nn.ReLU(),
-            torch.nn.Linear(1024, 1024, bias=True),
-            torch.nn.ReLU(),
-            torch.nn.Linear(1024, out_dim),
-            torch.nn.Sigmoid()
+            *self.__make_arch(arch_type)
         )
+
+    def __make_arch(self, key: str) -> tuple[any]:
+        match key:
+            case "small":
+                return (
+                    torch.nn.Conv2d(self.in_channels, 32, 4, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(32, 32, 4, 2, 1),
+                    torch.nn.Flatten(start_dim=1, end_dim=-1),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(30752, self.out_dim),
+                    torch.nn.Sigmoid()
+                )
+            case "small_medium":
+                return (
+                    torch.nn.Conv2d(self.in_channels, 32, 4, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(32, 32, 4, 2, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(32, 64, 4, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Flatten(start_dim=1, end_dim=-1),
+                    torch.nn.Linear(57600, 1024, bias=True),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(1024, self.out_dim, bias=True),
+                    torch.nn.Sigmoid()
+                )
+            case "large_medium":
+                return (
+                    torch.nn.Conv2d(self.in_channels, 32, 3, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(32, 32, 4, 2, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(32, 64, 4, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(64, 64, 4, 2, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Flatten(start_dim=1, end_dim=-1),
+                    torch.nn.Linear(self.latent_dim[self.feature_size], 1024, bias=True),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(1024, 1024, bias=True),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(1024, self.out_dim),
+                    torch.nn.Sigmoid()
+                )
+            case "large":
+                return (
+                    torch.nn.Conv2d(self.in_channels, 32, 3, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(32, 32, 4, 2, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(32, 64, 4, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(64, 64, 4, 2, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Conv2d(64, 64, 4, 1, 1),
+                    torch.nn.ReLU(),
+                    torch.nn.Flatten(start_dim=1, end_dim=-1),
+                    torch.nn.Linear(12544, 4096, bias=True),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(4096, 1024, bias=True),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(1024, 128, bias=True),
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(128, self.out_dim),
+                    torch.nn.Sigmoid()
+                )
 
 
 class SalientImageNet(torch.nn.Sequential):

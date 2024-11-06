@@ -19,20 +19,25 @@ def make_performance_plots_for_dset(dset_name: str) -> None:
 
     ticks_acc = np.array(["STD", "R3", "IBP_EX", "IBP_EX+R3", "R4"])
     ticks_rob = ticks_acc[1:]
-    _, ax = plt.subplots(2, 2, figsize=(15, 15))
-    ax[0, 0].bar(ticks_acc, test_accs, color="#0000FF")
+    _, ax = plt.subplots(2, 2, figsize=(17, 13))
+    color_gradient_accs = ["#ff7ca0", "#ffa7b4", "#ffcbd2", "#ffb979", "#ffa463"]
+    color_gradient_delta = ["#fae442", "#ddf969", "#a9f36a", "#57e86b"]
+    color_gradient_lb = ["#d92122", "#b8203d", "#971e58",  "#761d72"]
+    color_gradient_ub = ["#0000ff", "#4d4dff", "#7a7aff", "#bcbcff"]
+    # make the color a gradient with specified hex color
+    ax[0, 0].bar(ticks_acc, test_accs, color=color_gradient_accs)
     ax[0, 0].set_ylim([min(test_accs) - 0.1, max(test_accs) + 0.1])
     ax[0, 0].set_title("Test Accuracy")
 
-    ax[0, 1].bar(ticks_rob, robust_delta, color="#00FF00")
+    ax[0, 1].bar(ticks_rob, robust_delta, color=color_gradient_delta)
     ax[0, 1].set_yscale("symlog")
     ax[0, 1].set_title("Delta for which test set is certifiably 1-delta-input-robust")
 
-    ax[1, 0].bar(ticks_rob, lower_bounds_avg, color="#FF0000")
+    ax[1, 0].bar(ticks_rob, lower_bounds_avg, color=color_gradient_lb)
     ax[1, 0].set_yscale("symlog")
     ax[1, 0].set_title("Minimum lower bound (averaged over the number of runs)")
 
-    ax[1, 1].bar(ticks_rob, upper_bounds_avg, color="#0000FF")
+    ax[1, 1].bar(ticks_rob, upper_bounds_avg, color=color_gradient_ub)
     ax[1, 1].set_yscale("symlog")
     ax[1, 1].set_title("Maximum upper bound (averaged over the number of runs)")
 

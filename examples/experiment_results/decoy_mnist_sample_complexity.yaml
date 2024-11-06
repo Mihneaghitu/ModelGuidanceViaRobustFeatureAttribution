@@ -1,10 +1,3 @@
-ibp_ex+r3_3:
-  max_upper_bound: 2.265
-  min_lower_bound: -2.101
-  min_robust_delta: 3.326
-  num_robust: 0.0
-  test_acc: 0.929
-  train_acc: 0.938
 ibp_ex+r3_10:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -12,6 +5,8 @@ ibp_ex+r3_10:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex+r3_13:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -19,6 +14,8 @@ ibp_ex+r3_13:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex+r3_16:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -26,6 +23,15 @@ ibp_ex+r3_16:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
+ibp_ex+r3_17:
+  max_upper_bound: 2.265
+  min_lower_bound: -2.101
+  min_robust_delta: 3.326
+  num_robust: 0.0
+  test_acc: 0.929
+  train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex+r3_20:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -33,6 +39,17 @@ ibp_ex+r3_20:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
+ibp_ex+r3_3:
+  max_upper_bound: 2.265
+  min_lower_bound: -2.101
+  min_robust_delta: 3.326
+  num_robust: 0.0
+  test_acc: 0.929
+  train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex+r3_40:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -40,6 +57,8 @@ ibp_ex+r3_40:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex+r3_6:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -47,6 +66,8 @@ ibp_ex+r3_6:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex+r3_60:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -54,6 +75,8 @@ ibp_ex+r3_60:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex+r3_80:
   max_upper_bound: 2.265
   min_lower_bound: -2.101
@@ -61,13 +84,8 @@ ibp_ex+r3_80:
   num_robust: 0.0
   test_acc: 0.929
   train_acc: 0.938
-ibp_ex_3:
-  max_upper_bound: 3.113
-  min_lower_bound: -2.813
-  min_robust_delta: 4.798
-  num_robust: 0.0
-  test_acc: 0.925
-  train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.882
 ibp_ex_10:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -75,6 +93,8 @@ ibp_ex_10:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
 ibp_ex_13:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -82,6 +102,8 @@ ibp_ex_13:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
 ibp_ex_16:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -89,6 +111,15 @@ ibp_ex_16:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
+ibp_ex_17:
+  max_upper_bound: 3.113
+  min_lower_bound: -2.813
+  min_robust_delta: 4.798
+  num_robust: 0.0
+  test_acc: 0.925
+  train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
 ibp_ex_20:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -96,6 +127,17 @@ ibp_ex_20:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
+ibp_ex_3:
+  max_upper_bound: 3.113
+  min_lower_bound: -2.813
+  min_robust_delta: 4.798
+  num_robust: 0.0
+  test_acc: 0.925
+  train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
 ibp_ex_40:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -103,6 +145,8 @@ ibp_ex_40:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
 ibp_ex_6:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -110,6 +154,8 @@ ibp_ex_6:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
 ibp_ex_60:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -117,6 +163,8 @@ ibp_ex_60:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
+  worst_group: 9
+  worst_group_acc: 0.824
 ibp_ex_80:
   max_upper_bound: 3.113
   min_lower_bound: -2.813
@@ -124,13 +172,8 @@ ibp_ex_80:
   num_robust: 0.0
   test_acc: 0.925
   train_acc: 0.947
-r3_3:
-  max_upper_bound: 0.347
-  min_lower_bound: -0.324
-  min_robust_delta: 0.493
-  num_robust: 0.0
-  test_acc: 0.762
-  train_acc: 0.76
+  worst_group: 9
+  worst_group_acc: 0.824
 r3_10:
   max_upper_bound: 0.347
   min_lower_bound: -0.324
@@ -138,6 +181,8 @@ r3_10:
   num_robust: 0.0
   test_acc: 0.762
   train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r3_13:
   max_upper_bound: 0.347
   min_lower_bound: -0.324
@@ -145,6 +190,8 @@ r3_13:
   num_robust: 0.0
   test_acc: 0.762
   train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r3_16:
   max_upper_bound: 0.347
   min_lower_bound: -0.324
@@ -152,20 +199,42 @@ r3_16:
   num_robust: 0.0
   test_acc: 0.762
   train_acc: 0.76
+r3_17:
+  max_upper_bound: 0.347
+  min_lower_bound: -0.324
+  min_robust_delta: 0.493
+  num_robust: 0.0
+  test_acc: 0.762
+  train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r3_20:
-  max_upper_bound: 52664.657
-  min_lower_bound: -51167.737
-  min_robust_delta: 515.875
+  max_upper_bound: 0.347
+  min_lower_bound: -0.324
+  min_robust_delta: 0.493
   num_robust: 0.0
-  test_acc: 0.669
-  train_acc: 0.67
+  test_acc: 0.762
+  train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
+r3_3:
+  max_upper_bound: 0.347
+  min_lower_bound: -0.324
+  min_robust_delta: 0.493
+  num_robust: 0.0
+  test_acc: 0.762
+  train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r3_40:
-  max_upper_bound: 255142.772
-  min_lower_bound: -256331.948
-  min_robust_delta: 1838.41
+  max_upper_bound: 0.347
+  min_lower_bound: -0.324
+  min_robust_delta: 0.493
   num_robust: 0.0
-  test_acc: 0.585
-  train_acc: 0.585
+  test_acc: 0.762
+  train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r3_6:
   max_upper_bound: 0.347
   min_lower_bound: -0.324
@@ -173,41 +242,44 @@ r3_6:
   num_robust: 0.0
   test_acc: 0.762
   train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r3_60:
-  max_upper_bound: 2248589.862
-  min_lower_bound: -2250069.967
-  min_robust_delta: 43109.258
+  max_upper_bound: 0.347
+  min_lower_bound: -0.324
+  min_robust_delta: 0.493
   num_robust: 0.0
-  test_acc: 0.67
-  train_acc: 0.684
+  test_acc: 0.762
+  train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r3_80:
-  max_upper_bound: 9402.863
-  min_lower_bound: -9378.957
-  min_robust_delta: 41.52
+  max_upper_bound: 0.347
+  min_lower_bound: -0.324
+  min_robust_delta: 0.493
   num_robust: 0.0
-  test_acc: 0.669
-  train_acc: 0.67
-r4_3:
-  max_upper_bound: 4.787
-  min_lower_bound: -7.215
-  min_robust_delta: 7.729
-  num_robust: 0.0
-  test_acc: 0.909
-  train_acc: 0.99
+  test_acc: 0.762
+  train_acc: 0.76
+  worst_group: 5
+  worst_group_acc: 0.216
 r4_10:
-  max_upper_bound: 4.445
-  min_lower_bound: -6.706
-  min_robust_delta: 6.907
+  max_upper_bound: 4.718
+  min_lower_bound: -7.244
+  min_robust_delta: 7.424
   num_robust: 0.0
-  test_acc: 0.915
-  train_acc: 0.99
-r4_13:
-  max_upper_bound: 2.829
-  min_lower_bound: -4.247
-  min_robust_delta: 4.183
-  num_robust: 0.0
-  test_acc: 0.949
+  test_acc: 0.912
   train_acc: 0.989
+  worst_group: 9
+  worst_group_acc: 0.552
+r4_13:
+  max_upper_bound: 4.827
+  min_lower_bound: -7.18
+  min_robust_delta: 7.799
+  num_robust: 0.0
+  test_acc: 0.889
+  train_acc: 0.968
+  worst_group: 9
+  worst_group_acc: 0.553
 r4_16:
   max_upper_bound: 0.247
   min_lower_bound: -0.251
@@ -215,38 +287,66 @@ r4_16:
   num_robust: 0.0
   test_acc: 0.975
   train_acc: 0.986
+r4_17:
+  max_upper_bound: 4.052
+  min_lower_bound: -6.208
+  min_robust_delta: 6.848
+  num_robust: 0.0
+  test_acc: 0.923
+  train_acc: 0.99
+  worst_group: 9
+  worst_group_acc: 0.598
 r4_20:
-  max_upper_bound: 1.849
-  min_lower_bound: -2.894
-  min_robust_delta: 3.094
+  max_upper_bound: 1.956
+  min_lower_bound: -2.914
+  min_robust_delta: 3.059
   num_robust: 0.0
-  test_acc: 0.967
-  train_acc: 0.988
+  test_acc: 0.965
+  train_acc: 0.987
+  worst_group: 9
+  worst_group_acc: 0.881
+r4_3:
+  max_upper_bound: 4.779
+  min_lower_bound: -7.206
+  min_robust_delta: 7.562
+  num_robust: 0.0
+  test_acc: 0.912
+  train_acc: 0.989
+  worst_group: 9
+  worst_group_acc: 0.561
 r4_40:
-  max_upper_bound: 0.222
+  max_upper_bound: 0.21
   min_lower_bound: -0.203
-  min_robust_delta: 0.303
-  num_robust: 0.0
-  test_acc: 0.975
-  train_acc: 0.986
-r4_6:
-  max_upper_bound: 0.819
-  min_lower_bound: -0.971
-  min_robust_delta: 1.169
+  min_robust_delta: 0.324
   num_robust: 0.0
   test_acc: 0.974
   train_acc: 0.986
-r4_60:
-  max_upper_bound: 0.127
-  min_lower_bound: -0.122
-  min_robust_delta: 0.215
+  worst_group: 9
+  worst_group_acc: 0.958
+r4_6:
+  max_upper_bound: 4.779
+  min_lower_bound: -7.206
+  min_robust_delta: 7.562
   num_robust: 0.0
-  test_acc: 0.975
-  train_acc: 0.988
+  test_acc: 0.912
+  train_acc: 0.989
+  worst_group: 9
+  worst_group_acc: 0.561
+r4_60:
+  max_upper_bound: 0.132
+  min_lower_bound: -0.129
+  min_robust_delta: 0.232
+  num_robust: 0.0
+  test_acc: 0.977
+  train_acc: 0.989
+  worst_group: 9
+  worst_group_acc: 0.963
 r4_80:
-  max_upper_bound: 0.134
-  min_lower_bound: -0.133
+  max_upper_bound: 0.135
+  min_lower_bound: -0.137
   min_robust_delta: 0.242
   num_robust: 0.0
-  test_acc: 0.98
-  train_acc: 0.993
+  test_acc: 0.978
+  train_acc: 0.992
+  worst_group: 5
+  worst_group_acc: 0.967

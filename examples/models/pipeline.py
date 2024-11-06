@@ -18,6 +18,7 @@ def train_model_with_certified_input_grad(
     has_conv: bool,
     k_schedule: callable = None,
     weight_reg_coeff: float = 0.0,
+    class_weights: list[float] = None,
     suppress_tqdm: bool = False
 ) -> None:
     loss_fn = None
@@ -48,6 +49,10 @@ def train_model_with_certified_input_grad(
                     u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # output is [batch_size, 1], u is [bach_size] but BCELoss does not support different target and source sizes
             output = model(x).squeeze()
+            # for unbalanced plant
+            if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
+                batch_weights = torch.tensor([class_weights[int(label.item())] for label in u]).to(device)
+                criterion = torch.nn.BCELoss(weight=batch_weights)
             std_loss = criterion(output, u)
             if k_schedule is not None:
                 k = k_schedule(curr_epoch, n_epochs, std_loss.item(), inp_grad_reg)

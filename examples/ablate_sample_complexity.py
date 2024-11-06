@@ -7,13 +7,18 @@ from models.pipeline import (train_model_with_certified_input_grad, test_model_a
                              test_delta_input_robustness, load_params_or_results_from_file,
                              write_results_to_file, uniformize_magnitudes_schedule)
 from datasets import derma_mnist, plant, decoy_mnist
+from metrics import worst_group_acc
 from models.R4_models import DermaNet, PlantNet
 from models.fully_connected import FCNAugmented
 
 def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module, device: torch.device, mask_ratios: list[float] = [0.8, 0.6, 0.4, 0.2],
-    methods: list[str] = ["r4", "ibp_ex", "ibp_ex+r3", "r3"], img_size: int = None, with_data_removal: bool = False) -> None:
+    methods: list[str] = ["r4", "ibp_ex", "ibp_ex+r3", "r3"], img_size: int = None, with_data_removal: bool = False, write_to_file: bool = False) -> None:
     suffix = "" if  not with_data_removal else "_data_removal"
+    ablation_type = "data_and_mask" if with_data_removal else "mask"
+    root_dir = f"saved_experiment_models/ablations/{ablation_type}/{dset_name}/"
+    os.makedirs(root_dir, exist_ok=True)
     for method in methods:
+        os.makedirs(root_dir + method, exist_ok=True)
         # Load the params
         params_dict = load_params_or_results_from_file(f"experiment_results/{dset_name}_params.yaml", method)
         delta_threshold = params_dict["delta_threshold"]
@@ -24,6 +29,8 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
         lr = params_dict["lr"]
         restarts = params_dict["restarts"]
         for mask_ratio in mask_ratios:
+            mask_ratio_dir = root_dir + method + f"/ratio_{int(mask_ratio * 100)}"
+            os.makedirs(mask_ratio_dir, exist_ok=True)
             # Manipulate masks based on the dataset
             new_dl_train = None
             r4_soft = (method == "r4" and (not with_data_removal))
@@ -40,14 +47,11 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
                 torch.manual_seed(i + seed)
                 curr_model, loss_fn, multi_class = None, "binary_cross_entropy", False
                 if dset_name == "derma_mnist":
-                    curr_model = DermaNet(3, img_size, 1)
-                    curr_model.to(device)
+                    curr_model = DermaNet(3, img_size, 1).to(device)
                 elif dset_name == "plant":
                     curr_model = PlantNet(3, 1).to(device)
-                    # curr_model = torch.nn.DataParallel(curr_model, device_ids=[1, 0])
                 else:
-                    curr_model = FCNAugmented(784, 10, 512, 1)
-                    curr_model = curr_model.to(device)
+                    curr_model = FCNAugmented(784, 10, 512, 1).to(device)
                     multi_class = True
                     loss_fn = "cross_entropy"
                 print(f"========== Training model with method {method} restart {i} and mask ratio {mask_ratio} ==========")
@@ -62,13 +66,27 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
                 min_robust_delta = min(min_robust_delta, min_delta)
                 min_lower_bound += m_l
                 max_upper_bound += m_u
-            write_results_to_file(f"experiment_results/{dset_name}_sample_complexity" + suffix + ".yaml",
-                                {"train_acc": round(train_acc / restarts, 3),
-                                 "test_acc": round(test_acc / restarts, 3),
-                                 "num_robust": round(num_robust / restarts, 3),
-                                 "min_lower_bound": round(min_lower_bound / restarts, 3),
-                                 "max_upper_bound": round(max_upper_bound / restarts, 3),
-                                 "min_robust_delta": min_robust_delta}, method + f"_{int(mask_ratio * 100)}")
+                # Save the model
+                torch.save(curr_model.state_dict(), f"{mask_ratio_dir}/run_{i}.pt")
+            empty_model, num_classes = None, 2
+            if dset_name == "derma_mnist":
+                empty_model = DermaNet(3, img_size, 1).to(device)
+            elif dset_name == "plant":
+                empty_model = PlantNet(3, 1).to(device)
+            else:
+                empty_model = FCNAugmented(784, 10, 512, 1).to(device)
+                num_classes = 10
+            wg_acc, wg = worst_group_acc(empty_model, dl_test, device, num_classes, mask_ratio_dir, suppress_log=True)
+            if write_to_file:
+                write_results_to_file(f"experiment_results/{dset_name}_sample_complexity" + suffix + ".yaml",
+                                        {"train_acc": round(train_acc / restarts, 3),
+                                         "test_acc": round(test_acc / restarts, 3),
+                                         "worst_group_acc": round(wg_acc, 3),
+                                         "worst_group": wg,
+                                         "num_robust": round(num_robust / restarts, 3),
+                                         "min_lower_bound": round(min_lower_bound / restarts, 3),
+                                         "max_upper_bound": round(max_upper_bound / restarts, 3),
+                                         "min_robust_delta": min_robust_delta}, method + f"_{int(mask_ratio * 100)}")
 
 assert len(sys.argv) == 3
 assert sys.argv[1] in ["derma_mnist", "plant", "decoy_mnist"]
@@ -78,8 +96,8 @@ if sys.argv[1] == "derma_mnist":
     train_dset = derma_mnist.DecoyDermaMNIST(True, size=IMG_SIZE)
     test_dset = derma_mnist.DecoyDermaMNIST(False, size=IMG_SIZE)
     dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 256)
-    dev = torch.device("cuda:1")
-    ablate("derma_mnist", 0, True, torch.nn.BCELoss(), dev, methods=["ibp_ex+r3"], img_size=IMG_SIZE, with_data_removal=bool(int(sys.argv[2])))
+    dev = torch.device("cuda:0")
+    ablate("derma_mnist", 0, True, torch.nn.BCELoss(), dev, img_size=IMG_SIZE, with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
 elif sys.argv[1] == "plant":
     SPLIT_ROOT = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
     DATA_ROOT = "/vol/bitbucket/mg2720/plant/rgb_data"
@@ -94,6 +112,7 @@ elif sys.argv[1] == "decoy_mnist":
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
     dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
     dev = torch.device("cuda:0")
-    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, mask_ratios=[0.067], with_data_removal=bool(int(sys.argv[2])))
+    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, mask_ratios=[0.8, 0.6, 0.4, 0.2, 0.17, 0.13, 0.1, 0.06, 0.03],
+           with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
 else:
     raise ValueError("Only 'derma_mnist' and 'plant' are supported")
