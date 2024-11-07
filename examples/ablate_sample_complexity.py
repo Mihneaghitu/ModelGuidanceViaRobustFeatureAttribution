@@ -5,7 +5,8 @@ sys.path.append("../")
 import torch
 from models.pipeline import (train_model_with_certified_input_grad, test_model_accuracy,
                              test_delta_input_robustness, load_params_or_results_from_file,
-                             write_results_to_file, uniformize_magnitudes_schedule)
+                             write_results_to_file, uniformize_magnitudes_schedule,
+                             accumulate_model_with_certified_input_grad)
 from datasets import derma_mnist, plant, decoy_mnist
 from metrics import worst_group_acc
 from models.R4_models import DermaNet, PlantNet
@@ -55,9 +56,13 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
                     multi_class = True
                     loss_fn = "cross_entropy"
                 print(f"========== Training model with method {method} restart {i} and mask ratio {mask_ratio} ==========")
-                k_schedule = uniformize_magnitudes_schedule if method == "r3" else None
-                train_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
-                    k, device, has_conv, weight_reg_coeff=weight_coeff, k_schedule=k_schedule, suppress_tqdm=True)
+                k_schedule = uniformize_magnitudes_schedule if method == "r3" and dset_name != "plant" else None
+                if dset_name == "plant":
+                    accumulate_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
+                        k, device, has_conv, weight_reg_coeff=weight_coeff, num_accs=5, suppress_tqdm=True)
+                else:
+                    train_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
+                        k, device, has_conv, weight_reg_coeff=weight_coeff, k_schedule=k_schedule, suppress_tqdm=True)
                 train_acc += test_model_accuracy(curr_model, new_dl_train, device, multi_class=multi_class, suppress_log=True)
                 test_acc += test_model_accuracy(curr_model, dl_test, device, multi_class=multi_class, suppress_log=True)
                 n_r, min_delta, m_l, m_u = test_delta_input_robustness(dl_test, curr_model, epsilon, delta_threshold,
@@ -104,9 +109,9 @@ elif sys.argv[1] == "plant":
     MASKS_FILE = "/vol/bitbucket/mg2720/plant/mask/preprocessed_masks.pyu"
     plant_train_2 = plant.PlantDataset(SPLIT_ROOT, DATA_ROOT, MASKS_FILE, 2, True)
     plant_test_2 = plant.PlantDataset(SPLIT_ROOT, DATA_ROOT, MASKS_FILE, 2, False)
-    dl_train, dl_test = plant.get_dataloader(plant_train_2, 50), plant.get_dataloader(plant_test_2, 25)
+    dl_train, dl_test = plant.get_dataloader(plant_train_2, 10), plant.get_dataloader(plant_test_2, 25)
     dev = torch.device("cuda:1")
-    ablate("plant", 0, True,  torch.nn.BCELoss(), dev, methods=["ibp_ex+r3"], with_data_removal=bool(int(sys.argv[2])))
+    ablate("plant", 0, True,  torch.nn.BCELoss(), dev, with_data_removal=bool(int(sys.argv[2])))
 elif sys.argv[1] == "decoy_mnist":
     SEED = 0
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)

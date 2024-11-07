@@ -52,23 +52,23 @@ def get_avg_acc_with_stddev(model: torch.nn.Sequential, test_dloader: DataLoader
         for run_idx in range(num_runs):
             model.load_state_dict(torch.load(f"{model_dir}/run_{run_idx}.pt"))
             model = model.to(device)
-            acc_sum[run_idx] = test_model_accuracy(model, test_dloader, device, multi_class=num_classes > 0, suppress_log=True)
+            acc_sum[run_idx] = test_model_accuracy(model, test_dloader, device, multi_class=num_classes > 2, suppress_log=True)
 
     return acc_sum.mean(), acc_sum.std()
 
-def get_avg_delta(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
+def get_avg_rob_metrics(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
                   eps: float, loss_fn: str, has_conv: bool) -> tuple[float, float, float, float]:
     num_runs = len(os.listdir(model_dir))
-    delta_sum, l_sum, u_sum = np.zeros(num_runs), np.zeros(num_runs), np.zeros(num_runs)
+    deltas, ls, us = np.zeros(num_runs), np.zeros(num_runs), np.zeros(num_runs)
     with torch.no_grad():
         for run_idx in range(num_runs):
             model.load_state_dict(torch.load(f"{model_dir}/run_{run_idx}.pt"))
             model = model.to(device)
             _, d, l, u = test_delta_input_robustness(test_dloader, model, eps, 0, loss_fn, device, has_conv, suppress_log=True)
-            delta_sum[run_idx] = d
-            l_sum[run_idx] = l
-            u_sum[run_idx] = u
-    return delta_sum.mean(), l_sum.mean(), u_sum.mean(), delta_sum.std(), l_sum.std(), u_sum.std()
+            deltas[run_idx] = d
+            ls[run_idx] = l
+            us[run_idx] = u
+    return deltas.mean(), ls.mean(), us.mean(), deltas.std(), ls.std(), us.std()
 
 def test_avg_delta(dset_name: str):
     assert dset_name in ["derma_mnist", "plant", "decoy_mnist"]
@@ -99,8 +99,8 @@ def test_avg_delta(dset_name: str):
         has_conv = False
         eps = 0.1
     for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
-        avg_delta = get_avg_delta(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
-        print(f"Method {method} avg delta = {avg_delta:.4g}")
+        avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
+        print(f"Method {method} avg delta = {avg_delta}")
 
 
 def test_worst_group_acc():
@@ -133,4 +133,4 @@ def test_worst_group_acc():
     else:
         raise ValueError("Only 'derma_mnist' and 'plant' are supported")
 
-# test_worst_group_acc()
+# test_avg_delta("plant")

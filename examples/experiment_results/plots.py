@@ -1,7 +1,92 @@
+import sys
+import os
+sys.path.append("../")
+sys.path.append("../../")
 import matplotlib.pyplot as plt
 import yaml
-import os
 import numpy as np
+import seaborn as sns
+from examples.datasets import derma_mnist, decoy_mnist
+from examples.models.R4_models import DermaNet
+from examples.metrics import get_avg_acc_with_stddev, get_avg_rob_metrics
+from examples.models.fully_connected import FCNAugmented
+import pandas as pd
+
+
+def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False) -> None:
+    assert dset_name in ["decoy_mnist", "derma_mnist"]
+    methods = ["r3", "r4", "ibp_ex", "ibp_ex+r3"]
+    suffix = "data_and_mask" if with_data else "mask"
+    dl_test, model_dir, model, eps, has_conv, num_classes, loss_fn = None, None, None, None, None, None, None
+    if dset_name == "decoy_mnist":
+        dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
+        _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
+        model = FCNAugmented(784, 10, 512, 1)
+        loss_fn = "cross_entropy"
+        eps = 0.1
+        model_dir = f"saved_experiment_models/ablations/{suffix}/decoy_mnist"
+        has_conv = False
+        num_classes = 10
+    if dset_name == "derma_mnist":
+        test_derma = derma_mnist.DecoyDermaMNIST(False, size=64)
+        dl_test = derma_mnist.get_dataloader(test_derma, 256)
+        model = DermaNet(3, 64, 1)
+        loss_fn = "binary_cross_entropy"
+        eps = 0.05
+        model_dir = f"saved_experiment_models/ablations/{suffix}/derma_mnist"
+        has_conv = True
+        num_classes = 2
+
+    sns.set_theme(context="poster", font_scale=2)
+    sns.color_palette("bright")
+    ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0])
+    fig, ax = plt.subplots(2, 2, figsize=(70, 60))
+    for method in methods:
+        mean_accs, std_dev_accs = [], [],
+        mean_delta, mean_lb, mean_ub, std_dev_delta, std_dev_lb, std_dev_ub = [], [], [], [], [], []
+        for ratio in ratios:
+            dir_for_method = model_dir + f"/{method}" + f"/ratio_{int(ratio * 100)}"
+            avg_acc_ratio, std_dev_acc_ratio = get_avg_acc_with_stddev(model, dl_test, "cuda:0", dir_for_method, num_classes)
+            mean_accs.append(avg_acc_ratio)
+            std_dev_accs.append(std_dev_acc_ratio)
+            avg_delta_ratio, avg_lb_ratio, avg_ub_ratio, std_delta_ratio, std_lb_ratio, std_ub_ratio = get_avg_rob_metrics(
+                model, dl_test, "cuda:0", dir_for_method, eps, loss_fn, has_conv)
+            mean_delta.append(avg_delta_ratio)
+            mean_lb.append(avg_lb_ratio)
+            mean_ub.append(avg_ub_ratio)
+            std_dev_delta.append(std_delta_ratio)
+            std_dev_lb.append(std_lb_ratio)
+            std_dev_ub.append(std_ub_ratio)
+
+        sns.lineplot(x=ratios, y=mean_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][0], linewidth=10, estimator=None)
+        sns.lineplot(x=ratios, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][1], linewidth=10, estimator=None)
+        sns.lineplot(x=ratios, y=mean_lb, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][0], linewidth=10, estimator=None)
+        sns.lineplot(x=ratios, y=mean_ub, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][1], linewidth=10, estimator=None)
+        ax[0][0].fill_between(ratios, np.array(mean_accs) - np.array(std_dev_accs), np.array(mean_accs) + np.array(std_dev_accs), alpha=0.25)
+        ax[0][0].xaxis.set_inverted(True)
+        ax[0][0].set(xlabel="Mask Ratio\n", ylabel="Average Test Accuracy")
+        ax[0][1].fill_between(ratios, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.25)
+        ax[0][1].xaxis.set_inverted(True)
+        ax[0][1].set(xlabel="Mask Ratio\n", ylabel=r'Average $\delta$')
+        ax[0][1].set_yscale("symlog")
+        ax[1][0].fill_between(ratios, np.array(mean_lb) - np.array(std_dev_lb), np.array(mean_lb) + np.array(std_dev_lb), alpha=0.25)
+        ax[1][0].xaxis.set_inverted(True)
+        ax[1][0].set_yscale("symlog")
+        ax[1][0].set(xlabel="Mask Ratio\n", ylabel="Average Lower Bound")
+        ax[1][1].fill_between(ratios, np.array(mean_ub) - np.array(std_dev_ub), np.array(mean_ub) + np.array(std_dev_ub), alpha=0.25)
+        ax[1][1].xaxis.set_inverted(True)
+        ax[1][1].set_yscale("symlog")
+        ax[1][1].set(xlabel="Mask Ratio\n", ylabel="Average Upper Bound")
+
+    title_suffix = "and data" if with_data else ""
+    ax[0][0].set_title(f"Average test accuracy for {dset_name.upper()} upon varying \n the ratio of mask {title_suffix}", weight="bold")
+    ax[0][1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n \
+                       upon varying the ratio of mask {title_suffix}", weight="bold")
+    ax[1][0].set_title(f"Average lower bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
+    ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
+
+    plt.show()
+
 
 def make_performance_plots_for_dset(dset_name: str) -> None:
     curr_dirname = os.path.dirname(os.path.realpath(__file__))
@@ -43,6 +128,77 @@ def make_performance_plots_for_dset(dset_name: str) -> None:
 
     plt.show()
 
+
+def make_model_ablation_paper_plots(dset_name: str) -> None:
+    assert dset_name in ["decoy_mnist", "derma_mnist"]
+    methods = ["r3", "r4", "ibp_ex", "ibp_ex+r3"]
+    dl_test, model_dir, size_names, eps, has_conv, num_classes, loss_fn, model_archs = None, None, None, None, None, None, None, None
+    if dset_name == "decoy_mnist":
+        dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
+        _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
+        model_archs = [(784, 10, 512, 1), (784, 10, 512, 2), (784, 10, 512, 3), (784, 10, 512, 4)]
+        loss_fn = "cross_entropy"
+        eps = 0.1
+        model_dir = "saved_experiment_models/ablations/size/decoy_mnist"
+        has_conv = False
+        num_classes = 10
+        size_names = ["1_layer", "2_layer", "3_layer", "4_layer"]
+    if dset_name == "derma_mnist":
+        test_derma = derma_mnist.DecoyDermaMNIST(False, size=64)
+        dl_test = derma_mnist.get_dataloader(test_derma, 256)
+        model_archs = [(3, 64, 1, "small"), (3, 64, 1, "small_medium"), (3, 64, 1), (3, 64, 1, "large")]
+        loss_fn = "binary_cross_entropy"
+        eps = 0.05
+        model_dir = "saved_experiment_models/ablations/size/derma_mnist"
+        has_conv = True
+        num_classes = 2
+        size_names = ["small", "small_medium", "medium_large", "large"]
+
+    sns.set_theme(context="poster", font_scale=2)
+    sns.color_palette("bright")
+    fig, ax = plt.subplots(2, 2, figsize=(60, 40))
+    for method in methods:
+        mean_accs, std_dev_accs = [], [],
+        mean_delta, mean_lb, mean_ub, std_dev_delta, std_dev_lb, std_dev_ub = [], [], [], [], [], []
+        for sz_nm, arch in zip(size_names, model_archs):
+            model = DermaNet(*arch) if dset_name == "derma_mnist" else FCNAugmented(*arch)
+            dir_for_method = model_dir + f"/{method}" + f"/{sz_nm}"
+            avg_acc_ratio, std_dev_acc_ratio = get_avg_acc_with_stddev(model, dl_test, "cuda:0", dir_for_method, num_classes)
+            mean_accs.append(avg_acc_ratio)
+            std_dev_accs.append(std_dev_acc_ratio)
+            avg_delta_ratio, avg_lb_ratio, avg_ub_ratio, std_delta_ratio, std_lb_ratio, std_ub_ratio = get_avg_rob_metrics(
+                model, dl_test, "cuda:0", dir_for_method, eps, loss_fn, has_conv)
+            mean_delta.append(avg_delta_ratio)
+            mean_lb.append(avg_lb_ratio)
+            mean_ub.append(avg_ub_ratio)
+            std_dev_delta.append(std_delta_ratio)
+            std_dev_lb.append(std_lb_ratio)
+            std_dev_ub.append(std_ub_ratio)
+
+        sns.lineplot(x=size_names, y=mean_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][0], linewidth=10, estimator=None)
+        sns.lineplot(x=size_names, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][1], linewidth=10, estimator=None)
+        sns.lineplot(x=size_names, y=mean_lb, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][0], linewidth=10, estimator=None)
+        sns.lineplot(x=size_names, y=mean_ub, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][1], linewidth=10, estimator=None)
+        ax[0][0].fill_between(size_names, np.array(mean_accs) - np.array(std_dev_accs), np.array(mean_accs) + np.array(std_dev_accs), alpha=0.35)
+        ax[0][0].set(xlabel="Model Size\n", ylabel="Average Test Accuracy")
+        ax[0][1].fill_between(size_names, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.35)
+        ax[0][0].set(xlabel="Model Size\n", ylabel=r'Average $\delta$')
+        ax[0][1].set_yscale("symlog")
+        ax[1][0].fill_between(size_names, np.array(mean_lb) - np.array(std_dev_lb), np.array(mean_lb) + np.array(std_dev_lb), alpha=0.35)
+        ax[1][0].set(xlabel="Model Size\n", ylabel="Average Lower Bound")
+        ax[1][0].set_yscale("symlog")
+        ax[1][1].fill_between(size_names, np.array(mean_ub) - np.array(std_dev_ub), np.array(mean_ub) + np.array(std_dev_ub), alpha=0.35)
+        ax[1][1].set(xlabel="Model Size\n", ylabel="Average Upper Bound")
+        ax[1][1].set_yscale("symlog")
+
+    ax[0][0].set_title(f"Test Accuracy {dset_name.upper()} upon varying \n the model size", weight="bold")
+    ax[0][1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + \
+                          f"{dset_name.upper()} \n upon varying the model size", weight="bold")
+    ax[1][0].set_title(f"Average Lower bound for {dset_name.upper()} upon \n varying the model size", weight="bold")
+    ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the model size", weight="bold")
+
+    plt.show()
+
 def make_sample_complexity_plots_for_dset(dset_name: str, with_data_removal: bool = False) -> None:
     curr_dirname = os.path.dirname(os.path.realpath(__file__))
     perf_fname = os.path.join(curr_dirname, f"{dset_name}.yaml")
@@ -68,7 +224,6 @@ def make_sample_complexity_plots_for_dset(dset_name: str, with_data_removal: boo
         if method not in results_for_methods:
             results_for_methods[method] = {}
         results_for_methods[method][ratio] = results_abl[method_ratio]
-
 
     fig, ax = plt.subplots(2, 2, figsize=(20, 15))
     for method in all_methods:

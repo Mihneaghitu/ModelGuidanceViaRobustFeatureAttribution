@@ -11,8 +11,8 @@ from metrics import worst_group_acc
 from models.R4_models import DermaNet, PlantNet
 from models.fully_connected import FCNAugmented
 
-def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module, device: torch.device, model_archs: any,
-    size_names: list[str] , methods: list[str] = ["r4", "ibp_ex", "ibp_ex+r3", "r3"], write_to_file: bool = False) -> None:
+def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module, device: torch.device, model_archs: any, size_names: list[str],
+    methods: list[str] = ["r4", "ibp_ex", "ibp_ex+r3", "r3"], write_to_file: bool = False, load: bool = False) -> None:
     root_dir = f"saved_experiment_models/ablations/size/{dset_name}/"
     os.makedirs(root_dir, exist_ok=True)
     for method in methods:
@@ -32,10 +32,10 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
         if dset_name == "plant":
             if method == "r4":
                 new_dl_train = plant.make_soft_masks(new_dl_train, params_dict["alpha_soft"])
-        train_acc, test_acc, num_robust, min_robust_delta, min_lower_bound, max_upper_bound = 0, 0, 0, 1e+8, 0, 0
         for size_name, arch in zip(size_names, model_archs):
             size_name_dir = f"{root_dir_method}{size_name}"
             os.makedirs(size_name_dir, exist_ok=True)
+            train_acc, test_acc, num_robust, min_robust_delta, min_lower_bound, max_upper_bound = 0, 0, 0, 1e+8, 0, 0
             for i in range(restarts):
                 torch.manual_seed(i + seed)
                 curr_model, loss_fn, multi_class = None, "binary_cross_entropy", False
@@ -47,8 +47,12 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
                     loss_fn = "cross_entropy"
                 print(f"========== Training {dset_name} model with method {method} restart {i} and arch {arch} ==========")
                 k_schedule = uniformize_magnitudes_schedule if method == "r3" else None
-                train_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
-                    k, device, has_conv, weight_reg_coeff=weight_coeff, k_schedule=k_schedule, suppress_tqdm=True)
+                if not load:
+                    train_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
+                        k, device, has_conv, weight_reg_coeff=weight_coeff, k_schedule=k_schedule, suppress_tqdm=True)
+                else:
+                    curr_model.load_state_dict(torch.load(f"{size_name_dir}/run_{i}.pt"))
+                    curr_model = curr_model.to(device)
                 train_acc += test_model_accuracy(curr_model, new_dl_train, device, multi_class=multi_class, suppress_log=True)
                 test_acc += test_model_accuracy(curr_model, dl_test, device, multi_class=multi_class, suppress_log=True)
                 n_r, min_delta, m_l, m_u = test_delta_input_robustness(dl_test, curr_model, epsilon, delta_threshold,
@@ -58,7 +62,8 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
                 min_lower_bound += m_l
                 max_upper_bound += m_u
                 # Save the model
-                torch.save(curr_model.state_dict(), f"{size_name_dir}/run_{i}.pt")
+                if not load:
+                    torch.save(curr_model.state_dict(), f"{size_name_dir}/run_{i}.pt")
             empty_model, num_classes = None, 2
             if dset_name == "derma_mnist":
                 empty_model = DermaNet(*arch).to(device)
@@ -87,7 +92,7 @@ if sys.argv[1] == "derma_mnist":
     dev = torch.device("cuda:0")
     archs = [(3, IMG_SIZE, 1, "small"), (3, IMG_SIZE, 1, "small_medium"), (3, IMG_SIZE, 1, "large")]
     sz_ns = ["small", "small_medium", "large"]
-    ablate(sys.argv[1], 0, True, torch.nn.BCELoss(), dev, archs, sz_ns, write_to_file=True)
+    ablate(sys.argv[1], 0, True, torch.nn.BCELoss(), dev, archs, sz_ns, write_to_file=True, load=True)
 elif sys.argv[1] == "decoy_mnist":
     SEED = 0
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
@@ -95,6 +100,6 @@ elif sys.argv[1] == "decoy_mnist":
     dev = torch.device("cuda:0")
     archs = [(784, 10, 512, 2), (784, 10, 512, 3), (784, 10, 512, 4)]
     sz_ns = ["2_layer", "3_layer", "4_layer"]
-    ablate(sys.argv[1], SEED, False, torch.nn.CrossEntropyLoss(), dev, archs, sz_ns, methods=["r4", "ibp_ex", "ibp_ex+r3"], write_to_file=False)
+    ablate(sys.argv[1], SEED, False, torch.nn.CrossEntropyLoss(), dev, archs, sz_ns, write_to_file=True, load=True)
 else:
     raise ValueError("Only 'derma_mnist' and 'plant' are supported")
