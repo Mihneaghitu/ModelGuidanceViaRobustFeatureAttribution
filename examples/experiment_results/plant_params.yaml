@@ -25,12 +25,12 @@ r3:
   restarts: 3
   weight_coeff: 0.004
 r4:
-  alpha_soft: 0.5
+  alpha_soft: 0.45
   delta_threshold: 1
   epsilon: 0.01
-  k: 0.04
-  lr: 0.0005
-  num_epochs: 12
+  k: 0.03
+  lr: 0.0004
+  num_epochs: 14
   restarts: 3
   weight_coeff: -1
 std:
