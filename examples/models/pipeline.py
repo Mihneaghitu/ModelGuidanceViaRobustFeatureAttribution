@@ -138,6 +138,7 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
     # The model needs to be delta input robust only in the irrelevant features
     num_robust, min_robust_delta, num_test_samples = 0, 0, 0
     max_upper_bound, min_lower_bound = 0, 0
+    avg_abs_diff = 0
     model = model.to(device).eval()
     for test_batch, test_labels, test_masks in dl_masked:
         test_batch, test_labels, test_masks = test_batch.to(device), test_labels.to(device), test_masks.to(device)

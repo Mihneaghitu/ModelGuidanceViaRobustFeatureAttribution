@@ -2,10 +2,12 @@ import os
 import torch
 from torch.utils.data import DataLoader
 import sys
+sys.path.append("../")
 from datasets import derma_mnist, plant, decoy_mnist
 from models.R4_models import DermaNet, PlantNet
 from models.fully_connected import FCNAugmented
-from models.pipeline import test_delta_input_robustness
+from models.pipeline import test_delta_input_robustness, test_model_accuracy
+import numpy as np
 
 def worst_group_acc(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, num_classes: int,
                     runs_dir_root: str, suppress_log=False) -> tuple[float, int]:
@@ -42,16 +44,31 @@ def worst_group_acc(model: torch.nn.Sequential, test_dloader: DataLoader, device
 
     return round(min_acc, 3), min_class
 
-def get_avg_delta(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
-                  eps: float, loss_fn: str, has_conv: bool) -> float:
-    delta_sum = 0
+def get_avg_acc_with_stddev(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
+    num_classes: int) -> tuple[float, float]:
     num_runs = len(os.listdir(model_dir))
+    acc_sum = np.zeros(num_runs)
     with torch.no_grad():
         for run_idx in range(num_runs):
             model.load_state_dict(torch.load(f"{model_dir}/run_{run_idx}.pt"))
             model = model.to(device)
-            delta_sum += test_delta_input_robustness(test_dloader, model, eps, 0, loss_fn, device, has_conv)[2]
-    return delta_sum / num_runs
+            acc_sum[run_idx] = test_model_accuracy(model, test_dloader, device, multi_class=num_classes > 0, suppress_log=True)
+
+    return acc_sum.mean(), acc_sum.std()
+
+def get_avg_delta(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
+                  eps: float, loss_fn: str, has_conv: bool) -> tuple[float, float, float, float]:
+    num_runs = len(os.listdir(model_dir))
+    delta_sum, l_sum, u_sum = np.zeros(num_runs), np.zeros(num_runs), np.zeros(num_runs)
+    with torch.no_grad():
+        for run_idx in range(num_runs):
+            model.load_state_dict(torch.load(f"{model_dir}/run_{run_idx}.pt"))
+            model = model.to(device)
+            _, d, l, u = test_delta_input_robustness(test_dloader, model, eps, 0, loss_fn, device, has_conv, suppress_log=True)
+            delta_sum[run_idx] = d
+            l_sum[run_idx] = l
+            u_sum[run_idx] = u
+    return delta_sum.mean(), l_sum.mean(), u_sum.mean(), delta_sum.std(), l_sum.std(), u_sum.std()
 
 def test_avg_delta(dset_name: str):
     assert dset_name in ["derma_mnist", "plant", "decoy_mnist"]
@@ -91,20 +108,20 @@ def test_worst_group_acc():
     assert sys.argv[1] in ["derma_mnist", "plant", "decoy_mnist"]
     dev = torch.device("cuda:0")
     if sys.argv[1] == "derma_mnist":
-        IMG_SIZE = 64
-        test_dset = derma_mnist.DecoyDermaMNIST(False, size=IMG_SIZE)
+        img_size = 64
+        test_dset = derma_mnist.DecoyDermaMNIST(False, size=img_size)
         dl_test = derma_mnist.get_dataloader(test_dset, 256)
-        model = DermaNet(3, IMG_SIZE, 1)
+        model = DermaNet(3, img_size, 1)
         for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
             worst_group_acc(model, dl_test, dev, 2, f"saved_experiment_models/performance/derma_mnist/{method}")
     elif sys.argv[1] == "plant":
-        SPLIT_ROOT = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
-        DATA_ROOT = "/vol/bitbucket/mg2720/plant/rgb_data"
-        MASKS_FILE = "/vol/bitbucket/mg2720/plant/mask/preprocessed_masks.pyu"
-        plant_test_2 = plant.PlantDataset(SPLIT_ROOT, DATA_ROOT, MASKS_FILE, 2, False)
-        dl_test = plant.get_dataloader(plant_test_2, 50)
+        split_root = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
+        data_root = "/vol/bitbucket/mg2720/plant/rgb_data"
+        masks_file = "/vol/bitbucket/mg2720/plant/mask/preprocessed_masks.pyu"
+        plant_test_2 = plant.PlantDataset(split_root, data_root, masks_file, 2, False)
+        dl_test = plant.get_dataloader(plant_test_2, 25)
         model = PlantNet(3, 1)
-        for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
+        for method in ["ibp_ex"]:#["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
             print(f"Method {method}")
             worst_group_acc(model, dl_test, dev, 2, f"saved_experiment_models/performance/plant/{method}")
     elif sys.argv[1] == "decoy_mnist":
@@ -115,3 +132,5 @@ def test_worst_group_acc():
             worst_group_acc(model, dl_test, dev, 10, f"saved_experiment_models/performance/decoy_mnist/{method}")
     else:
         raise ValueError("Only 'derma_mnist' and 'plant' are supported")
+
+# test_worst_group_acc()

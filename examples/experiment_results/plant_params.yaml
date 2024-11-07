@@ -1,20 +1,21 @@
 ibp_ex:
-  alpha_soft: 0.2
+  alpha_soft: 0.3
   delta_threshold: 1
   epsilon: 0.01
-  k: 0.05
-  lr: 0.0005
-  num_epochs: 8
+  k: 0.4
+  lr: 0.0002
+  num_epochs: 10
   restarts: 3
-  weight_coeff: 0.0001
+  weight_coeff: 0.003
 ibp_ex+r3:
+  alpha_soft: 0.35
   delta_threshold: 1
   epsilon: 0.01
-  k: 0.07
+  k: 0.12
   lr: 0.0005
-  num_epochs: 8
+  num_epochs: 12
   restarts: 3
-  weight_coeff: 0.0001
+  weight_coeff: 0.002
 r3:
   delta_threshold: 1
   epsilon: 0.01
@@ -24,12 +25,12 @@ r3:
   restarts: 3
   weight_coeff: 0.004
 r4:
-  alpha_soft: 0.6
+  alpha_soft: 0.5
   delta_threshold: 1
   epsilon: 0.01
-  k: 0.02
+  k: 0.04
   lr: 0.0005
-  num_epochs: 20
+  num_epochs: 12
   restarts: 3
   weight_coeff: -1
 std:
