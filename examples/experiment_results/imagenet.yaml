@@ -27,7 +27,7 @@ r4:
   test_acc: 0.544
   train_acc: 0.582
 std:
-  test_acc: 0.984
-  train_acc: 0.998
-  worst_group: 5
-  worst_group_acc: 5.0
+  test_acc: 0.657
+  train_acc: 0.744
+  worst_group: 1
+  worst_group_acc: 0.011

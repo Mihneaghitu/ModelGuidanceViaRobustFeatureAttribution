@@ -27,7 +27,8 @@ def input_gradient_interval_regularizer(
     batch_masks: torch.Tensor = None,
     has_conv: bool = False,
     device: str = "cuda:0",
-    weight_reg_coeff: float = 0.0
+    weight_reg_coeff: float = 0.0,
+    perturb_mask_only: bool = False
 ) -> torch.Tensor | list[tuple[torch.Tensor]]:
     """
     Compute an interval over the gradients of the loss with respect to the inputs to the network. Then compute the norm
@@ -53,7 +54,7 @@ def input_gradient_interval_regularizer(
     # we only support binary cross entropy loss for now
     if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
-    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex", "ibp_ex+r3"]
+    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex", "ibp_ex+r3", "r4_pmo"]
     assert batch_masks is not None
     modules = list(model.modules())
     assert isinstance(modules[-1], torch.nn.Sigmoid) or isinstance(modules[-1], torch.nn.Softmax)
@@ -72,7 +73,7 @@ def input_gradient_interval_regularizer(
 
     # ================================= BOUNDS COMPUTATION =================================
     intermediate = None
-    if regularizer_type == "ibp_ex" or regularizer_type == "ibp_ex+r3":
+    if regularizer_type == "ibp_ex" or regularizer_type == "ibp_ex+r3" or (regularizer_type == "r4" and perturb_mask_only):
         intermediate = [(batch - epsilon * batch_masks, batch + epsilon * batch_masks)]
     else:
         intermediate = [(batch - epsilon, batch + epsilon)]
@@ -142,7 +143,7 @@ def input_gradient_interval_regularizer(
         case "grad_cert":
             # Loss for the interval regularizer
             return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
-        case "r4":
+        case r4 if r4 in ["r4", "r4_pmo"]:
             # Loss for R4
             return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
@@ -192,13 +193,16 @@ def smooth_gradient_regularizer(
     epsilon: float,
     regularizer_type: str = "smooth_r3",
     device: str = "cuda:0",
-    weight_reg_coeff: float = 0.0
+    weight_reg_coeff: float = 0.0,
+    perturb_mask_only: bool = False
 ) -> torch.Tensor:
-    assert regularizer_type in ["smooth_r3", "rand_r4"]
+    assert regularizer_type in ["smooth_r3", "rand_r4", "rand_r4_pmo"]
     assert isinstance(criterion, torch.nn.CrossEntropyLoss) or isinstance(criterion, torch.nn.BCELoss)
 
     sampling_dist = torch.distributions.normal.Normal(0, epsilon)
     perturbation = sampling_dist.sample(batch.shape).to(device)
+    if perturb_mask_only:
+        perturbation *= batch_masks
     perturbed_batch = batch + perturbation
 
     # Get the input gradient for the perturbed batch
@@ -217,7 +221,7 @@ def smooth_gradient_regularizer(
         case "smooth_r3":
             # return the average input gradient
             return torch.mean(torch.abs(input_grad * batch_masks)) + weight_reg_coeff * weight_sum
-        case "rand_r4":
+        case rand_r4 if rand_r4 in ["rand_r4", "rand_r4_pmo"]:
             # return the maximum input gradient of only the masked regions
             samples_max_input_grad_elem_wise = torch.max(input_grad, dim=0).values
             non_zero_masks = (batch_masks > 0).sum().item()
@@ -234,7 +238,8 @@ def input_gradient_pgd_regularizer(
     regularizer_type: str = "std",
     device: str = "cuda:0",
     weight_reg_coeff: float = 0.0,
-    clip_grad_bound: float = None
+    clip_grad_bound: float = None,
+    perturb_mask_only: bool = False
 ) -> torch.Tensor:
     """This function is used to compute the adversarial perturbation budget for the input data batch and return it to be used as a regularization term
     in order to optimize the behaviour of a model to ignore irrelevant features. This is not a certification technique, but does provide a minimal level
@@ -253,11 +258,11 @@ def input_gradient_pgd_regularizer(
         device (_type_, optional): The device to use for computation. Defaults to "cuda:0".
 
     """
-    assert regularizer_type in ["pgd_r4", "pgd_ex+r3", "std", "pgd_ex", "r3"]
+    assert regularizer_type in ["pgd_r4", "pgd_ex+r3", "std", "pgd_ex", "r3", "pgd_r4_pmo"]
     assert batch_masks is not None
 
     pgd_adv_input = batch
-    perturbation_masks = batch_masks if regularizer_type == "pgd_ex" else torch.ones_like(batch_masks).to(device)
+    perturbation_masks = batch_masks if regularizer_type in ["pgd_ex", "pgd_r4_pmo"] else torch.ones_like(batch_masks).to(device)
     for _ in range(num_iterations) :
         pgd_adv_input.requires_grad = True
         # We need it because otherwise the gradients will be accumulated with previous iterations
@@ -282,7 +287,7 @@ def input_gradient_pgd_regularizer(
     match regularizer_type:
         case "pgd_ex":
             return criterion(model(pgd_adv_input), labels) + weight_reg_coeff * weight_sum
-        case "pgd_r4":
+        case pgd_r4 if pgd_r4 in ["pgd_r4", "pgd_r4_pmo"]:
             # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
             pgd_adv_input.requires_grad = True
             model.zero_grad()

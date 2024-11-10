@@ -38,7 +38,7 @@ class ImageNetDataset(Dataset):
         init_mask_tensors = []
         for wnid in self.relevant_classes:
             data_subdir_path = os.path.join(data_dir, wnid)
-            for fname in os.listdir(data_subdir_path):
+            for fname in sorted(os.listdir(data_subdir_path)): # sort to ensure consistency
                 data_img = Image.open(os.path.join(data_subdir_path, fname))
                 data_img = data_transform(data_img)
                 # for some reason, some images have only 1 channel, just discard them
@@ -111,9 +111,8 @@ class LazyImageNetDataset(Dataset):
         ])
         label_transform = lambda label_idx: torch.tensor([label_idx])
 
-        self.labels = []
-        masks_paths = []
-        data_paths = []
+        data_paths, mask_paths, labels = [], [], []
+        self.data_paths, self.mask_paths, self.labels = [], [], []
         for wnid in self.relevant_classes:
             data_subdir_path = os.path.join(data_dir, wnid)
             for fname in os.listdir(data_subdir_path):
@@ -129,21 +128,24 @@ class LazyImageNetDataset(Dataset):
                     if fname.split(".")[0] in mask_names:
                         curr_mask_path = os.path.join(masks_subdir, f"feature_{c}", fname)
                         data_paths.append(curr_data_path)
-                        masks_paths.append(curr_mask_path)
-                        self.labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
+                        mask_paths.append(curr_mask_path)
+                        labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
                         cnt += 1
                 if cnt == 0:
                     data_paths.append(curr_data_path)
-                    masks_paths.append("-1") # dummy flag
-                    self.labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
+                    mask_paths.append("-1") # dummy flag
+                    labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
+            if is_train:
+                self.data_paths += data_paths[:1000]
+                self.labels += labels[:1000]
+                self.mask_paths += mask_paths[:1000]
+            else:
+                self.data_paths += data_paths[1000:]
+                self.labels += labels[1000:]
+                self.mask_paths += mask_paths[1000:]
+            data_paths, mask_paths, labels = [], [], []
 
-        all_split_indices = np.random.permutation(len(data_paths))
-        num_train = int(train_proportion * len(data_paths))
-        split_indices = all_split_indices[:num_train] if is_train else all_split_indices[num_train:]
-
-        self.data_paths = [data_paths[i] for i in split_indices]
-        self.label_tensors = torch.stack([self.labels[i] for i in split_indices]).squeeze()
-        self.mask_paths = [masks_paths[i] for i in split_indices]
+        self.label_tensors = torch.stack(self.labels).squeeze()
 
     def __len__(self):
         return len(self.data_paths)

@@ -18,6 +18,7 @@ def train_model_with_certified_input_grad(
     k: float, # input reg weight
     device: str,
     has_conv: bool,
+    perturb_mask_only: bool = False,
     k_schedule: callable = None,
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
@@ -42,7 +43,7 @@ def train_model_with_certified_input_grad(
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_interval_regularizer(
                 model, x, u, loss_fn, epsilon, 0.0, regularizer_type=mlx_method, batch_masks=m, has_conv=has_conv,
-                device=device, weight_reg_coeff=weight_reg_coeff
+                device=device, weight_reg_coeff=weight_reg_coeff, perturb_mask_only=perturb_mask_only
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
@@ -83,6 +84,7 @@ def train_model_with_pgd_robust_input_grad(
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
     num_iterations: int = 10,
+    perturb_mask_only: bool = False,
     clip_grad_bound = None
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
@@ -100,8 +102,8 @@ def train_model_with_pgd_robust_input_grad(
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_pgd_regularizer(
-                x, u, model, m, criterion, epsilon, num_iterations=num_iterations, regularizer_type=mlx_method,
-                device=device, weight_reg_coeff=weight_reg_coeff, clip_grad_bound=clip_grad_bound
+                x, u, model, m, criterion, epsilon, num_iterations=num_iterations, regularizer_type=mlx_method, device=device,
+                weight_reg_coeff=weight_reg_coeff, clip_grad_bound=clip_grad_bound, perturb_mask_only=perturb_mask_only
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
@@ -132,11 +134,11 @@ def train_model_with_smoothed_input_grad(
     device: str,
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
+    perturb_mask_only: bool = False
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    # pre-train the model
     progress_bar = tqdm.trange(n_epochs, desc="Epoch", )
     model = model.to(device).train()
     for _ in progress_bar:
@@ -148,7 +150,8 @@ def train_model_with_smoothed_input_grad(
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = smooth_gradient_regularizer(
-                x, u, model, m, criterion, epsilon, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff
+                x, u, model, m, criterion, epsilon, regularizer_type=mlx_method, device=device,
+                weight_reg_coeff=weight_reg_coeff, perturb_mask_only=perturb_mask_only
             )
             # output is [batch_size, 1], u is [bach_size] but BCELoss does not support different target and source sizes
             output = model(x).squeeze()
@@ -237,22 +240,22 @@ def write_results_to_file(filename: str, results: dict, method: str) -> None:
     assert filename.endswith(".yaml"), "Only yaml files supported"
     if not os.path.exists(filename):
         # Create a new file and write the dict to it
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             yaml.dump({method: results}, f)
     else:
         # Load the existing yaml file, append to it and write it back
         new_results = None
-        with open(filename, "r") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             new_results = yaml.load(f, Loader=yaml.FullLoader) or {}
             new_results[method] = results
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             yaml.dump(new_results, f)
 
 def load_params_or_results_from_file(filename: str, method: str) -> dict:
     assert filename.endswith(".yaml"), "Only yaml files supported"
     assert os.path.exists(filename), "File does not exist"
     results = None
-    with open(filename, "r") as f:
+    with open(filename, "r", encoding="utf-8") as f:
         results = yaml.load(f, Loader=yaml.FullLoader)
 
     return results[method] if results is not None else None

@@ -22,6 +22,14 @@ pgd_r4:
   num_epochs: 30
   restarts: 4
   weight_coeff: 0.0002
+pgd_r4_pmo:
+  delta_threshold: 1
+  epsilon: 0.05
+  k: 0.1
+  lr: 1.0e-05
+  num_epochs: 30
+  restarts: 4
+  weight_coeff: 0.0002
 r3:
   delta_threshold: 1
   epsilon: 0.05
@@ -38,6 +46,14 @@ r4:
   num_epochs: 12
   restarts: 4
   weight_coeff: -1
+r4_pmo:
+  delta_threshold: 1
+  epsilon: 0.15
+  k: 0.06
+  lr: 0.0002
+  num_epochs: 14
+  restarts: 4
+  weight_coeff: -1
 rand_r4:
   delta_threshold: 1
   epsilon: 0.05
@@ -45,6 +61,14 @@ rand_r4:
   lr: 5.0e-05
   num_epochs: 10
   restarts: 4
+  weight_coeff: 0.001
+rand_r4_pmo:
+  delta_threshold: 1
+  epsilon: 0.15
+  k: 15
+  lr: 1.0e-05
+  num_epochs: 35
+  restarts: 3
   weight_coeff: 0.001
 smooth_r3:
   delta_threshold: 1

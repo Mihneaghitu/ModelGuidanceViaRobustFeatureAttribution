@@ -1,5 +1,5 @@
 import torch
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet18, ResNet18_Weights
 
 class LesionNet(torch.nn.Sequential):
     def __init__(self, in_channels, out_dim):
@@ -118,14 +118,16 @@ class DermaNet(torch.nn.Sequential):
 class SalientImageNet(torch.nn.Module):
     def __init__(self, num_classes: int):
         super().__init__()
-        self.resnet = resnet50(weights=ResNet50_Weights.DEFAULT)
+        self.resnet = resnet18(weights=ResNet18_Weights.DEFAULT)
         num_features = self.resnet.fc.in_features
         self.resnet.fc = torch.nn.Identity()
+        self.dropout = torch.nn.Dropout(0.5)
         self.fc = torch.nn.Linear(num_features, num_classes)
         self.softmax = torch.nn.Softmax(dim=-1)
 
     def forward(self, x):
         y = self.resnet(x)
+        y = self.dropout(y)
         y = self.fc(y)
         y = self.softmax(y)
         return y
