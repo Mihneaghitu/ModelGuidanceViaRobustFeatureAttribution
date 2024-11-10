@@ -15,13 +15,13 @@ ibp_ex+r3:
   restarts: 4
   weight_coeff: 0.006
 pgd_r4:
-  delta_threshold: 1
+  delta_threshold: 0.5
   epsilon: 0.1
-  k: 0.04
-  lr: 0.001
-  num_epochs: 14
-  restarts: 1
-  weight_coeff: 0.0004
+  k: 0.7
+  lr: 0.03
+  num_epochs: 30
+  restarts: 4
+  weight_coeff: 0.0005
 r3:
   delta_threshold: 0.5
   epsilon: 0.1

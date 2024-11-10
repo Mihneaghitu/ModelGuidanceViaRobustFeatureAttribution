@@ -16,6 +16,15 @@ ibp_ex+r3:
   train_acc: 0.871
   worst_group: 1
   worst_group_acc: 0.78
+pgd_r4:
+  max_upper_bound: 194.997
+  min_lower_bound: -195.12
+  min_robust_delta: 331.757
+  num_robust: 0.0
+  test_acc: 0.817
+  train_acc: 0.817
+  worst_group: 1
+  worst_group_acc: 0.812
 r3:
   max_upper_bound: 80.629
   min_lower_bound: -80.63
@@ -34,6 +43,24 @@ r4:
   train_acc: 0.897
   worst_group: 0
   worst_group_acc: 0.824
+rand_r4:
+  max_upper_bound: 23.521
+  min_lower_bound: -23.504
+  min_robust_delta: 44.894
+  num_robust: 0.0
+  test_acc: 0.786
+  train_acc: 0.817
+  worst_group: 1
+  worst_group_acc: 0.756
+smooth_r3:
+  max_upper_bound: 19.481
+  min_lower_bound: -19.466
+  min_robust_delta: 36.832
+  num_robust: 0.0
+  test_acc: 0.784
+  train_acc: 0.811
+  worst_group: 1
+  worst_group_acc: 0.741
 std:
   max_upper_bound: 3745.819
   min_lower_bound: -3745.636

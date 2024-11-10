@@ -14,6 +14,14 @@ ibp_ex+r3:
   num_epochs: 10
   restarts: 4
   weight_coeff: 0.0002
+pgd_r4:
+  delta_threshold: 1
+  epsilon: 0.05
+  k: 0.1
+  lr: 1.0e-05
+  num_epochs: 30
+  restarts: 4
+  weight_coeff: 0.0002
 r3:
   delta_threshold: 1
   epsilon: 0.05
@@ -30,6 +38,22 @@ r4:
   num_epochs: 12
   restarts: 4
   weight_coeff: -1
+rand_r4:
+  delta_threshold: 1
+  epsilon: 0.05
+  k: 15
+  lr: 5.0e-05
+  num_epochs: 10
+  restarts: 4
+  weight_coeff: 0.001
+smooth_r3:
+  delta_threshold: 1
+  epsilon: 0.05
+  k: 40
+  lr: 2.0e-05
+  num_epochs: 30
+  restarts: 4
+  weight_coeff: 0.0004
 std:
   delta_threshold: 1
   epsilon: 0.1

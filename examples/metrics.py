@@ -98,7 +98,7 @@ def test_avg_delta(dset_name: str):
         model_dir = "saved_experiment_models/performance/decoy_mnist"
         has_conv = False
         eps = 0.1
-    for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
+    for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
         avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
         print(f"Method {method} avg delta = {avg_delta}")
 
@@ -106,11 +106,13 @@ def test_avg_delta(dset_name: str):
 def test_worst_group_acc(dset_name: str):
     assert dset_name in ["derma_mnist", "plant", "decoy_mnist"]
     dev = torch.device("cuda:0")
+    img_size, dl_test, model, num_classes = None, None, None, None
     if dset_name == "derma_mnist":
         img_size = 64
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=img_size)
         dl_test = derma_mnist.get_dataloader(test_dset, 256)
         model = DermaNet(3, img_size, 1)
+        num_classes = 2
         for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
             worst_group_acc(model, dl_test, dev, 2, f"saved_experiment_models/performance/derma_mnist/{method}")
     elif dset_name == "plant":
@@ -120,16 +122,13 @@ def test_worst_group_acc(dset_name: str):
         plant_test_2 = plant.PlantDataset(split_root, data_root, masks_file, 2, False)
         dl_test = plant.get_dataloader(plant_test_2, 25)
         model = PlantNet(3, 1)
-        for method in ["ibp_ex", "std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
-            print(f"Method {method}")
-            worst_group_acc(model, dl_test, dev, 2, f"saved_experiment_models/performance/plant/{method}")
-    elif dset_name == "decoy_mnist":
+        num_classes = 2
+    else: # decoy_mnist
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
         model = FCNAugmented(784, 10, 512, 1)
-        for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
-            worst_group_acc(model, dl_test, dev, 10, f"saved_experiment_models/performance/decoy_mnist/{method}")
-    else:
-        raise ValueError("Only 'derma_mnist' and 'plant' are supported")
+        num_classes = 10
 
-# test_worst_group_acc("derma_mnist")
+    for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
+        print(f"Method {method}")
+        worst_group_acc(model, dl_test, dev, num_classes, f"saved_experiment_models/performance/{dset_name}/{method}")

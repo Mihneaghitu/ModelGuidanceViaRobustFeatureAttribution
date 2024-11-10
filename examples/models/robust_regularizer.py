@@ -205,7 +205,6 @@ def smooth_gradient_regularizer(
     perturbed_batch.requires_grad = True
     model.zero_grad()
     y_hat = model(perturbed_batch)
-    print(y_hat.shape, labels.shape, pgd_adv_input.shape)
     loss = criterion(y_hat.squeeze(), labels)
     loss.backward()
     input_grad = perturbed_batch.grad.data
@@ -217,7 +216,6 @@ def smooth_gradient_regularizer(
     match regularizer_type:
         case "smooth_r3":
             # return the average input gradient
-            #TODO might need L2 reg
             return torch.mean(torch.abs(input_grad * batch_masks)) + weight_reg_coeff * weight_sum
         case "rand_r4":
             # return the maximum input gradient of only the masked regions
@@ -235,7 +233,8 @@ def input_gradient_pgd_regularizer(
     num_iterations: int = 10,
     regularizer_type: str = "std",
     device: str = "cuda:0",
-    weight_reg_coeff: float = 0.0
+    weight_reg_coeff: float = 0.0,
+    clip_grad_bound: float = None
 ) -> torch.Tensor:
     """This function is used to compute the adversarial perturbation budget for the input data batch and return it to be used as a regularization term
     in order to optimize the behaviour of a model to ignore irrelevant features. This is not a certification technique, but does provide a minimal level
@@ -291,8 +290,11 @@ def input_gradient_pgd_regularizer(
             # We squeeze here for the same reason as above
             loss = criterion(y_hat.squeeze(), labels)
             loss.backward()
+            pgd_grad_reg = torch.sum(torch.abs(torch.mul(pgd_adv_input.grad.data, batch_masks)))
+            if clip_grad_bound is not None:
+                pgd_grad_reg = torch.clamp(pgd_grad_reg, min=0, max=clip_grad_bound)
 
-            return torch.sum(torch.abs(torch.mul(pgd_adv_input.grad.data, batch_masks))) + weight_reg_coeff * weight_sum
+            return pgd_grad_reg + weight_reg_coeff * weight_sum
         case "pgd_ex+r3":
             # r3 term
             reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
