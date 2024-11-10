@@ -1,4 +1,5 @@
 import torch
+from torchvision.models import resnet50, ResNet50_Weights
 
 class LesionNet(torch.nn.Sequential):
     def __init__(self, in_channels, out_dim):
@@ -114,23 +115,21 @@ class DermaNet(torch.nn.Sequential):
                 )
 
 
-class SalientImageNet(torch.nn.Sequential):
-    def __init__(self, in_channels, out_dim):
-        output = torch.nn.Softmax(dim=-1) if out_dim > 1 else torch.nn.Sigmoid()
-        super().__init__(
-            torch.nn.Conv2d(in_channels, 32, 3, 1, 1),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(32, 32, 4, 2, 1),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(32, 64, 4, 1, 1),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(64, 64, 4, 2, 1),
-            torch.nn.ReLU(),
-            torch.nn.Flatten(start_dim=1, end_dim=-1),
-            torch.nn.Linear(193600, 1024, bias=True),
-            torch.nn.ReLU(),
-            torch.nn.Linear(1024, 1024, bias=True),
-            torch.nn.ReLU(),
-            torch.nn.Linear(1024, out_dim),
-            output
-        )
+class SalientImageNet(torch.nn.Module):
+    def __init__(self, num_classes: int):
+        super().__init__()
+        self.resnet = resnet50(weights=ResNet50_Weights.DEFAULT)
+        num_features = self.resnet.fc.in_features
+        self.resnet.fc = torch.nn.Identity()
+        self.fc = torch.nn.Linear(num_features, num_classes)
+        self.softmax = torch.nn.Softmax(dim=-1)
+
+    def forward(self, x):
+        y = self.resnet(x)
+        y = self.fc(y)
+        y = self.softmax(y)
+        return y
+
+class SeqSalientImageNet(torch.nn.Sequential):
+    def __init__(self, modules: list[torch.nn.Module]):
+        super().__init__(*modules)

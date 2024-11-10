@@ -27,7 +27,9 @@ class ImageNetDataset(Dataset):
 
         data_transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize((224, 224))
+            transforms.Resize((224, 224)),
+            transforms.Lambda(lambda x: x / 255.0),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
         label_transform = lambda label_idx: torch.nn.functional.one_hot(torch.tensor([label_idx]), num_classes=6).float()
 
@@ -97,6 +99,13 @@ class LazyImageNetDataset(Dataset):
         np.random.seed(split_seed)
 
         self.data_transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            # As per https://pytorch.org/hub/pytorch_vision_resnet/
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        self.mask_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize((224, 224))
         ])
@@ -132,7 +141,6 @@ class LazyImageNetDataset(Dataset):
         num_train = int(train_proportion * len(data_paths))
         split_indices = all_split_indices[:num_train] if is_train else all_split_indices[num_train:]
 
-
         self.data_paths = [data_paths[i] for i in split_indices]
         self.label_tensors = torch.stack([self.labels[i] for i in split_indices]).squeeze()
         self.mask_paths = [masks_paths[i] for i in split_indices]
@@ -141,18 +149,16 @@ class LazyImageNetDataset(Dataset):
         return len(self.data_paths)
 
     def __getitem__(self, idx):
-        data_img = Image.open(self.data_paths[idx])
+        data_img = Image.open(self.data_paths[idx]).convert("RGB")
         data_tensor = self.data_transform(data_img)
-        if data_tensor.shape[0] == 1:
-            # skip
-            return self.__getitem__(idx + 1)
         mask_tensor = torch.zeros(1, 224, 224, dtype=torch.float32) / 100
         if not self.mask_paths[idx] == "-1":
             mask_img = Image.open(self.mask_paths[idx])
-            mask_img = self.data_transform(mask_img)
+            mask_img = self.mask_transform(mask_img)
             mask_tensor = 1 - mask_img
             assert mask_tensor.shape == (1, 224, 224)
         mask_tensor = mask_tensor.repeat(3, 1, 1)
+        assert mask_tensor.shape == (3, 224, 224), data_tensor.shape == (3, 224, 224)
         return data_tensor, self.label_tensors[idx], mask_tensor
 
 def get_dataloader(plant_dset: ImageNetDataset, batch_size: int):

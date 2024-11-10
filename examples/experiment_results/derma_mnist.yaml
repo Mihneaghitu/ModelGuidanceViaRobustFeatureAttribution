@@ -1,17 +1,21 @@
 ibp_ex:
-  max_upper_bound: 817.223
-  min_lower_bound: -817.358
-  min_robust_delta: 1460.365
+  max_upper_bound: 248.327
+  min_lower_bound: -252.607
+  min_robust_delta: 147.806
   num_robust: 0.0
-  test_acc: 0.684
-  train_acc: 1.0
+  test_acc: 0.607
+  train_acc: 0.831
+  worst_group: 0
+  worst_group_acc: 0.572
 ibp_ex+r3:
-  max_upper_bound: 716.681
-  min_lower_bound: -716.618
-  min_robust_delta: 1202.81
+  max_upper_bound: 58.628
+  min_lower_bound: -58.977
+  min_robust_delta: 65.108
   num_robust: 0.0
-  test_acc: 0.707
-  train_acc: 0.999
+  test_acc: 0.762
+  train_acc: 0.766
+  worst_group: 1
+  worst_group_acc: 0.69
 r3:
   max_upper_bound: 910.418
   min_lower_bound: -910.413
@@ -20,12 +24,14 @@ r3:
   test_acc: 0.737
   train_acc: 0.743
 r4:
-  max_upper_bound: 2.843
-  min_lower_bound: -2.843
-  min_robust_delta: 4.845
+  max_upper_bound: 2.981
+  min_lower_bound: -2.989
+  min_robust_delta: 4.398
   num_robust: 0.0
-  test_acc: 0.781
-  train_acc: 0.788
+  test_acc: 0.79
+  train_acc: 0.798
+  worst_group: 1
+  worst_group_acc: 0.6928
 std:
   max_upper_bound: 8430.993
   min_lower_bound: -8428.731

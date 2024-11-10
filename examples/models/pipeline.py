@@ -1,7 +1,9 @@
 import torch
 import tqdm
 import sys
-from .robust_regularizer import input_gradient_interval_regularizer, input_gradient_pgd_regularizer
+from .robust_regularizer import (input_gradient_interval_regularizer,
+                                 input_gradient_pgd_regularizer,
+                                 smooth_gradient_regularizer)
 import os
 import yaml
 
@@ -78,7 +80,9 @@ def train_model_with_pgd_robust_input_grad(
     mlx_method: str, # one of ["std", "grad_cert", "ibp_ex", "r3" or "r4"]
     k: float, # input reg weight
     device: str,
-    weight_reg_coeff: float = 0.0
+    weight_reg_coeff: float = 0.0,
+    class_weights: list[float] = None,
+    num_iterations: int = 10
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
@@ -95,12 +99,16 @@ def train_model_with_pgd_robust_input_grad(
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_pgd_regularizer(
-                x, u, model, m, criterion, epsilon, num_iterations=10, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff
+                x, u, model, m, criterion, epsilon, num_iterations=num_iterations, regularizer_type=mlx_method,
+                device=device, weight_reg_coeff=weight_reg_coeff
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
             # output is [batch_size, 1], u is [bach_size] but BCELoss does not support different target and source sizes
             output = model(x).squeeze()
+            if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
+                batch_weights = torch.tensor([class_weights[int(label.item())] for label in u]).to(device)
+                criterion = torch.nn.BCELoss(weight=batch_weights)
             std_loss = criterion(output, u)
             loss = std_loss + k * inp_grad_reg
             # Backward and optimize
@@ -109,6 +117,51 @@ def train_model_with_pgd_robust_input_grad(
             optimizer.step()
             if i % 100 == 0:
                 progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+
+
+def train_model_with_smoothed_input_grad(
+    dl_train: torch.utils.data.DataLoader,
+    n_epochs: int,
+    model: torch.nn.Module,
+    learning_rate: float,
+    criterion: torch.nn.Module,
+    epsilon: float,
+    mlx_method: str, # one of ["rand_r4, "smooth_r3"]
+    k: float, # input reg weighting coefficient
+    device: str,
+    weight_reg_coeff: float = 0.0,
+    class_weights: list[float] = None,
+) -> None:
+    if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
+        raise ValueError("Criterion not supported")
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # pre-train the model
+    progress_bar = tqdm.trange(n_epochs, desc="Epoch", )
+    model = model.to(device).train()
+    for _ in progress_bar:
+        for i, (x, u, m) in enumerate(dl_train):
+            # Forward pass
+            u, x, m = u.to(device), x.to(device), m.to(device)
+            if isinstance(criterion, torch.nn.CrossEntropyLoss):
+                # The last module is either Softmax or Sigmoid, hence why the [-2] is used
+                u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
+            # For std, we will waste some time doing the bounds, but at least it is consistent across methods
+            inp_grad_reg = smooth_gradient_regularizer(
+                x, u, model, m, criterion, epsilon, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff
+            )
+            # output is [batch_size, 1], u is [bach_size] but BCELoss does not support different target and source sizes
+            output = model(x).squeeze()
+            if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
+                batch_weights = torch.tensor([class_weights[int(label.item())] for label in u]).to(device)
+                criterion = torch.nn.BCELoss(weight=batch_weights)
+            std_loss = criterion(output, u)
+            loss = std_loss + k * inp_grad_reg
+            # Backward and optimize
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            if i % 100 == 0:
+                progress_bar.set_postfix({"loss": loss.item(), "reg": k * inp_grad_reg})
 
 def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str,
                         multi_class: bool = False, suppress_log: bool = False) -> float:
@@ -138,13 +191,12 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
     # The model needs to be delta input robust only in the irrelevant features
     num_robust, min_robust_delta, num_test_samples = 0, 0, 0
     max_upper_bound, min_lower_bound = 0, 0
-    avg_abs_diff = 0
     model = model.to(device).eval()
     for test_batch, test_labels, test_masks in dl_masked:
         test_batch, test_labels, test_masks = test_batch.to(device), test_labels.to(device), test_masks.to(device)
         # The MLX method does not really matter, as we return the grads
         grad_bounds = input_gradient_interval_regularizer(model, test_batch, test_labels, loss_fn, epsilon, 0.0, return_grads=True,
-                                                          regularizer_type="r4", batch_masks=test_masks, has_conv=has_conv, device=device)
+            regularizer_type="r4", batch_masks=test_masks, has_conv=has_conv, device=device)
         d_l, d_u = grad_bounds[1]
         d_l, d_u = d_l * test_masks, d_u * test_masks
         for idx in range(len(test_batch)):

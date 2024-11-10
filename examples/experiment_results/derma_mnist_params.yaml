@@ -1,19 +1,19 @@
 ibp_ex:
   delta_threshold: 1
   epsilon: 0.05
-  k: 0.02
-  lr: 0.0001
-  num_epochs: 14
+  k: 0.6
+  lr: 0.001
+  num_epochs: 10
   restarts: 4
-  weight_coeff: 0.0008
+  weight_coeff: 0.0002
 ibp_ex+r3:
   delta_threshold: 1
   epsilon: 0.05
-  k: 0.023
-  lr: 0.0001
+  k: 0.5
+  lr: 0.001
   num_epochs: 10
   restarts: 4
-  weight_coeff: 0.0008
+  weight_coeff: 0.0002
 r3:
   delta_threshold: 1
   epsilon: 0.05
@@ -25,8 +25,8 @@ r3:
 r4:
   delta_threshold: 1
   epsilon: 0.05
-  k: 0.02
-  lr: 0.0001
+  k: 0.05
+  lr: 0.0003
   num_epochs: 12
   restarts: 4
   weight_coeff: -1

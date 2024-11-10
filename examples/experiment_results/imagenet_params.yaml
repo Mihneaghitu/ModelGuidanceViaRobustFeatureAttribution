@@ -15,10 +15,9 @@ r4:
   restarts: 3
   weight_coeff: -1
 std:
-  delta_threshold: 1
   epsilon: 0.1
-  k: 0.2
+  k: -1
   lr: 0.0002
-  num_epochs: 12
-  restarts: 3
+  num_epochs: 2
+  restarts: 1
   weight_coeff: -1

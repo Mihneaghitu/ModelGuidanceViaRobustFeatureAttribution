@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import sys
 sys.path.append("../")
 from datasets import derma_mnist, plant, decoy_mnist
-from models.R4_models import DermaNet, PlantNet
+from models.R4_models import DermaNet, PlantNet, SalientImageNet
 from models.fully_connected import FCNAugmented
 from models.pipeline import test_delta_input_robustness, test_model_accuracy
 import numpy as np
@@ -27,11 +27,11 @@ def worst_group_acc(model: torch.nn.Sequential, test_dloader: DataLoader, device
                     output = model(test_point).squeeze()
                     correct = 0
                     if multi_class:
-                        correct = (output.argmax(dim=0) == test_label).sum().item()
+                        correct = (output.argmax(dim=0) == test_label).item()
                     else:
-                        correct = ((output > 0.5) == (test_label)).sum().item()
-                    acc_per_class[int(test_label)] += correct / num_runs
-                    elems_per_class[int(test_label)] += 1 / num_runs
+                        correct = ((output > 0.5) == (test_label)).item()
+                    acc_per_class[int(test_label)] += correct
+                    elems_per_class[int(test_label)] += 1
     min_acc, min_class = 1, -1
     for i in range(num_classes):
         if elems_per_class[i] > 0:
@@ -103,28 +103,27 @@ def test_avg_delta(dset_name: str):
         print(f"Method {method} avg delta = {avg_delta}")
 
 
-def test_worst_group_acc():
-    assert len(sys.argv) == 2
-    assert sys.argv[1] in ["derma_mnist", "plant", "decoy_mnist"]
+def test_worst_group_acc(dset_name: str):
+    assert dset_name in ["derma_mnist", "plant", "decoy_mnist"]
     dev = torch.device("cuda:0")
-    if sys.argv[1] == "derma_mnist":
+    if dset_name == "derma_mnist":
         img_size = 64
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=img_size)
         dl_test = derma_mnist.get_dataloader(test_dset, 256)
         model = DermaNet(3, img_size, 1)
         for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
             worst_group_acc(model, dl_test, dev, 2, f"saved_experiment_models/performance/derma_mnist/{method}")
-    elif sys.argv[1] == "plant":
+    elif dset_name == "plant":
         split_root = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
         data_root = "/vol/bitbucket/mg2720/plant/rgb_data"
         masks_file = "/vol/bitbucket/mg2720/plant/mask/preprocessed_masks.pyu"
         plant_test_2 = plant.PlantDataset(split_root, data_root, masks_file, 2, False)
         dl_test = plant.get_dataloader(plant_test_2, 25)
         model = PlantNet(3, 1)
-        for method in ["ibp_ex"]:#["std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
+        for method in ["ibp_ex", "std", "r3", "r4", "ibp_ex", "ibp_ex+r3"]:
             print(f"Method {method}")
             worst_group_acc(model, dl_test, dev, 2, f"saved_experiment_models/performance/plant/{method}")
-    elif sys.argv[1] == "decoy_mnist":
+    elif dset_name == "decoy_mnist":
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
         model = FCNAugmented(784, 10, 512, 1)
@@ -133,4 +132,4 @@ def test_worst_group_acc():
     else:
         raise ValueError("Only 'derma_mnist' and 'plant' are supported")
 
-# test_avg_delta("plant")
+# test_worst_group_acc("derma_mnist")
