@@ -45,14 +45,14 @@ r4:
   test_acc: 0.978
   train_acc: 0.992
 r4_pmo:
-  max_upper_bound: 0.032
-  min_lower_bound: -0.032
-  min_robust_delta: 0.051
+  max_upper_bound: 4.625
+  min_lower_bound: -4.588
+  min_robust_delta: 8.691
   num_robust: 0.0
-  test_acc: 0.974
-  train_acc: 0.99
-  worst_group: 7
-  worst_group_acc: 0.964
+  test_acc: 0.954
+  train_acc: 0.971
+  worst_group: 5
+  worst_group_acc: 0.931
 rand_r4:
   max_upper_bound: 1.298
   min_lower_bound: -1.203

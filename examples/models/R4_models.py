@@ -116,7 +116,7 @@ class DermaNet(torch.nn.Sequential):
 
 
 class SalientImageNet(torch.nn.Module):
-    def __init__(self, num_classes: int):
+    def __init__(self, num_classes: int = 6):
         super().__init__()
         self.resnet = resnet18(weights=ResNet18_Weights.DEFAULT)
         num_features = self.resnet.fc.in_features

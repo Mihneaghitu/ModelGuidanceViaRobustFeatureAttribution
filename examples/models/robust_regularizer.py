@@ -28,7 +28,6 @@ def input_gradient_interval_regularizer(
     has_conv: bool = False,
     device: str = "cuda:0",
     weight_reg_coeff: float = 0.0,
-    perturb_mask_only: bool = False
 ) -> torch.Tensor | list[tuple[torch.Tensor]]:
     """
     Compute an interval over the gradients of the loss with respect to the inputs to the network. Then compute the norm
@@ -73,7 +72,7 @@ def input_gradient_interval_regularizer(
 
     # ================================= BOUNDS COMPUTATION =================================
     intermediate = None
-    if regularizer_type == "ibp_ex" or regularizer_type == "ibp_ex+r3" or (regularizer_type == "r4" and perturb_mask_only):
+    if regularizer_type == "ibp_ex" or regularizer_type == "ibp_ex+r3" or regularizer_type == "r4_pmo":
         intermediate = [(batch - epsilon * batch_masks, batch + epsilon * batch_masks)]
     else:
         intermediate = [(batch - epsilon, batch + epsilon)]
@@ -201,7 +200,7 @@ def smooth_gradient_regularizer(
 
     sampling_dist = torch.distributions.normal.Normal(0, epsilon)
     perturbation = sampling_dist.sample(batch.shape).to(device)
-    if perturb_mask_only:
+    if regularizer_type == "rand_r4_pmo":
         perturbation *= batch_masks
     perturbed_batch = batch + perturbation
 
@@ -239,7 +238,6 @@ def input_gradient_pgd_regularizer(
     device: str = "cuda:0",
     weight_reg_coeff: float = 0.0,
     clip_grad_bound: float = None,
-    perturb_mask_only: bool = False
 ) -> torch.Tensor:
     """This function is used to compute the adversarial perturbation budget for the input data batch and return it to be used as a regularization term
     in order to optimize the behaviour of a model to ignore irrelevant features. This is not a certification technique, but does provide a minimal level
@@ -260,6 +258,8 @@ def input_gradient_pgd_regularizer(
     """
     assert regularizer_type in ["pgd_r4", "pgd_ex+r3", "std", "pgd_ex", "r3", "pgd_r4_pmo"]
     assert batch_masks is not None
+    if regularizer_type == "std":
+        return 0
 
     pgd_adv_input = batch
     perturbation_masks = batch_masks if regularizer_type in ["pgd_ex", "pgd_r4_pmo"] else torch.ones_like(batch_masks).to(device)
@@ -321,8 +321,6 @@ def input_gradient_pgd_regularizer(
             loss.backward()
             reg_term = reg_term + torch.sum((batch.grad.data.reshape(batch_masks.shape) * batch_masks) ** 2)
             return weight_reg_coeff * weight_sum + reg_term
-        case "std":
-            return 0
 
 # This only works for robust explanation constraints
 def parameter_gradient_interval_regularizer(

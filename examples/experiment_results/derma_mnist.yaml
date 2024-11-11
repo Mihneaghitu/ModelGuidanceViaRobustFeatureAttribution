@@ -51,14 +51,14 @@ r4:
   worst_group: 1
   worst_group_acc: 0.6928
 r4_pmo:
-  max_upper_bound: 3.485
-  min_lower_bound: -3.485
-  min_robust_delta: 6.349
+  max_upper_bound: 3.568
+  min_lower_bound: -3.568
+  min_robust_delta: 5.403
   num_robust: 0.0
-  test_acc: 0.757
-  train_acc: 0.757
+  test_acc: 0.753
+  train_acc: 0.756
   worst_group: 0
-  worst_group_acc: 0.716
+  worst_group_acc: 0.7066
 rand_r4:
   max_upper_bound: 48.472
   min_lower_bound: -48.468

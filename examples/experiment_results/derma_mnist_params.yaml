@@ -50,9 +50,9 @@ r4_pmo:
   delta_threshold: 1
   epsilon: 0.15
   k: 0.06
-  lr: 0.0002
+  lr: 0.00025
   num_epochs: 14
-  restarts: 4
+  restarts: 3
   weight_coeff: -1
 rand_r4:
   delta_threshold: 1

@@ -47,6 +47,7 @@ def worst_group_acc(model: torch.nn.Sequential, test_dloader: DataLoader, device
     acc_per_class = [0] * num_classes
     elems_per_class = [0] * num_classes
     num_runs = len(os.listdir(runs_dir_root))
+    model.eval()
     with torch.no_grad():
         for run_idx in range(num_runs):
             model.load_state_dict(torch.load(f"{runs_dir_root}/run_{run_idx}.pt"))
@@ -104,7 +105,7 @@ def get_avg_rob_metrics(model: torch.nn.Sequential, test_dloader: DataLoader, de
 
 def test_avg_delta(dset_name: str):
     assert dset_name in ["derma_mnist", "plant", "decoy_mnist"]
-    dl_test, model_dir, model, device, loss_fn, eps, has_conv = None, None, None, "cuda:0", None, None, True
+    dl_test, model_dir, model, device, loss_fn, eps, has_conv = None, None, None, "cuda:1", None, None, True
     if dset_name == "derma_mnist":
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_test = derma_mnist.get_dataloader(test_dset, 256)
@@ -155,12 +156,12 @@ def test_worst_group_acc(dset_name: str):
         num_classes = 2
     elif dset_name == "imagenet":
         num_classes = 6
-        model = SalientImageNet(num_classes)
-        data_dir = "/vol/bitbucket/mg2720/imagenet100_data"
+        model = SalientImageNet()
+        data_dir = "/vol/bitbucket/mg2720/val.X"
         masks_dir = "/vol/bitbucket/mg2720/salient_imagenet_dataset"
 
-        test_imgnet = salient_imagenet.LazyImageNetDataset(data_dir, masks_dir, False)
-        dl_test = salient_imagenet.get_dataloader(test_imgnet, 25)
+        test_imgnet = salient_imagenet.LazyImageNetTestDataset(data_dir, masks_dir, False)
+        dl_test = salient_imagenet.get_dataloader(test_imgnet, 100)
     else: # decoy_mnist
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
@@ -192,11 +193,11 @@ def test_avg_acc(dset_name: str):
         num_classes = 2
     elif dset_name == "imagenet":
         num_classes = 6
-        model = SalientImageNet(num_classes)
-        data_dir = "/vol/bitbucket/mg2720/imagenet100_data"
+        model = SalientImageNet()
+        data_dir = "/vol/bitbucket/mg2720/val.X"
         masks_dir = "/vol/bitbucket/mg2720/salient_imagenet_dataset"
 
-        test_imgnet = salient_imagenet.LazyImageNetDataset(data_dir, masks_dir, False)
+        test_imgnet = salient_imagenet.LazyImageNetTestDataset(data_dir, masks_dir, False)
         dl_test = salient_imagenet.get_dataloader(test_imgnet, 100)
     else: # decoy_mnist
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)

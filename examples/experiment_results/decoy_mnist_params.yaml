@@ -48,8 +48,8 @@ r4:
   weight_coeff: -1
 r4_pmo:
   delta_threshold: 0.5
-  epsilon: 0.3
-  k: 20
+  epsilon: 0.5
+  k: 14
   lr: 0.01
   num_epochs: 25
   restarts: 4

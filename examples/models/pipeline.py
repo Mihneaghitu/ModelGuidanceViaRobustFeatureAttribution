@@ -18,7 +18,6 @@ def train_model_with_certified_input_grad(
     k: float, # input reg weight
     device: str,
     has_conv: bool,
-    perturb_mask_only: bool = False,
     k_schedule: callable = None,
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
@@ -43,7 +42,7 @@ def train_model_with_certified_input_grad(
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_interval_regularizer(
                 model, x, u, loss_fn, epsilon, 0.0, regularizer_type=mlx_method, batch_masks=m, has_conv=has_conv,
-                device=device, weight_reg_coeff=weight_reg_coeff, perturb_mask_only=perturb_mask_only
+                device=device, weight_reg_coeff=weight_reg_coeff
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
@@ -84,8 +83,8 @@ def train_model_with_pgd_robust_input_grad(
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
     num_iterations: int = 10,
-    perturb_mask_only: bool = False,
-    clip_grad_bound = None
+    clip_grad_bound = None,
+    suppress_tqdm: bool = False
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
@@ -103,7 +102,7 @@ def train_model_with_pgd_robust_input_grad(
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_pgd_regularizer(
                 x, u, model, m, criterion, epsilon, num_iterations=num_iterations, regularizer_type=mlx_method, device=device,
-                weight_reg_coeff=weight_reg_coeff, clip_grad_bound=clip_grad_bound, perturb_mask_only=perturb_mask_only
+                weight_reg_coeff=weight_reg_coeff, clip_grad_bound=clip_grad_bound
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
@@ -118,8 +117,9 @@ def train_model_with_pgd_robust_input_grad(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if i % 100 == 0:
-                progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+            if not suppress_tqdm:
+                if i % 100 == 0:
+                    progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
 
 
 def train_model_with_smoothed_input_grad(
@@ -134,7 +134,8 @@ def train_model_with_smoothed_input_grad(
     device: str,
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
-    perturb_mask_only: bool = False
+    perturb_mask_only: bool = False,
+    suppress_tqdm: bool = False
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
@@ -164,13 +165,15 @@ def train_model_with_smoothed_input_grad(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if i % 100 == 0:
-                progress_bar.set_postfix({"loss": loss.item(), "reg": k * inp_grad_reg})
+            if not suppress_tqdm:
+                if i % 100 == 0:
+                    progress_bar.set_postfix({"loss": loss.item(), "reg": k * inp_grad_reg})
 
 def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str,
                         multi_class: bool = False, suppress_log: bool = False) -> float:
     all_acc = 0
     num_inputs = 0
+    model.eval()
     for test_batch, test_labels, _ in dl_test:
         # Just do a simple forward and compare the output to the labels
         test_batch, test_labels = test_batch.to(device), test_labels.to(device)

@@ -6,7 +6,7 @@ import torch
 from models.pipeline import (train_model_with_certified_input_grad, test_model_accuracy,
                              test_delta_input_robustness, load_params_or_results_from_file,
                              write_results_to_file, uniformize_magnitudes_schedule,
-                             accumulate_model_with_certified_input_grad)
+                             train_model_with_pgd_robust_input_grad, train_model_with_smoothed_input_grad)
 from datasets import derma_mnist, plant, decoy_mnist
 from metrics import worst_group_acc
 from models.R4_models import DermaNet, PlantNet
@@ -46,23 +46,28 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
             train_acc, test_acc, num_robust, min_robust_delta, min_lower_bound, max_upper_bound = 0, 0, 0, 1e+8, 0, 0
             for i in range(restarts):
                 torch.manual_seed(i + seed)
-                curr_model, loss_fn, multi_class = None, "binary_cross_entropy", False
+                curr_model, loss_fn, multi_class, class_weights = None, "binary_cross_entropy", False, None
                 if dset_name == "derma_mnist":
                     curr_model = DermaNet(3, img_size, 1).to(device)
+                    class_weights = [0.4, 5.068] if method not in ["r3"] else None
                 elif dset_name == "plant":
                     curr_model = PlantNet(3, 1).to(device)
+                    class_weights = [6.589, 0.75]
                 else:
                     curr_model = FCNAugmented(784, 10, 512, 1).to(device)
                     multi_class = True
                     loss_fn = "cross_entropy"
                 print(f"========== Training model with method {method} restart {i} and mask ratio {mask_ratio} ==========")
                 k_schedule = uniformize_magnitudes_schedule if method == "r3" and dset_name != "plant" else None
-                if dset_name == "plant":
-                    accumulate_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
-                        k, device, has_conv, weight_reg_coeff=weight_coeff, num_accs=5, suppress_tqdm=True)
+                if method in ["pgd_r4", "pgd_r4_pmo"]:
+                    train_model_with_pgd_robust_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method, k, device,
+                        weight_reg_coeff=weight_coeff, suppress_tqdm=True, class_weights=class_weights)
+                elif method in ["rand_r4", "rand_r4_pmo", "smooth_r3", "smooth_r3_pmo"]:
+                    train_model_with_smoothed_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method, k, device,
+                        weight_reg_coeff=weight_coeff, suppress_tqdm=True, class_weights=class_weights)
                 else:
                     train_model_with_certified_input_grad(new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method,
-                        k, device, has_conv, weight_reg_coeff=weight_coeff, k_schedule=k_schedule, suppress_tqdm=True)
+                        k, device, has_conv, weight_reg_coeff=weight_coeff, k_schedule=k_schedule, suppress_tqdm=True, class_weights=class_weights)
                 train_acc += test_model_accuracy(curr_model, new_dl_train, device, multi_class=multi_class, suppress_log=True)
                 test_acc += test_model_accuracy(curr_model, dl_test, device, multi_class=multi_class, suppress_log=True)
                 n_r, min_delta, m_l, m_u = test_delta_input_robustness(dl_test, curr_model, epsilon, delta_threshold,
@@ -100,7 +105,7 @@ if sys.argv[1] == "derma_mnist":
     IMG_SIZE = 64
     train_dset = derma_mnist.DecoyDermaMNIST(True, size=IMG_SIZE)
     test_dset = derma_mnist.DecoyDermaMNIST(False, size=IMG_SIZE)
-    dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 256)
+    dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 267), derma_mnist.get_dataloader(test_dset, 267)
     dev = torch.device("cuda:0")
     ablate("derma_mnist", 0, True, torch.nn.BCELoss(), dev, img_size=IMG_SIZE, with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
 elif sys.argv[1] == "plant":
@@ -117,7 +122,8 @@ elif sys.argv[1] == "decoy_mnist":
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
     dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
     dev = torch.device("cuda:0")
-    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, mask_ratios=[0.8, 0.6, 0.4, 0.2, 0.17, 0.13, 0.1, 0.06, 0.03],
-           with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
+    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, mask_ratios=[0.8, 0.6, 0.4, 0.2, 0.1],
+        methods=["pgd_r4_pmo", "pgd_r4"],
+        with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
 else:
     raise ValueError("Only 'derma_mnist' and 'plant' are supported")
