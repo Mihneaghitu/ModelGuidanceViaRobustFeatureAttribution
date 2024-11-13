@@ -30,26 +30,29 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
         lr = params_dict["lr"]
         restarts = params_dict["restarts"]
         for mask_ratio in mask_ratios:
-            mask_ratio_dir = root_dir + method + f"/ratio_{int(mask_ratio * 100)}"
+            mask_ratio_dir = root_dir + method.removesuffix("_pmo") + f"/ratio_{int(mask_ratio * 100)}"
             os.makedirs(mask_ratio_dir, exist_ok=True)
             # Manipulate masks based on the dataset
             new_dl_train = None
-            r4_soft = (method == "r4" and (not with_data_removal))
+            non_mask_softness = (not with_data_removal and method in ["r4", "r4_pmo", "ibp_ex+r3", "ibp_ex", "r3"])
             if dset_name == "derma_mnist":
-                new_dl_train = derma_mnist.remove_masks(mask_ratio, dl_train, with_data_removal, r4_soft)
+                batch_size = 267 if method not in ["r3", "ibp_ex+r3", "ibp_ex", "r4", "r4_pmo"] else 256
+                drop_last = batch_size == 267
+                train_dloader = derma_mnist.get_dataloader(dl_train.dataset, batch_size, drop_last)
+                new_dl_train = derma_mnist.remove_masks(mask_ratio, train_dloader, with_data_removal, non_mask_softness)
             elif dset_name == "plant":
-                new_dl_train = plant.remove_masks(mask_ratio, dl_train, with_data_removal, r4_soft)
+                new_dl_train = plant.remove_masks(mask_ratio, dl_train, with_data_removal, non_mask_softness)
                 if method == "r4":
                     new_dl_train = plant.make_soft_masks(new_dl_train, params_dict["alpha_soft"])
             else:
-                new_dl_train = decoy_mnist.remove_masks(mask_ratio, dl_train, with_data_removal, r4_soft)
+                new_dl_train = decoy_mnist.remove_masks(mask_ratio, dl_train, with_data_removal, non_mask_softness)
             train_acc, test_acc, num_robust, min_robust_delta, min_lower_bound, max_upper_bound = 0, 0, 0, 1e+8, 0, 0
             for i in range(restarts):
                 torch.manual_seed(i + seed)
                 curr_model, loss_fn, multi_class, class_weights = None, "binary_cross_entropy", False, None
                 if dset_name == "derma_mnist":
                     curr_model = DermaNet(3, img_size, 1).to(device)
-                    class_weights = [0.4, 5.068] if method not in ["r3"] else None
+                    class_weights = [0.4, 5.068] if method != "r3" else None
                 elif dset_name == "plant":
                     curr_model = PlantNet(3, 1).to(device)
                     class_weights = [6.589, 0.75]
@@ -105,9 +108,13 @@ if sys.argv[1] == "derma_mnist":
     IMG_SIZE = 64
     train_dset = derma_mnist.DecoyDermaMNIST(True, size=IMG_SIZE)
     test_dset = derma_mnist.DecoyDermaMNIST(False, size=IMG_SIZE)
-    dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 267), derma_mnist.get_dataloader(test_dset, 267)
-    dev = torch.device("cuda:0")
-    ablate("derma_mnist", 0, True, torch.nn.BCELoss(), dev, img_size=IMG_SIZE, with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
+    dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 100)
+    dev = torch.device("cuda:1")
+    mask_ratios = [0.8, 0.6, 0.4, 0.2]
+    if not bool(int(sys.argv[2])): # only masks are removed
+        mask_ratios.append(0)
+    ablate("derma_mnist", 0, True, torch.nn.BCELoss(), dev, img_size=IMG_SIZE, methods=["ibp_ex+r3", "r4", "r3", "rand_r4_pmo"],
+           mask_ratios=mask_ratios, with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
 elif sys.argv[1] == "plant":
     SPLIT_ROOT = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
     DATA_ROOT = "/vol/bitbucket/mg2720/plant/rgb_data"
@@ -122,8 +129,10 @@ elif sys.argv[1] == "decoy_mnist":
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
     dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
     dev = torch.device("cuda:0")
-    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, mask_ratios=[0.8, 0.6, 0.4, 0.2, 0.1],
-        methods=["pgd_r4_pmo", "pgd_r4"],
-        with_data_removal=bool(int(sys.argv[2])), write_to_file=True)
+    mask_ratios = [0.8, 0.6, 0.4, 0.2]
+    if not bool(int(sys.argv[2])): # only masks are removed
+        mask_ratios.append(0)
+    ablate("decoy_mnist", 0, False, torch.nn.CrossEntropyLoss(), dev, mask_ratios=mask_ratios, write_to_file=True,
+        with_data_removal=bool(int(sys.argv[2])), methods=["ibp_ex+r3", "rand_r4_pmo", "r3"])
 else:
     raise ValueError("Only 'derma_mnist' and 'plant' are supported")

@@ -44,6 +44,8 @@ def get_dataloaders(train_batchsize, test_batchsize=500):
     return dl_train, dl_test
 
 def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal: bool = False, r4_soft: bool = False) -> DataLoader:
+    if ratio_preserved == 1:
+        return dloader
     ratio_removed = 1 - ratio_preserved
     num_classes = 10
     # group by label
@@ -63,17 +65,19 @@ def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal:
     non_zero_masks_indices = np.concatenate(indices_per_label_preserved).astype(int)
     if with_data_removal:
         # remove data, labels and masks completely - sample complexity across the board
-        new_data = dloader.dataset.tensors[0][non_zero_masks_indices]
-        new_labels = dloader.dataset.tensors[1][non_zero_masks_indices]
-        new_masks = dloader.dataset.tensors[2][non_zero_masks_indices]
+        new_data = (dloader.dataset.tensors[0].clone())[non_zero_masks_indices]
+        new_labels = (dloader.dataset.tensors[1].clone())[non_zero_masks_indices]
+        new_masks = (dloader.dataset.tensors[2].clone())[non_zero_masks_indices]
         dloader = DataLoader(TensorDataset(new_data, new_labels, new_masks), batch_size=dloader.batch_size, shuffle=True)
     else:
+        new_masks = dloader.dataset.tensors[2].clone()
         for zero_mask_index in zero_masks_indices:
             if r4_soft:
-                dloader.dataset.tensors[2][zero_mask_index] = torch.ones_like(dloader.dataset.tensors[2][zero_mask_index])
-                dloader.dataset.tensors[2][zero_mask_index] /= 100
+                new_masks[zero_mask_index] = torch.ones_like(new_masks[zero_mask_index])
+                new_masks[zero_mask_index] /= 100
             else:
-                dloader.dataset.tensors[2][zero_mask_index] = torch.zeros_like(dloader.dataset.tensors[2][zero_mask_index])
+                new_masks[zero_mask_index] = torch.zeros_like(new_masks[zero_mask_index])
+        dloader = DataLoader(TensorDataset(dloader.dataset.tensors[0], dloader.dataset.tensors[1], new_masks), batch_size=dloader.batch_size, shuffle=True)
 
     return dloader
 

@@ -38,7 +38,7 @@ class PlantNet(torch.nn.Sequential):
         )
 
 class DermaNet(torch.nn.Sequential):
-    def __init__(self, in_channels, feature_size, out_dim, arch_type: str = "large_medium"):
+    def __init__(self, in_channels, feature_size, out_dim, arch_type: str = "medium_large"):
         self.latent_dim = {28: 2304, 64: 14400, 128: 61504, 224: 193600}
         self.in_channels = in_channels
         self.feature_size = feature_size
@@ -73,7 +73,7 @@ class DermaNet(torch.nn.Sequential):
                     torch.nn.Linear(1024, self.out_dim, bias=True),
                     torch.nn.Sigmoid()
                 )
-            case "large_medium":
+            case "medium_large":
                 return (
                     torch.nn.Conv2d(self.in_channels, 32, 3, 1, 1),
                     torch.nn.ReLU(),
@@ -127,7 +127,7 @@ class SalientImageNet(torch.nn.Module):
 
     def forward(self, x):
         y = self.resnet(x)
-        y = self.dropout(y)
+       # y = self.dropout(y)
         y = self.fc(y)
         y = self.softmax(y)
         return y

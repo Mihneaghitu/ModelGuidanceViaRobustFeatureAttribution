@@ -26,14 +26,14 @@ pgd_r4:
   worst_group: 1
   worst_group_acc: 0.22
 pgd_r4_pmo:
-  max_upper_bound: 2033.615
-  min_lower_bound: -2033.439
-  min_robust_delta: 3788.049
+  max_upper_bound: 1773.264
+  min_lower_bound: -1773.29
+  min_robust_delta: 3221.766
   num_robust: 0.0
-  test_acc: 0.704
-  train_acc: 0.704
-  worst_group: 1
-  worst_group_acc: 0.265
+  test_acc: 0.674
+  train_acc: 0.674
+  worst_group: 0
+  worst_group_acc: 0.574
 r3:
   max_upper_bound: 910.418
   min_lower_bound: -910.413

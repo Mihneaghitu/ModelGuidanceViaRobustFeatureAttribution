@@ -22,3 +22,4 @@ examples/datasets/MNIST/*
 .models
 .data
 .datasets
+examples/saved_experiment_models

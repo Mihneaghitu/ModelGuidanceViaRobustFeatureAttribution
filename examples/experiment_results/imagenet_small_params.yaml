@@ -7,32 +7,24 @@ pgd_r4:
   weight_coeff: 1.0e-05
 pgd_r4_pmo:
   epsilon: 0.03
-  k: 0.3
+  k: 1
   lr: 0.0001
-  num_epochs: 7
+  num_epochs: 8
   restarts: 3
   weight_coeff: 1.0e-05
-r3:
+rand_r4_pmo:
   delta_threshold: 1
-  epsilon: 0.01
-  k: 0.08
-  lr: 0.0004
-  num_epochs: 12
-  restarts: 3
-  weight_coeff: 0.0001
-r4:
-  delta_threshold: 1
-  epsilon: 0.01
-  k: 0.01
-  lr: 0.0005
-  num_epochs: 14
-  restarts: 3
-  weight_coeff: -1
-smooth_r3:
-  epsilon: 0.01
-  k: 0.4
+  epsilon: 0.03
+  k: 200000.0
   lr: 8.0e-05
   num_epochs: 7
+  restarts: 3
+  weight_coeff: 0
+smooth_r3:
+  epsilon: 0.01
+  k: 400
+  lr: 8.0e-05
+  num_epochs: 10
   restarts: 3
   weight_coeff: 1.0e-06
 std:

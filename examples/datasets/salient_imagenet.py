@@ -18,8 +18,9 @@ WNID_TO_LABEL_DICT = {
     "n01698640": 5  # 50, American Alligator
 }
 
-class LazyImageNetTrainDataset(Dataset):
-    def __init__(self, data_dir: str, masks_dir: str, is_train: bool, preprocess: callable = None, train_proportion: float = 0.75, split_seed: int = 0):
+class LazyImageNetDataset(Dataset):
+    def __init__(self, data_dir: str, masks_dir: str, preprocess: callable = None, split_seed: int = 0, skip_empty_masks: bool = False,
+                 is_train: bool = True):
         ImageFile.LOAD_TRUNCATED_IMAGES = True
         # Get the names of all subdirs in data_dir
         self.relevant_classes = list(WNID_TO_LABEL_DICT.keys())
@@ -63,24 +64,31 @@ class LazyImageNetTrainDataset(Dataset):
                     data_paths.append(curr_data_path)
                     mask_paths.append("-1") # dummy flag
                     labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
-            # if is_train:
-            #     self.data_paths += data_paths[:1000]
-            #     self.labels += labels[:1000]
-            #     self.mask_paths += mask_paths[:1000]
-            # else:
-            #     self.data_paths += data_paths[1000:]
-            #     self.labels += labels[1000:]
-            #     self.mask_paths += mask_paths[1000:]
-            # data_paths, mask_paths, labels = [], [], []
 
-        # all_split_indices = np.random.permutation(len(data_paths))
-        # num_train = int(train_proportion * len(data_paths))
-        # split_indices = all_split_indices[:num_train] if is_train else all_split_indices[num_train:]
-        split_indices = list(range(len(data_paths)))
+        data_paths, mask_paths, labels = zip(*[(d, m, l) for d, m, l in zip(data_paths, mask_paths, labels) if not m == "-1"])
+        data_paths, mask_paths, labels = list(data_paths), list(mask_paths), list(labels)
+
+        train_proportion = 0.8
+        all_split_indices = np.random.permutation(len(data_paths))
+        num_train = int(train_proportion * len(data_paths))
+        split_indices = all_split_indices[:num_train] if is_train else all_split_indices[num_train:]
 
         self.data_paths = [data_paths[i] for i in split_indices]
         self.label_tensors = torch.stack(labels).squeeze()
         self.mask_paths = [mask_paths[i] for i in split_indices]
+        # if not skip_empty_masks:
+        #     self.data_paths = [data_paths[i] for i in split_indices]
+        #     self.label_tensors = torch.stack(labels).squeeze()
+        #     self.mask_paths = [mask_paths[i] for i in split_indices]
+        # else:
+        #     self.data_paths, self.label_tensors, self.mask_paths = [], [], []
+        #     for i in split_indices:
+        #         if not mask_paths[i] == "-1":
+        #             self.data_paths.append(data_paths[i])
+        #             self.label_tensors.append(labels[i])
+        #             self.mask_paths.append(mask_paths[i])
+        #     self.label_tensors = torch.stack(self.label_tensors).squeeze()
+
 
     def __len__(self):
         return len(self.data_paths)
@@ -100,7 +108,7 @@ class LazyImageNetTrainDataset(Dataset):
 
 
 class LazyImageNetTestDataset(Dataset):
-    def __init__(self, data_dir: str, masks_dir: str, is_train: bool, preprocess: callable = None, train_proportion: float = 0.75, split_seed: int = 0):
+    def __init__(self, data_dir: str, masks_dir: str, preprocess: callable = None, split_seed: int = 0):
         ImageFile.LOAD_TRUNCATED_IMAGES = True
         # Get the names of all subdirs in data_dir
         self.relevant_classes = list(WNID_TO_LABEL_DICT.keys())

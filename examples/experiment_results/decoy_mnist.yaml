@@ -6,12 +6,14 @@ ibp_ex:
   test_acc: 0.925
   train_acc: 0.947
 ibp_ex+r3:
-  max_upper_bound: 2.265
-  min_lower_bound: -2.101
+  max_upper_bound: 2.2651
+  min_lower_bound: -2.1011
   min_robust_delta: 3.326
   num_robust: 0.0
-  test_acc: 0.929
-  train_acc: 0.938
+  test_acc: 0.9289
+  train_acc: 0.9383
+  worst_group: 9
+  worst_group_acc: 0.8816
 pgd_r4:
   max_upper_bound: 7.404
   min_lower_bound: -6.559
@@ -22,14 +24,14 @@ pgd_r4:
   worst_group: 9
   worst_group_acc: 0.533
 pgd_r4_pmo:
-  max_upper_bound: 6.602
-  min_lower_bound: -5.907
-  min_robust_delta: 9.814
+  max_upper_bound: 2.109
+  min_lower_bound: -2.012
+  min_robust_delta: 3.141
   num_robust: 0.0
-  test_acc: 0.894
-  train_acc: 0.968
-  worst_group: 9
-  worst_group_acc: 0.612
+  test_acc: 0.905
+  train_acc: 0.914
+  worst_group: 8
+  worst_group_acc: 0.827
 r3:
   max_upper_bound: 7.443
   min_lower_bound: -6.563
@@ -54,14 +56,14 @@ r4_pmo:
   worst_group: 5
   worst_group_acc: 0.931
 rand_r4:
-  max_upper_bound: 1.298
-  min_lower_bound: -1.203
+  max_upper_bound: 1.2977
+  min_lower_bound: -1.2034
   min_robust_delta: 1.99
   num_robust: 0.0
-  test_acc: 0.916
-  train_acc: 0.92
+  test_acc: 0.9159
+  train_acc: 0.9199
   worst_group: 5
-  worst_group_acc: 0.853
+  worst_group_acc: 0.8534
 rand_r4_pmo:
   max_upper_bound: 1.298
   min_lower_bound: -1.203

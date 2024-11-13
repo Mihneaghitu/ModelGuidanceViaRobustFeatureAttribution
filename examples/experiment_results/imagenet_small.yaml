@@ -1,0 +1,25 @@
+pgd_r4:
+  test_acc: 0.92
+  train_acc: 1.0
+  worst_group: 3
+  worst_group_acc: 0.827
+pgd_r4_pmo:
+  test_acc: 0.92
+  train_acc: 1.0
+  worst_group: 3
+  worst_group_acc: 0.8
+rand_r4_pmo:
+  test_acc: 0.97
+  train_acc: 1.0
+  worst_group: 3
+  worst_group_acc: 0.9267
+smooth_r3:
+  test_acc: 0.936
+  train_acc: 1.0
+  worst_group: 3
+  worst_group_acc: 0.833
+std:
+  test_acc: 0.923
+  train_acc: 1.0
+  worst_group: 3
+  worst_group_acc: 0.84

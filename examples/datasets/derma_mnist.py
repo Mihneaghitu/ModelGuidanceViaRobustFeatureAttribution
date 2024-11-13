@@ -102,12 +102,13 @@ class BasicDermaMNIST(Dataset):
     def __getitem__(self, idx):
         return self.dset_inputs[idx], self.dset_labels[idx], self.dset_masks[idx]
 
-def get_dataloader(dset: DecoyDermaMNIST, batch_size: int):
-    return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=True)
-
+def get_dataloader(dset: DecoyDermaMNIST, batch_size: int, drop_last: bool = False):
+    return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=True, drop_last=drop_last)
 
 def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, with_data_removal: bool = False, r4_soft: bool = False) -> torch.utils.data.DataLoader:
     assert isinstance(dloader.dataset, DecoyDermaMNIST), "The dataset must be an instance of DecoyDermaMNIST"
+    if ratio_preserved == 1:
+        return dloader
     ratio_removed = 1 - ratio_preserved
     num_classes = 2
     # group by label
@@ -132,11 +133,12 @@ def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, w
         new_dset = BasicDermaMNIST(ds, ls, ms)
         dloader = torch.utils.data.DataLoader(new_dset, batch_size=dloader.batch_size, shuffle=True)
     else:
+        new_masks = dloader.dataset.dset_masks.clone()
         for zero_mask_index in zero_masks_indices:
             if r4_soft:
-                dloader.dataset.dset_masks[zero_mask_index] = torch.ones_like(dloader.dataset.dset_masks[zero_mask_index])
-                dloader.dataset.dset_masks[zero_mask_index] /= 100
+                new_masks[zero_mask_index] = torch.ones_like(new_masks[zero_mask_index])
+                new_masks[zero_mask_index] /= 25
             else:
-                dloader.dataset.dset_masks[zero_mask_index] = torch.zeros_like(dloader.dataset.dset_masks[zero_mask_index])
+                new_masks[zero_mask_index] = torch.zeros_like(new_masks[zero_mask_index])
 
     return dloader

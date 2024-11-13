@@ -90,10 +90,13 @@ def train_model_with_pgd_robust_input_grad(
         raise ValueError("Criterion not supported")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     # pre-train the model
-    progress_bar = tqdm.trange(n_epochs, desc="Epoch", )
+    progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
     model = model.to(device).train()
     for _ in progress_bar:
         for i, (x, u, m) in enumerate(dl_train):
+            # if the batch is not full (last batch), skip it
+            if x.shape[0] != dl_train.batch_size:
+                continue
             # Forward pass
             u, x, m = u.to(device), x.to(device), m.to(device)
             if isinstance(criterion, torch.nn.CrossEntropyLoss):
@@ -140,10 +143,13 @@ def train_model_with_smoothed_input_grad(
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    progress_bar = tqdm.trange(n_epochs, desc="Epoch", )
+    progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
     model = model.to(device).train()
     for _ in progress_bar:
         for i, (x, u, m) in enumerate(dl_train):
+            # if the batch is not full (last batch), skip it
+            if x.shape[0] != dl_train.batch_size:
+                continue
             # Forward pass
             u, x, m = u.to(device), x.to(device), m.to(device)
             if isinstance(criterion, torch.nn.CrossEntropyLoss):
@@ -188,9 +194,9 @@ def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.Da
     all_acc /= num_inputs
     if not suppress_log:
         print("--- Model accuracy ---")
-        print(f"Nominal = {all_acc:.2g}")
+        print(f"Nominal = {all_acc:.4g}")
 
-    return round(all_acc, 3)
+    return round(all_acc, 4)
 
 def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: torch.nn.Sequential, epsilon: float, delta: float,
     loss_fn: str, device: str, has_conv: bool = False, suppress_log: bool = False) -> tuple[float, float, float, float]:

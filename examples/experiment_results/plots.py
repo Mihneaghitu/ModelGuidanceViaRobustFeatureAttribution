@@ -8,14 +8,13 @@ import numpy as np
 import seaborn as sns
 from examples.datasets import derma_mnist, decoy_mnist
 from examples.models.R4_models import DermaNet
-from examples.metrics import get_avg_acc_with_stddev, get_avg_rob_metrics
+from examples.metrics import get_avg_acc_with_stddev, get_avg_rob_metrics, get_avg_wg_acc_with_stddev
 from examples.models.fully_connected import FCNAugmented
 import pandas as pd
 
 
-def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False) -> None:
+def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False, methods: list[str] = ["r3", "ibp_ex+r3", "r4", "rand_r4"]) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
-    methods = ["r3", "r4", "ibp_ex", "ibp_ex+r3"]
     suffix = "data_and_mask" if with_data else "mask"
     dl_test, model_dir, model, eps, has_conv, num_classes, loss_fn = None, None, None, None, None, None, None
     if dset_name == "decoy_mnist":
@@ -38,18 +37,20 @@ def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False) -> N
         num_classes = 2
     dset_name = dset_name.replace("_", " ")
 
-    sns.set_theme(context="poster", font_scale=2)
+    sns.set_theme(context="poster", font_scale=3)
     sns.color_palette("bright")
     ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0])
+    if with_data:
+        ratios = ratios[:-1] # the 0 data does not make any sense, it is basically a randomly initialized model
     fig, ax = plt.subplots(2, 2, figsize=(70, 45))
     for method in methods:
-        mean_accs, std_dev_accs = [], [],
+        mean_wg_accs, std_wg_dev_accs = [], [],
         mean_delta, mean_lb, mean_ub, std_dev_delta, std_dev_lb, std_dev_ub = [], [], [], [], [], []
         for ratio in ratios:
             dir_for_method = model_dir + f"/{method}" + f"/ratio_{int(ratio * 100)}"
-            avg_acc_ratio, std_dev_acc_ratio = get_avg_acc_with_stddev(model, dl_test, "cuda:0", dir_for_method, num_classes)
-            mean_accs.append(avg_acc_ratio)
-            std_dev_accs.append(std_dev_acc_ratio)
+            avg_wg_acc_ratio, std_wg_dev_acc_ratio = get_avg_wg_acc_with_stddev(model, dl_test, "cuda:0", num_classes, dir_for_method)
+            mean_wg_accs.append(avg_wg_acc_ratio)
+            std_wg_dev_accs.append(std_wg_dev_acc_ratio)
             avg_delta_ratio, avg_lb_ratio, avg_ub_ratio, std_delta_ratio, std_lb_ratio, std_ub_ratio = get_avg_rob_metrics(
                 model, dl_test, "cuda:0", dir_for_method, eps, loss_fn, has_conv)
             mean_delta.append(avg_delta_ratio)
@@ -59,33 +60,35 @@ def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False) -> N
             std_dev_lb.append(std_lb_ratio)
             std_dev_ub.append(std_ub_ratio)
 
-        sns.lineplot(x=ratios, y=mean_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][0], linewidth=10, estimator=None)
+        xlabel_suffix = "and data" if with_data else ""
+        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][0], linewidth=10, estimator=None)
         sns.lineplot(x=ratios, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][1], linewidth=10, estimator=None)
         sns.lineplot(x=ratios, y=mean_lb, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][0], linewidth=10, estimator=None)
         sns.lineplot(x=ratios, y=mean_ub, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][1], linewidth=10, estimator=None)
-        ax[0][0].fill_between(ratios, np.array(mean_accs) - np.array(std_dev_accs), np.array(mean_accs) + np.array(std_dev_accs), alpha=0.25)
+        ax[0][0].fill_between(ratios, np.array(mean_wg_accs) - np.array(std_wg_dev_accs), np.array(mean_wg_accs) + np.array(std_wg_dev_accs), alpha=0.15)
         ax[0][0].xaxis.set_inverted(True)
-        ax[0][0].set(xlabel="Mask Ratio\n", ylabel="Average Test Accuracy")
-        ax[0][1].fill_between(ratios, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.25)
+        ax[0][0].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Worst Group Test Accuracy")
+        ax[0][1].fill_between(ratios, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
         ax[0][1].xaxis.set_inverted(True)
-        ax[0][1].set(xlabel="Mask Ratio\n", ylabel=r'Average $\delta$')
+        ax[0][1].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel=r'Average $\delta$')
         ax[0][1].set_yscale("symlog")
-        ax[1][0].fill_between(ratios, np.array(mean_lb) - np.array(std_dev_lb), np.array(mean_lb) + np.array(std_dev_lb), alpha=0.25)
+        ax[1][0].fill_between(ratios, np.array(mean_lb) - np.array(std_dev_lb), np.array(mean_lb) + np.array(std_dev_lb), alpha=0.15)
         ax[1][0].xaxis.set_inverted(True)
         ax[1][0].set_yscale("symlog")
-        ax[1][0].set(xlabel="Mask Ratio", ylabel="Average Lower Bound")
-        ax[1][1].fill_between(ratios, np.array(mean_ub) - np.array(std_dev_ub), np.array(mean_ub) + np.array(std_dev_ub), alpha=0.25)
+        ax[1][0].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Lower Bound")
+        ax[1][1].fill_between(ratios, np.array(mean_ub) - np.array(std_dev_ub), np.array(mean_ub) + np.array(std_dev_ub), alpha=0.15)
         ax[1][1].xaxis.set_inverted(True)
         ax[1][1].set_yscale("symlog")
-        ax[1][1].set(xlabel="Mask Ratio", ylabel="Average Upper Bound")
+        ax[1][1].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Upper Bound")
 
     title_suffix = "and data" if with_data else ""
-    ax[0][0].set_title(f"Average test accuracy for {dset_name.upper()} upon varying \n the ratio of mask {title_suffix}", weight="bold", fontsize=60)
+    ax[0][0].set_title(f"Worst group test accuracy for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
     ax[0][1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n upon varying the ratio of mask {title_suffix}",
-                       weight="bold", fontsize=60)
-    ax[1][0].set_title(f"Average lower bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold", fontsize=60)
-    ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold", fontsize=60)
+                       weight="bold")
+    ax[1][0].set_title(f"Average lower bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
+    ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
 
+    plt.tight_layout()
     plt.show()
 
 
@@ -132,7 +135,7 @@ def make_performance_plots_for_dset(dset_name: str) -> None:
 
 def make_model_ablation_paper_plots(dset_name: str) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
-    methods = ["r3", "r4", "ibp_ex", "ibp_ex+r3"]
+    methods = ["r3", "r4", "ibp_ex+r3", "rand_r4"]
     dl_test, model_dir, size_names, eps, has_conv, num_classes, loss_fn, model_archs = None, None, None, None, None, None, None, None
     if dset_name == "decoy_mnist":
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
@@ -155,9 +158,10 @@ def make_model_ablation_paper_plots(dset_name: str) -> None:
         num_classes = 2
         size_names = ["small", "small_medium", "medium_large", "large"]
 
-    sns.set_theme(context="poster", font_scale=2)
+    sns.set_theme(context="poster", font_scale=3)
     sns.color_palette("bright")
     fig, ax = plt.subplots(2, 2, figsize=(70, 45))
+    size_name_xlabels = ["1 layer", "2 layers", "3 layers", "4 layers"]
     for method in methods:
         mean_accs, std_dev_accs = [], [],
         mean_delta, mean_lb, mean_ub, std_dev_delta, std_dev_lb, std_dev_ub = [], [], [], [], [], []
@@ -176,28 +180,30 @@ def make_model_ablation_paper_plots(dset_name: str) -> None:
             std_dev_lb.append(std_lb_ratio)
             std_dev_ub.append(std_ub_ratio)
 
-        sns.lineplot(x=size_names, y=mean_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][0], linewidth=10, estimator=None)
-        sns.lineplot(x=size_names, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][1], linewidth=10, estimator=None)
-        sns.lineplot(x=size_names, y=mean_lb, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][0], linewidth=10, estimator=None)
-        sns.lineplot(x=size_names, y=mean_ub, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][1], linewidth=10, estimator=None)
-        ax[0][0].fill_between(size_names, np.array(mean_accs) - np.array(std_dev_accs), np.array(mean_accs) + np.array(std_dev_accs), alpha=0.35)
+        sns.lineplot(x=size_name_xlabels, y=mean_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][0], linewidth=10, estimator=None)
+        sns.lineplot(x=size_name_xlabels, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][1], linewidth=10, estimator=None)
+        sns.lineplot(x=size_name_xlabels, y=mean_lb, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][0], linewidth=10, estimator=None)
+        sns.lineplot(x=size_name_xlabels, y=mean_ub, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][1], linewidth=10, estimator=None)
+        ax[0][0].fill_between(size_name_xlabels, np.array(mean_accs) - np.array(std_dev_accs), np.array(mean_accs) + np.array(std_dev_accs), alpha=0.15)
         ax[0][0].set(xlabel="Model Size\n \n", ylabel="Average Test Accuracy")
-        ax[0][1].fill_between(size_names, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.35)
+        ax[0][1].fill_between(size_name_xlabels, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
         ax[0][1].set(xlabel="Model Size\n \n", ylabel=r'Average $\delta$')
         ax[0][1].set_yscale("symlog")
-        ax[1][0].fill_between(size_names, np.array(mean_lb) - np.array(std_dev_lb), np.array(mean_lb) + np.array(std_dev_lb), alpha=0.35)
+        ax[1][0].fill_between(size_name_xlabels, np.array(mean_lb) - np.array(std_dev_lb), np.array(mean_lb) + np.array(std_dev_lb), alpha=0.15)
         ax[1][0].set(xlabel="Model Size", ylabel="Average Lower Bound")
         ax[1][0].set_yscale("symlog")
-        ax[1][1].fill_between(size_names, np.array(mean_ub) - np.array(std_dev_ub), np.array(mean_ub) + np.array(std_dev_ub), alpha=0.35)
+        ax[1][1].fill_between(size_name_xlabels, np.array(mean_ub) - np.array(std_dev_ub), np.array(mean_ub) + np.array(std_dev_ub), alpha=0.15)
         ax[1][1].set(xlabel="Model Size", ylabel="Average Upper Bound")
         ax[1][1].set_yscale("symlog")
 
-    ax[0][0].set_title(f"Test Accuracy {dset_name.upper()} upon varying \n the model size", weight="bold", fontsize=60)
+    dset_name = dset_name.replace("_", " ")
+    ax[0][0].set_title(f"Test Accuracy of {dset_name.upper()} upon varying \n the model size", weight="bold")#, fontsize=60)
     ax[0][1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + \
-                          f"{dset_name.upper()} \n upon varying the model size", weight="bold", fontsize=60)
-    ax[1][0].set_title(f"Average Lower bound for {dset_name.upper()} upon \n varying the model size", weight="bold", fontsize=60)
-    ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the model size", weight="bold", fontsize=60)
+                          f"{dset_name.upper()} \n upon varying the model size", weight="bold")#, fontsize=60)
+    ax[1][0].set_title(f"Average Lower bound for {dset_name.upper()} upon \n varying the model size", weight="bold")#, fontsize=60)
+    ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the model size", weight="bold")#, fontsize=60)
 
+    plt.tight_layout()
     plt.show()
 
 def make_sample_complexity_plots_for_dset(dset_name: str, with_data_removal: bool = False) -> None:

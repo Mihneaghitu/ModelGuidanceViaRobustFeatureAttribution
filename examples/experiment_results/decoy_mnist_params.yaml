@@ -24,12 +24,12 @@ pgd_r4:
   weight_coeff: 0.0005
 pgd_r4_pmo:
   delta_threshold: 0.5
-  epsilon: 0.3
-  k: 0.7
-  lr: 0.025
-  num_epochs: 35
+  epsilon: 0.2
+  k: 0.3
+  lr: 0.06
+  num_epochs: 30
   restarts: 4
-  weight_coeff: 0.0006
+  weight_coeff: 0.004
 r3:
   delta_threshold: 0.5
   epsilon: 0.1
