@@ -1,88 +1,112 @@
 ibp_ex:
-  delta_threshold: 0.5
-  epsilon: 0.1
-  k: 0.12
-  lr: 0.02
+  class_weights: -1
+  epsilon: 0.25
+  has_conv: false
+  k: 4
+  lr: 0.075
+  multi_class: true
   num_epochs: 30
   restarts: 4
-  weight_coeff: 0.008
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
+  weight_coeff: 0.0002
+  with_k_schedule: false
 ibp_ex+r3:
-  delta_threshold: 0.5
-  epsilon: 0.1
-  k: 0.2
-  lr: 0.02
-  num_epochs: 20
+  class_weights: -1
+  epsilon: 0.15
+  has_conv: false
+  k: 2.1
+  lr: 0.01
+  multi_class: true
+  num_epochs: 30
   restarts: 4
-  weight_coeff: 0.006
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
+  weight_coeff: 0.0006
+  with_k_schedule: false
 pgd_r4:
-  delta_threshold: 0.5
-  epsilon: 0.1
-  k: 0.7
-  lr: 0.03
-  num_epochs: 30
-  restarts: 4
-  weight_coeff: 0.0005
-pgd_r4_pmo:
-  delta_threshold: 0.5
-  epsilon: 0.2
-  k: 0.3
-  lr: 0.06
-  num_epochs: 30
-  restarts: 4
-  weight_coeff: 0.004
-r3:
-  delta_threshold: 0.5
-  epsilon: 0.1
-  k: 0.05
-  lr: 0.01
-  num_epochs: 20
-  restarts: 4
-  weight_coeff: 0.006
-r4:
-  delta_threshold: 0.5
-  epsilon: 0.1
-  k: 1
-  lr: 0.02
-  num_epochs: 25
-  restarts: 4
-  weight_coeff: -1
-r4_pmo:
-  delta_threshold: 0.5
+  class_weights: -1
   epsilon: 0.5
+  has_conv: false
   k: 14
-  lr: 0.01
+  lr: 0.001
+  multi_class: true
+  num_epochs: 30
+  restarts: 4
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
+  weight_coeff: 0.0001
+  with_k_schedule: false
+r3:
+  class_weights: -1
+  epsilon: 0.1
+  has_conv: false
+  k: 10
+  lr: 0.025
+  multi_class: true
   num_epochs: 25
   restarts: 4
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
+  weight_coeff: 0.0001
+  with_k_schedule: false
+r4:
+  class_weights: -1
+  epsilon: 0.5
+  has_conv: false
+  k: 15
+  lr: 0.001
+  multi_class: true
+  num_epochs: 25
+  restarts: 4
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
   weight_coeff: -1
+  with_k_schedule: false
 rand_r4:
-  delta_threshold: 0.5
-  epsilon: 0.1
-  k: 20
-  lr: 0.02
+  class_weights: -1
+  epsilon: 0.5
+  has_conv: false
+  k: 15
+  lr: 0.001
+  multi_class: true
   num_epochs: 30
   restarts: 4
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
   weight_coeff: 0.0001
-rand_r4_pmo:
-  delta_threshold: 0.5
-  epsilon: 0.3
-  k: 20
-  lr: 0.02
-  num_epochs: 30
-  restarts: 4
-  weight_coeff: 0.0001
+  with_k_schedule: false
 smooth_r3:
-  delta_threshold: 0.5
+  class_weights: -1
   epsilon: 0.1
-  k: 50000.0
-  lr: 0.01
-  num_epochs: 30
+  has_conv: false
+  k: 10
+  lr: 0.001
+  multi_class: true
+  num_epochs: 25
   restarts: 4
-  weight_coeff: 1.0e-08
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
+  weight_coeff: 0.0001
+  with_k_schedule: false
 std:
-  delta_threshold: 0.5
+  class_weights: -1
   epsilon: 0.1
-  k: 0.2
+  has_conv: false
+  k: -1
   lr: 0.01
+  multi_class: true
   num_epochs: 30
   restarts: 4
-  weight_coeff: 0.01
+  test_batch_size: 1000
+  test_epsilon: 0.1
+  train_batch_size: 1000
+  weight_coeff: -1
+  with_k_schedule: false

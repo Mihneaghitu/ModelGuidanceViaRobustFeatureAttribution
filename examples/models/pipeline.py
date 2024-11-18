@@ -84,6 +84,7 @@ def train_model_with_pgd_robust_input_grad(
     class_weights: list[float] = None,
     num_iterations: int = 10,
     clip_grad_bound = None,
+    k_schedule: callable = None,
     suppress_tqdm: bool = False
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
@@ -92,7 +93,7 @@ def train_model_with_pgd_robust_input_grad(
     # pre-train the model
     progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
     model = model.to(device).train()
-    for _ in progress_bar:
+    for curr_epoch in progress_bar:
         for i, (x, u, m) in enumerate(dl_train):
             # if the batch is not full (last batch), skip it
             if x.shape[0] != dl_train.batch_size:
@@ -115,7 +116,10 @@ def train_model_with_pgd_robust_input_grad(
                 batch_weights = torch.tensor([class_weights[int(label.item())] for label in u]).to(device)
                 criterion = torch.nn.BCELoss(weight=batch_weights)
             std_loss = criterion(output, u)
-            loss = std_loss + k * inp_grad_reg
+            alpha = 1
+            if k_schedule is not None:
+                alpha = k_schedule(curr_epoch, n_epochs, std_loss.item(), inp_grad_reg)
+            loss = std_loss + alpha * k * inp_grad_reg
             # Backward and optimize
             optimizer.zero_grad()
             loss.backward()
@@ -137,7 +141,6 @@ def train_model_with_smoothed_input_grad(
     device: str,
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
-    perturb_mask_only: bool = False,
     suppress_tqdm: bool = False
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
@@ -157,9 +160,7 @@ def train_model_with_smoothed_input_grad(
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = smooth_gradient_regularizer(
-                x, u, model, m, criterion, epsilon, regularizer_type=mlx_method, device=device,
-                weight_reg_coeff=weight_reg_coeff, perturb_mask_only=perturb_mask_only
-            )
+                x, u, model, m, criterion, epsilon, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff)
             # output is [batch_size, 1], u is [bach_size] but BCELoss does not support different target and source sizes
             output = model(x).squeeze()
             if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
@@ -180,7 +181,7 @@ def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.Da
     all_acc = 0
     num_inputs = 0
     model.eval()
-    for test_batch, test_labels, _ in dl_test:
+    for test_batch, test_labels, *_ in dl_test: # when groups are present, _ is a tuple
         # Just do a simple forward and compare the output to the labels
         test_batch, test_labels = test_batch.to(device), test_labels.to(device)
         output = model(test_batch).squeeze()
@@ -198,6 +199,35 @@ def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.Da
 
     return round(all_acc, 4)
 
+def test_model_avg_and_wg_accuracy(model: torch.nn.Sequential, dl_test_grouped: torch.utils.data.DataLoader, device: str, num_groups: int,
+                                   multi_class: bool = False, suppress_log: bool = False) -> tuple[float, float, int]:
+    acc_per_group, num_elems_for_group = [0] * num_groups, [0] * num_groups
+    model.eval()
+    for data, ground_truth_labels, _, groups in dl_test_grouped:
+        data, ground_truth_labels, groups = data.to(device), ground_truth_labels.to(device), groups.to(device)
+        output = model(data).squeeze()
+        predicted_labels = None
+        if multi_class:
+            predicted_labels = output.argmax(dim=-1).squeeze()
+        else:
+            predicted_labels = (output > 0.5).int().squeeze()
+
+        for i in range(num_groups):
+            group_mask = groups == i
+            num_elems_for_group[i] += group_mask.sum().item()
+            group_acc = (predicted_labels[group_mask] == ground_truth_labels[group_mask]).sum().item()
+            acc_per_group[i] += group_acc
+
+    acc_per_group = torch.tensor(acc_per_group) / torch.tensor(num_elems_for_group)
+    macro_avg_group_acc = acc_per_group.mean().item()
+    if not suppress_log:
+        print("--- Model accuracy per group ---")
+        print(f"Macro average group accuracy = {macro_avg_group_acc:.4g}")
+        print(f"Min group accuracy = {acc_per_group.min().item():.4g}, group idx = {acc_per_group.argmin().item()}")
+
+    return round(macro_avg_group_acc, 5), round(acc_per_group.min().item(), 5), acc_per_group.argmin().item()
+
+
 def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: torch.nn.Sequential, epsilon: float, delta: float,
     loss_fn: str, device: str, has_conv: bool = False, suppress_log: bool = False) -> tuple[float, float, float, float]:
     assert loss_fn in ["binary_cross_entropy", "cross_entropy"], "Only binary_cross_entropy and cross_entropy supported"
@@ -205,11 +235,11 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
     num_robust, min_robust_delta, num_test_samples = 0, 0, 0
     max_upper_bound, min_lower_bound = 0, 0
     model = model.to(device).eval()
-    for test_batch, test_labels, test_masks in dl_masked:
+    for test_batch, test_labels, test_masks, _ in dl_masked:
         test_batch, test_labels, test_masks = test_batch.to(device), test_labels.to(device), test_masks.to(device)
         # The MLX method does not really matter, as we return the grads
         grad_bounds = input_gradient_interval_regularizer(model, test_batch, test_labels, loss_fn, epsilon, 0.0, return_grads=True,
-            regularizer_type="r4", batch_masks=test_masks, has_conv=has_conv, device=device)
+            regularizer_type="std", batch_masks=test_masks, has_conv=has_conv, device=device)
         d_l, d_u = grad_bounds[1]
         d_l, d_u = d_l * test_masks, d_u * test_masks
         for idx in range(len(test_batch)):
@@ -225,8 +255,6 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
             num_test_samples += 1
     num_robust /= num_test_samples
     if not suppress_log:
-        print("--- Delta input robustness ---")
-        print(f"Delta Input Robustness = {num_robust:.2g}")
         print("--- Mininimum delta for which the test set is certifiably 1-delta-input-robust ---")
         print(f"Min robust delta = {min_robust_delta:.3g}")
     # truncate to 3 decimal places

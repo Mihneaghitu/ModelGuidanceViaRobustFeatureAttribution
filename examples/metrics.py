@@ -11,106 +11,49 @@ import numpy as np
 from torchvision.models import ResNet18_Weights
 from tqdm import tqdm
 
-def worst_group_acc_no_load(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, num_classes: int, suppress_log=False) -> tuple[float, int]:
-    multi_class = num_classes > 2
-    acc_per_class = [0] * num_classes
-    elems_per_class = [0] * num_classes
-    with torch.no_grad():
+
+def get_restart_avg_and_worst_group_accuracy_with_stddev(
+    dl_test_grouped: torch.utils.data.DataLoader, model_run_dir: str, model: torch.nn.Sequential, device: str, num_groups: int,
+    multi_class: bool = False, suppress_log: bool = False) -> tuple[float, float, int, float, float]:
+    restarts = len(os.listdir(model_run_dir))
+    acc_per_group, num_elems_for_group = np.zeros((restarts, num_groups)), np.zeros((restarts, num_groups))
+    for run in range(restarts):
+        run_file = os.path.join(model_run_dir, f"run_{run}.pt")
+        model.load_state_dict(torch.load(run_file))
         model = model.to(device)
-        for test_batch, test_labels, _ in test_dloader:
-            for i in range(test_batch.shape[0]):
-                test_point, test_label = test_batch[i].to(device), test_labels[i].to(device)
-                # because it is a single point, we need to add a batch dimension
-                test_point = test_point.unsqueeze(0)
-                output = model(test_point).squeeze()
-                correct = 0
-                if multi_class:
-                    correct = (output.argmax(dim=0) == test_label).item()
-                else:
-                    correct = ((output > 0.5) == (test_label)).item()
-                acc_per_class[int(test_label)] += correct
-                elems_per_class[int(test_label)] += 1
-    min_acc, min_class = 1, -1
-    for i in range(num_classes):
-        if elems_per_class[i] > 0:
-            acc_per_class[i] /= elems_per_class[i]
-            if acc_per_class[i] < min_acc:
-                min_acc = acc_per_class[i]
-                min_class = i
+        model.eval()
+        for data, ground_truth_labels, _, groups in dl_test_grouped:
+            data, ground_truth_labels, groups = data.to(device), ground_truth_labels.to(device), groups.to(device)
+            output = model(data).squeeze()
+            predicted_labels = None
+            if multi_class:
+                predicted_labels = output.argmax(dim=-1).squeeze()
+            else:
+                predicted_labels = (output > 0.5).int().squeeze()
+
+            for i in range(num_groups):
+                group_mask = (groups == i)
+                num_elems_for_group[run][i] += group_mask.sum().item()
+                group_acc = (predicted_labels[group_mask] == ground_truth_labels[group_mask]).sum().item()
+                acc_per_group[run][i] += group_acc
+
+    # the number of elements per group does not need to be calculated for each run, but it makes writing this a bit easier
+    acc_per_group = torch.tensor(acc_per_group) / torch.tensor(num_elems_for_group)
+
+    group_acc_averaged_over_runs = acc_per_group.mean(dim=0)
+    worst_group_acc = group_acc_averaged_over_runs.min().item()
+    worst_group = group_acc_averaged_over_runs.argmin().item()
+    macro_avg_group_acc = group_acc_averaged_over_runs.mean().item()
+    std_dev_group_acc = group_acc_averaged_over_runs.std().item()
+    std_dev_per_group = acc_per_group.std(dim=0)
+    std_dev_for_worst_group = std_dev_per_group[worst_group].float().item()
     if not suppress_log:
-        print(f"Worst class accuracy = {min_acc:.4g} for class {min_class}")
+        print(f"Macro average group accuracy = {macro_avg_group_acc:.4g}")
+        print(f"Min group accuracy = {worst_group_acc:.4g}, group idx = {worst_group}")
+        print(f"Group accuracies averaged over run = {group_acc_averaged_over_runs}")
 
-    return round(min_acc, 4), min_class
+    return round(macro_avg_group_acc, 5), round(worst_group_acc, 5), worst_group, round(std_dev_group_acc, 5), round(std_dev_for_worst_group, 5)
 
-def worst_group_acc(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, num_classes: int,
-                    runs_dir_root: str, suppress_log=False) -> tuple[float, int]:
-    multi_class = num_classes > 2
-    acc_per_class = [0] * num_classes
-    elems_per_class = [0] * num_classes
-    num_runs = len(os.listdir(runs_dir_root))
-    model.eval()
-    with torch.no_grad():
-        for run_idx in range(num_runs):
-            model.load_state_dict(torch.load(f"{runs_dir_root}/run_{run_idx}.pt"))
-            model = model.to(device)
-            for test_batch, test_labels, _ in test_dloader:
-                for i in range(test_batch.shape[0]):
-                    test_point, test_label = test_batch[i].to(device), test_labels[i].to(device)
-                    # because it is a single point, we need to add a batch dimension
-                    test_point = test_point.unsqueeze(0)
-                    output = model(test_point).squeeze()
-                    correct = 0
-                    if multi_class:
-                        correct = (output.argmax(dim=0) == test_label).item()
-                    else:
-                        correct = ((output > 0.5) == (test_label)).item()
-                    acc_per_class[int(test_label)] += correct
-                    elems_per_class[int(test_label)] += 1
-    min_acc, min_class = 1, -1
-    for i in range(num_classes):
-        if elems_per_class[i] > 0:
-            acc_per_class[i] /= elems_per_class[i]
-            if acc_per_class[i] < min_acc:
-                min_acc = acc_per_class[i]
-                min_class = i
-    if not suppress_log:
-        print(f"Worst class accuracy = {min_acc:.4g} for class {min_class}")
-
-    return round(min_acc, 4), min_class
-
-
-def get_avg_wg_acc_with_stddev(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, num_classes: int,
-                               runs_dir_root: str) -> tuple[float, float]:
-    multi_class = num_classes > 2
-    acc_per_class = [0] * num_classes
-    elems_per_class = [0] * num_classes
-    num_runs = len(os.listdir(runs_dir_root))
-    model.eval()
-    wg_per_run_per_class = np.zeros((num_runs, num_classes))
-    with torch.no_grad():
-        for run_idx in range(num_runs):
-            model.load_state_dict(torch.load(f"{runs_dir_root}/run_{run_idx}.pt"))
-            model = model.to(device)
-            for test_batch, test_labels, _ in test_dloader:
-                for i in range(test_batch.shape[0]):
-                    test_point, test_label = test_batch[i].to(device), test_labels[i].to(device)
-                    # because it is a single point, we need to add a batch dimension
-                    test_point = test_point.unsqueeze(0)
-                    output = model(test_point).squeeze()
-                    correct = 0
-                    if multi_class:
-                        correct = (output.argmax(dim=0) == test_label).item()
-                    else:
-                        correct = ((output > 0.5) == (test_label)).item()
-                    acc_per_class[int(test_label)] += correct
-                    elems_per_class[int(test_label)] += 1
-            wg_per_run_per_class[run_idx] = np.array(acc_per_class) / np.array(elems_per_class)
-
-    mean_wg_per_class = wg_per_run_per_class.mean(axis=0)
-    std_wg_per_class = wg_per_run_per_class.std(axis=0)
-    min_acc_idx = np.argmin(mean_wg_per_class)
-
-    return round(mean_wg_per_class[min_acc_idx], 4), std_wg_per_class[min_acc_idx]
 
 def get_avg_acc_with_stddev(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
     num_classes: int) -> tuple[float, float]:
@@ -290,7 +233,7 @@ def test_worst_group_acc(dset_name: str):
 
     for method in ["pgd_r4", "pgd_r4_pmo"]:#, "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
         print(f"Method {method}")
-        worst_group_acc(model, dl_test, dev, num_classes, f"saved_experiment_models/performance/{dset_name}/{method}")
+        worst_label_acc(model, dl_test, dev, num_classes, f"saved_experiment_models/performance/{dset_name}/{method}")
 
 
 def test_avg_acc(dset_name: str):

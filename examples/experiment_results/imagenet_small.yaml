@@ -19,7 +19,7 @@ smooth_r3:
   worst_group: 3
   worst_group_acc: 0.833
 std:
-  test_acc: 0.923
-  train_acc: 1.0
-  worst_group: 3
-  worst_group_acc: 0.84
+  test_acc: 0.9607
+  train_acc: 0.9775
+  worst_group: 2
+  worst_group_acc: 0.8438

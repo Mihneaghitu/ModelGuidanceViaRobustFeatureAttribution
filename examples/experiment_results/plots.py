@@ -8,7 +8,7 @@ import numpy as np
 import seaborn as sns
 from examples.datasets import derma_mnist, decoy_mnist
 from examples.models.R4_models import DermaNet
-from examples.metrics import get_avg_acc_with_stddev, get_avg_rob_metrics, get_avg_wg_acc_with_stddev
+from examples.metrics import get_avg_acc_with_stddev, get_avg_rob_metrics, get_avg_and_worst_label_acc_with_stddev
 from examples.models.fully_connected import FCNAugmented
 import pandas as pd
 
@@ -48,7 +48,7 @@ def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False, meth
         mean_delta, mean_lb, mean_ub, std_dev_delta, std_dev_lb, std_dev_ub = [], [], [], [], [], []
         for ratio in ratios:
             dir_for_method = model_dir + f"/{method}" + f"/ratio_{int(ratio * 100)}"
-            avg_wg_acc_ratio, std_wg_dev_acc_ratio = get_avg_wg_acc_with_stddev(model, dl_test, "cuda:0", num_classes, dir_for_method)
+            avg_wg_acc_ratio, std_wg_dev_acc_ratio = get_avg_and_worst_label_acc_with_stddev(model, dl_test, "cuda:0", num_classes, dir_for_method)
             mean_wg_accs.append(avg_wg_acc_ratio)
             std_wg_dev_accs.append(std_wg_dev_acc_ratio)
             avg_delta_ratio, avg_lb_ratio, avg_ub_ratio, std_delta_ratio, std_lb_ratio, std_ub_ratio = get_avg_rob_metrics(
@@ -136,7 +136,7 @@ def make_performance_plots_for_dset(dset_name: str) -> None:
 def make_model_ablation_paper_plots(dset_name: str) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
     methods = ["r3", "r4", "ibp_ex+r3", "rand_r4"]
-    dl_test, model_dir, size_names, eps, has_conv, num_classes, loss_fn, model_archs = None, None, None, None, None, None, None, None
+    dl_test, model_dir, size_names, eps, has_conv, num_classes, loss_fn, model_archs, size_name_xlabels = None, None, None, None, None, None, None, None, None
     if dset_name == "decoy_mnist":
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
@@ -147,6 +147,7 @@ def make_model_ablation_paper_plots(dset_name: str) -> None:
         has_conv = False
         num_classes = 10
         size_names = ["1_layer", "2_layer", "3_layer", "4_layer"]
+        size_name_xlabels = ["1 layer", "2 layers", "3 layers", "4 layers"]
     if dset_name == "derma_mnist":
         test_derma = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_test = derma_mnist.get_dataloader(test_derma, 256)
@@ -157,11 +158,11 @@ def make_model_ablation_paper_plots(dset_name: str) -> None:
         has_conv = True
         num_classes = 2
         size_names = ["small", "small_medium", "medium_large", "large"]
+        size_name_xlabels = ["Small", "Small-Medium", "Medium-Large", "Large"]
 
     sns.set_theme(context="poster", font_scale=3)
     sns.color_palette("bright")
     fig, ax = plt.subplots(2, 2, figsize=(70, 45))
-    size_name_xlabels = ["1 layer", "2 layers", "3 layers", "4 layers"]
     for method in methods:
         mean_accs, std_dev_accs = [], [],
         mean_delta, mean_lb, mean_ub, std_dev_delta, std_dev_lb, std_dev_ub = [], [], [], [], [], []

@@ -38,7 +38,7 @@ class PlantNet(torch.nn.Sequential):
         )
 
 class DermaNet(torch.nn.Sequential):
-    def __init__(self, in_channels, feature_size, out_dim, arch_type: str = "medium_large"):
+    def __init__(self, in_channels, feature_size, out_dim, arch_type: str = "medium_large", init_with_small_weights: bool = False):
         self.latent_dim = {28: 2304, 64: 14400, 128: 61504, 224: 193600}
         self.in_channels = in_channels
         self.feature_size = feature_size
@@ -46,6 +46,15 @@ class DermaNet(torch.nn.Sequential):
         super().__init__(
             *self.__make_arch(arch_type)
         )
+        if init_with_small_weights:
+            self.__init_with_small_weights()
+
+    def __init_with_small_weights(self):
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+                torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+                torch.nn.init.constant_(m.bias, 0)
+
 
     def __make_arch(self, key: str) -> tuple[any]:
         match key:
@@ -121,13 +130,16 @@ class SalientImageNet(torch.nn.Module):
         self.resnet = resnet18(weights=ResNet18_Weights.DEFAULT)
         num_features = self.resnet.fc.in_features
         self.resnet.fc = torch.nn.Identity()
+        # freeze the resnet layer weights
+        for param in self.resnet.parameters():
+            param.requires_grad = False
         self.dropout = torch.nn.Dropout(0.5)
         self.fc = torch.nn.Linear(num_features, num_classes)
         self.softmax = torch.nn.Softmax(dim=-1)
 
     def forward(self, x):
         y = self.resnet(x)
-       # y = self.dropout(y)
+        # y = self.dropout(y)
         y = self.fc(y)
         y = self.softmax(y)
         return y

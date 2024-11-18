@@ -8,7 +8,7 @@ from models.pipeline import (train_model_with_certified_input_grad, test_model_a
                              write_results_to_file, uniformize_magnitudes_schedule,
                              train_model_with_pgd_robust_input_grad, train_model_with_smoothed_input_grad)
 from datasets import derma_mnist, plant, decoy_mnist
-from metrics import worst_group_acc
+from metrics import worst_label_acc
 from models.R4_models import DermaNet, PlantNet
 from models.fully_connected import FCNAugmented
 
@@ -89,7 +89,7 @@ def ablate(dset_name: str, seed: int, has_conv: bool, criterion: torch.nn.Module
             else:
                 empty_model = FCNAugmented(784, 10, 512, 1).to(device)
                 num_classes = 10
-            wg_acc, wg = worst_group_acc(empty_model, dl_test, device, num_classes, mask_ratio_dir, suppress_log=True)
+            wg_acc, wg = worst_label_acc(empty_model, dl_test, device, num_classes, mask_ratio_dir, suppress_log=True)
             if write_to_file:
                 write_results_to_file(f"experiment_results/{dset_name}_sample_complexity" + suffix + ".yaml",
                                         {"train_acc": round(train_acc / restarts, 3),

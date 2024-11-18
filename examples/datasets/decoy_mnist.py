@@ -81,13 +81,10 @@ def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal:
 
     return dloader
 
-def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[DataLoader, DataLoader]:
+def get_swatches_color_dict(data: torch.Tensor, label: torch.Tensor) -> dict:
     # Extract the swatches values for each different label
-    train_label_tensors = dl_train.dataset.tensors[1]
-    train_input_tensors = dl_train.dataset.tensors[0]
-    print(train_label_tensors.shape, train_input_tensors.shape)
-    indices = [((train_label_tensors == i).nonzero()[0], i) for i in range(10)]
-    reshaped = [(torch.reshape(train_input_tensors[idx], (28, 28)), label) for idx, label in indices]
+    indices = [((label == i).nonzero()[0], i) for i in range(10)]
+    reshaped = [(torch.reshape(data[idx], (28, 28)), label) for idx, label in indices]
     corner_indices = (0, 0), (0, 27), (27, 0), (27, 27)
     swatches_color_dict = {}
     for r, label in reshaped:
@@ -96,7 +93,15 @@ def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[D
                 swatches_color_dict[label] = r[i][j]
                 continue
 
-    print(swatches_color_dict)
+    return swatches_color_dict
+
+def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[DataLoader, DataLoader]:
+    # Extract the swatches values for each different label
+    train_label_tensors = dl_train.dataset.tensors[1]
+    train_input_tensors = dl_train.dataset.tensors[0]
+
+    swatches_color_dict = get_swatches_color_dict(train_input_tensors, train_label_tensors)
+    print(f"Swatches color dict: {swatches_color_dict}")
 
     # make a corner mask
     check_mask = torch.zeros(28, 28)
@@ -118,13 +123,26 @@ def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[D
     dl_masks_train = torch.utils.data.DataLoader(masks_dset, batch_size=dl_train.batch_size, shuffle=True)
     # ========================================================
 
-    # ========= Construct the masks for the test set =========
+    # ========= Construct the masks for the test set and randomize the input data by choosing a random corner value =========
     test_data_inputs, test_data_labels = dl_test.dataset.tensors[0], dl_test.dataset.tensors[1]
-    test_masks = torch.ones_like(test_data_inputs)
-    # The test masks have to be in all four corners. I.e. we want the classification to be invariant to ANY swatch
-    for idx, (data_input, label) in enumerate(zip(test_data_inputs, test_data_labels)):
-        test_masks[idx] *= check_mask
-    masks_dset = torch.utils.data.TensorDataset(test_data_inputs, test_data_labels, test_masks)
+    randomized_test_data = randomize_img_swatch(test_data_inputs, test_data_labels, swatches_color_dict)
+    test_masks = check_mask.repeat(randomized_test_data.shape[0], 1, 1)
+    test_groups = test_data_labels.clone().detach()
+    masks_dset = torch.utils.data.TensorDataset(randomized_test_data, test_data_labels, test_masks, test_groups)
     dl_masks_test = torch.utils.data.DataLoader(masks_dset, batch_size=dl_test.batch_size, shuffle=True)
 
     return dl_masks_train, dl_masks_test
+
+def randomize_img_swatch(data: torch.Tensor, labels: torch.Tensor, swatches_per_class: dict) -> torch.Tensor:
+    # ======= Randomize the (test) images by choosing a random corner AND a random color swatch =======
+    randomized_imgs = data.clone()
+    for idx, (data_input, data_label) in enumerate(zip(data, labels)):
+        rand_label_color  = torch.randint(0, 10, (1,))
+        correct_label_color = swatches_per_class[int(data_label)]
+        randomized_imgs[idx] = torch.where(
+            torch.isclose(data_input, correct_label_color, atol=1e-5),
+            swatches_per_class[rand_label_color.item()],
+            data_input
+        )
+
+    return randomized_imgs

@@ -30,7 +30,7 @@ smooth_r3:
 std:
   epsilon: -1
   k: -1
-  lr: 0.0001
-  num_epochs: 5
-  restarts: 1
+  lr: 0.001
+  num_epochs: 4
+  restarts: 4
   weight_coeff: -1

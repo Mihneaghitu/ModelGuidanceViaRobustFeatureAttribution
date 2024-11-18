@@ -53,7 +53,7 @@ def input_gradient_interval_regularizer(
     # we only support binary cross entropy loss for now
     if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
         raise ValueError(f"Unsupported loss function: {loss_fn}")
-    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex", "ibp_ex+r3", "r4_pmo"]
+    assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex", "ibp_ex+r3"], f"Unsupported regularizer type: {regularizer_type}"
     assert batch_masks is not None
     modules = list(model.modules())
     assert isinstance(modules[-1], torch.nn.Sigmoid) or isinstance(modules[-1], torch.nn.Softmax)
@@ -72,7 +72,7 @@ def input_gradient_interval_regularizer(
 
     # ================================= BOUNDS COMPUTATION =================================
     intermediate = None
-    if regularizer_type == "ibp_ex" or regularizer_type == "ibp_ex+r3" or regularizer_type == "r4_pmo":
+    if regularizer_type in ["r4", "ibp_ex", "ibp_ex+r3"]:
         intermediate = [(batch - epsilon * batch_masks, batch + epsilon * batch_masks)]
     else:
         intermediate = [(batch - epsilon, batch + epsilon)]
@@ -113,7 +113,6 @@ def input_gradient_interval_regularizer(
             assert torch.allclose(dl_n, dl_n_1)
         input_grad = dl_n
     else:
-        #TODO see if we can just let the flatten here or we need to to something more general
         activations_n = nominal_forward_pass(batch.flatten(start_dim=1).unsqueeze(-1), params_n_dense)
         input_grad = nominal_backward_pass(dl_n, params_n_dense, activations_n, with_input_grad=True)[0]
     # This will happen when we have a Flatten() module at the beginning of the model
@@ -125,6 +124,13 @@ def input_gradient_interval_regularizer(
         grads.reverse()
         return grads
 
+    # pre-compute the regularization term for code clarity
+    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+    for module in modules:
+        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+            weight_sum = weight_sum + torch.sum(module.weight ** 2)
+    l2_reg = weight_reg_coeff * weight_sum
+
     match regularizer_type:
         case "ibp_ex":
             y_bar = None
@@ -134,36 +140,22 @@ def input_gradient_interval_regularizer(
                 labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
                 # squeeze because logits are [batchsize x output_dim x 1]
                 y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
-            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-            for module in modules:
-                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
-            return weight_reg_coeff * weight_sum + criterion(y_bar.squeeze(), labels)
+            return l2_reg + criterion(y_bar.squeeze(), labels)
         case "grad_cert":
             # Loss for the interval regularizer
             return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
-        case r4 if r4 in ["r4", "r4_pmo"]:
+        case "r4":
             # Loss for R4
             return torch.sum(torch.abs(torch.mul(dl_l, batch_masks)) +
             torch.abs(torch.mul(dl_u, batch_masks))) / dl_l.nelement()
         case "r3":
-            # RRR is also dependent on L2 smoothing
-            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-            for module in modules:
-                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
             # return the gradient of the loss w.r.t. the input squared and summed
             # input_grad_logits should now be of shape [batchsize x input_dim]
             reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
             # make sure the input_grad is of the same shape as the input
-            reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
-            return reg_term + weight_reg_coeff * weight_sum
+            reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2) / input_grad.nelement()
+            return reg_term + l2_reg
         case "ibp_ex+r3":
-            # smoothing
-            weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-            for module in modules:
-                if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-                    weight_sum = weight_sum + torch.sum(module.weight ** 2)
             # ibp_ex term
             y_bar = None
             if loss_fn == "binary_cross_entropy":
@@ -174,14 +166,12 @@ def input_gradient_interval_regularizer(
                 y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
             # r3 term
             reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-            reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2)
+            reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2) / input_grad.nelement()
             # combine
-            return weight_reg_coeff * weight_sum + criterion(y_bar.squeeze(), labels) + reg_term
+            return l2_reg + criterion(y_bar.squeeze(), labels) + reg_term
         case "std":
             # In standard training, we basically do not have any regularization
             return 0
-
-    raise ValueError(f"Unsupported regularizer type: {regularizer_type}")
 
 def smooth_gradient_regularizer(
     batch: torch.Tensor,
@@ -192,15 +182,14 @@ def smooth_gradient_regularizer(
     epsilon: float,
     regularizer_type: str = "smooth_r3",
     device: str = "cuda:0",
-    weight_reg_coeff: float = 0.0,
-    perturb_mask_only: bool = False
+    weight_reg_coeff: float = 0.0
 ) -> torch.Tensor:
-    assert regularizer_type in ["smooth_r3", "rand_r4", "rand_r4_pmo"]
+    assert regularizer_type in ["smooth_r3", "rand_r4"]
     assert isinstance(criterion, torch.nn.CrossEntropyLoss) or isinstance(criterion, torch.nn.BCELoss)
 
     sampling_dist = torch.distributions.normal.Normal(0, epsilon)
     perturbation = sampling_dist.sample(batch.shape).to(device)
-    if regularizer_type == "rand_r4_pmo":
+    if regularizer_type == "rand_r4":
         perturbation *= batch_masks
     perturbed_batch = batch + perturbation
 
@@ -220,7 +209,7 @@ def smooth_gradient_regularizer(
         case "smooth_r3":
             # return the average input gradient
             return torch.mean(torch.abs(input_grad * batch_masks)) + weight_reg_coeff * weight_sum
-        case rand_r4 if rand_r4 in ["rand_r4", "rand_r4_pmo"]:
+        case "rand_r4":
             # return the maximum input gradient of only the masked regions
             samples_max_input_grad_elem_wise = torch.max(input_grad, dim=0).values
             non_zero_masks = (batch_masks > 0).sum().item()
@@ -256,13 +245,13 @@ def input_gradient_pgd_regularizer(
         device (_type_, optional): The device to use for computation. Defaults to "cuda:0".
 
     """
-    assert regularizer_type in ["pgd_r4", "pgd_ex+r3", "std", "pgd_ex", "r3", "pgd_r4_pmo"]
+    assert regularizer_type in ["pgd_r4", "pgd_ex+r3", "std", "pgd_ex", "r3"]
     assert batch_masks is not None
     if regularizer_type == "std":
         return 0
 
     pgd_adv_input = batch
-    perturbation_masks = batch_masks if regularizer_type in ["pgd_ex", "pgd_r4_pmo"] else torch.ones_like(batch_masks).to(device)
+    perturbation_masks = batch_masks if regularizer_type in ["pgd_ex", "pgd_r4"] else torch.ones_like(batch_masks).to(device)
     for _ in range(num_iterations) :
         pgd_adv_input.requires_grad = True
         # We need it because otherwise the gradients will be accumulated with previous iterations
@@ -287,7 +276,7 @@ def input_gradient_pgd_regularizer(
     match regularizer_type:
         case "pgd_ex":
             return criterion(model(pgd_adv_input), labels) + weight_reg_coeff * weight_sum
-        case pgd_r4 if pgd_r4 in ["pgd_r4", "pgd_r4_pmo"]:
+        case "pgd_r4":
             # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
             pgd_adv_input.requires_grad = True
             model.zero_grad()
