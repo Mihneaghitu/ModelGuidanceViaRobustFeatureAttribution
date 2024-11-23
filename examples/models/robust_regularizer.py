@@ -51,10 +51,13 @@ def input_gradient_interval_regularizer(
         float | list[torch.Tensor]: The regularization term or the gradient lower bounds.
     """
     # we only support binary cross entropy loss for now
-    if loss_fn != "binary_cross_entropy" and loss_fn != "cross_entropy":
-        raise ValueError(f"Unsupported loss function: {loss_fn}")
+    assert loss_fn in ["binary_cross_entropy", "cross_entropy"], f"Unsupported loss function: {loss_fn}"
     assert regularizer_type in ["grad_cert", "r4", "r3", "std", "ibp_ex", "ibp_ex+r3"], f"Unsupported regularizer type: {regularizer_type}"
     assert batch_masks is not None
+    #! =========================== Checkpoint to make training faster ===========================
+    if regularizer_type == "std":
+        return 0
+    #! ==================================== End of Checkpoint ===================================
     modules = list(model.modules())
     assert isinstance(modules[-1], torch.nn.Sigmoid) or isinstance(modules[-1], torch.nn.Softmax)
     last_layer_act_func = modules[-1]
@@ -84,8 +87,26 @@ def input_gradient_interval_regularizer(
         intermediate_nominal.append(propagate_module_forward(module, *intermediate_nominal[-1], 0))
         interval_arithmetic.validate_interval(*intermediate[-1], msg=f"forward pass {module}")
 
-    # propagate through the loss function
     logits_l, logits_u = intermediate[-1]
+    #! =========================== Checkpoint to make training faster ===========================
+    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+    for module in modules:
+        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+            weight_sum = weight_sum + torch.sum(module.weight ** 2)
+    l2_reg = weight_reg_coeff * weight_sum
+    match regularizer_type:
+        case "ibp_ex":
+            y_bar = None
+            if loss_fn == "binary_cross_entropy":
+                y_bar = last_layer_act_func(logits_l)
+            else: # cross entropy
+                labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
+                # squeeze because logits are [batchsize x output_dim x 1]
+                y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
+            return l2_reg + criterion(y_bar.squeeze(), labels)
+    #! ==================================== End of Checkpoint ===================================
+
+    # propagate through the loss function
     dl_l, dl_u, dl_n = bound_loss_function_derivative(loss_fn, logits_l, logits_u, logits_n, labels)
     dl_l, dl_u = dl_l.squeeze(-1), dl_u.squeeze(-1)
     interval_arithmetic.validate_interval(dl_l, dl_u, msg="loss gradient")
@@ -125,22 +146,7 @@ def input_gradient_interval_regularizer(
         return grads
 
     # pre-compute the regularization term for code clarity
-    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-    for module in modules:
-        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-            weight_sum = weight_sum + torch.sum(module.weight ** 2)
-    l2_reg = weight_reg_coeff * weight_sum
-
     match regularizer_type:
-        case "ibp_ex":
-            y_bar = None
-            if loss_fn == "binary_cross_entropy":
-                y_bar = last_layer_act_func(logits_l)
-            else: # cross entropy
-                labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
-                # squeeze because logits are [batchsize x output_dim x 1]
-                y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
-            return l2_reg + criterion(y_bar.squeeze(), labels)
         case "grad_cert":
             # Loss for the interval regularizer
             return torch.norm(dl_u - dl_l, p=2) / dl_l.nelement()
@@ -169,9 +175,6 @@ def input_gradient_interval_regularizer(
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2) / input_grad.nelement()
             # combine
             return l2_reg + criterion(y_bar.squeeze(), labels) + reg_term
-        case "std":
-            # In standard training, we basically do not have any regularization
-            return 0
 
 def smooth_gradient_regularizer(
     batch: torch.Tensor,
@@ -247,8 +250,23 @@ def input_gradient_pgd_regularizer(
     """
     assert regularizer_type in ["pgd_r4", "pgd_ex+r3", "std", "pgd_ex", "r3"]
     assert batch_masks is not None
+    #! =========================== Checkpoint to make training faster ===========================
     if regularizer_type == "std":
         return 0
+    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+    for module in model.modules():
+        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+            weight_sum = weight_sum + torch.sum(module.weight ** 2)
+    if regularizer_type == "r3":
+        model.zero_grad()
+        reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+        batch = batch.requires_grad_()
+        y_hat = model(batch)
+        loss = criterion(y_hat.squeeze(), labels)
+        loss.backward()
+        reg_term = reg_term + torch.sum((batch.grad.data.reshape(batch_masks.shape) * batch_masks) ** 2)
+        return weight_reg_coeff * weight_sum + reg_term
+    #! ==================================== End of Checkpoint ===================================
 
     pgd_adv_input = batch
     perturbation_masks = batch_masks if regularizer_type in ["pgd_ex", "pgd_r4"] else torch.ones_like(batch_masks).to(device)
@@ -268,10 +286,6 @@ def input_gradient_pgd_regularizer(
         adv_batch_step = torch.clamp(batch + delta, min=batch.min(), max=batch.max()).detach_()
         pgd_adv_input = adv_batch_step
 
-    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-    for module in model.modules():
-        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-            weight_sum = weight_sum + torch.sum(module.weight ** 2)
     # Compute the loss for the interval regularizer
     match regularizer_type:
         case "pgd_ex":
@@ -301,15 +315,6 @@ def input_gradient_pgd_regularizer(
             reg_term = reg_term + torch.sum((batch.grad.data.reshape(batch_masks.shape) * batch_masks) ** 2)
             # combine
             return weight_reg_coeff * weight_sum + criterion(model(pgd_adv_input), labels) + reg_term
-        case "r3":
-            model.zero_grad()
-            reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-            batch = batch.requires_grad_()
-            y_hat = model(batch)
-            loss = criterion(y_hat.squeeze(), labels)
-            loss.backward()
-            reg_term = reg_term + torch.sum((batch.grad.data.reshape(batch_masks.shape) * batch_masks) ** 2)
-            return weight_reg_coeff * weight_sum + reg_term
 
 # This only works for robust explanation constraints
 def parameter_gradient_interval_regularizer(

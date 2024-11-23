@@ -1,13 +1,13 @@
 import os
+import pickle
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, TensorDataset, Dataset
+from torch.utils.data import DataLoader, Dataset
 from PIL import Image, ImageEnhance
-import torchvision.transforms as transforms
-import pickle
+from torchvision import transforms
 
 # ============================================================================================
-# TAKEN FROM: https://github.com/vihari/robust_mlx/blob/main/src/datasets/plant_rgb_dataset.py
+# ADAPTED FROM: https://github.com/vihari/robust_mlx/blob/main/src/datasets/plant_rgb_dataset.py
 # ============================================================================================
 def __get_day_after_incubation_dict():
     dai_dict = dict({
@@ -54,14 +54,16 @@ def get_label(sample_id):
 # ============================================================================================
 
 class PlantDataset(Dataset):
+    per_channel_mean = None
     def __init__(self, splits_dir: str, data_dir: str, masks_file: str, split_idx: int, is_train: bool):
         # Only 5 splits are available
         assert split_idx < 5
+        self.is_train = is_train
 
         # Load file names and masks dictionary
         split_fname = os.path.join(splits_dir, f"train_{split_idx}.txt" if is_train else f"test_{split_idx}.txt")
         masks_dict, self.img_fnames = None, None
-        with open(split_fname, 'r') as f:
+        with open(split_fname, 'r', encoding="utf-8") as f:
             self.img_fnames = f.read().splitlines()
         with open(masks_file, 'rb') as f:
             # Masks dict has format {fname: mask} whee mask is a numpy array
@@ -86,11 +88,36 @@ class PlantDataset(Dataset):
             self.data_masks[i] = ~torch.from_numpy(masks_dict[img_fname])
             self.data_labels[i] = float(get_label(img_fname))
 
-    def __len__(self):
+        if not self.is_train:
+            assert PlantDataset.per_channel_mean is not None, "The training set must be loaded first to compute the per-channel mean"
+            self.__randomize_background()
+        else:
+            # Compute the per-channel mean, channel is dim 1, i.e. (N, [C], H, W)
+            PlantDataset.per_channel_mean = torch.mean(self.data_tensors, dim=(0, 2, 3))
+
+    def __randomize_background(self) -> None:
+        expanded_per_channel_mean = PlantDataset.per_channel_mean.unsqueeze(0).unsqueeze(2).unsqueeze(3)
+        self.data_tensors = self.data_tensors * (1 - self.data_masks) + expanded_per_channel_mean * self.data_masks
+
+    def __len__(self) -> int:
         return len(self.img_fnames)
 
-    def __getitem__(self, idx):
-        return self.data_tensors[idx], self.data_labels[idx], self.data_masks[idx]
+    def __getitem__(self, idx) -> tuple[torch.Tensor, ...]:
+        if self.is_train:
+            return self.data_tensors[idx], self.data_labels[idx], self.data_masks[idx]
+        else:
+            # the group is the same as the label in plant, the only difference is that the masked region is randomized
+            label, group = self.data_labels[idx], self.data_labels[idx]
+            return self.data_tensors[idx], label, self.data_masks[idx], group
+
+def split_train_val(train_dset: PlantDataset, ratio: float = 0.8) -> tuple[PlantDataset, PlantDataset]:
+    assert ratio > 0 and ratio < 1, "The ratio must be between 0 and 1"
+    num_train = int(ratio * len(train_dset))
+    num_val = len(train_dset) - num_train
+    [new_train_dset, val_dset] = torch.utils.data.random_split(train_dset, [num_train, num_val])
+    new_train_dset = train_dset.dataset[new_train_dset.indices]
+    val_dset = train_dset.dataset[val_dset.indices]
+    return new_train_dset, val_dset
 
 class BasicPlantDataset(PlantDataset):
     def __init__(self, data: torch.Tensor, labels: torch.Tensor, masks: torch.Tensor):
@@ -103,7 +130,6 @@ class BasicPlantDataset(PlantDataset):
 
     def __getitem__(self, idx):
         return self.data_tensors[idx], self.data_labels[idx], self.data_masks[idx]
-
 
 def get_dataloader(plant_dset: PlantDataset, batch_size: int):
     return DataLoader(plant_dset, batch_size=batch_size, shuffle=False)
@@ -118,10 +144,12 @@ def make_soft_masks(plant_dloader: DataLoader, alpha: float) -> DataLoader:
     for i in range(num_masks):
         new_masks[i] = alpha * (intersection * new_masks[i]) + (1 - alpha) * new_masks[i]
 
-    plant_dloader.dataset.data_masks = new_masks
-    print(f"shape of new masks: {new_masks.shape}")
+    new_tensors = plant_dloader.dataset.data_tensors
+    new_labels = plant_dloader.dataset.data_labels
+    new_plant_dset = BasicPlantDataset(new_tensors, new_labels, new_masks)
+    new_plant_loader = DataLoader(new_plant_dset, batch_size=plant_dloader.batch_size, shuffle=True)
 
-    return plant_dloader
+    return new_plant_loader
 
 def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, with_data_removal: bool = False, r4_soft: bool = False) -> torch.utils.data.DataLoader:
     assert isinstance(dloader.dataset, PlantDataset), "The dataset must be an instance of DecoyDermaMNIST"

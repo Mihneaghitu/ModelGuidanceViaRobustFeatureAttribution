@@ -1,0 +1,10 @@
+std:
+  avg_group_acc: 0.8091
+  macro_avg_over_labels: 0.8202
+  max_upper_bound: 0.22695
+  min_lower_bound: -0.21789
+  min_robust_delta: 0.42333
+  test_acc: 0.7564
+  train_acc: 0.7548
+  worst_group: 1
+  worst_group_acc: 0.5166

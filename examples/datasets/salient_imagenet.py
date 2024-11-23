@@ -243,8 +243,7 @@ class MyConcatDataset(Dataset):
     def __getitem__(self, idx):
         img, mask = self.full_dat[idx]
         # dummy group label
-        # return img, self.labels[idx], mask, 0
-        return torch.tensor(img), torch.tensor(self.labels[idx]), torch.tensor(mask).repeat(1, 1, 3)
+        return torch.tensor(img), torch.tensor(self.labels[idx]), torch.tensor(mask).repeat(1, 1, 3), torch.tensor(0)
 
     def __len__(self):
         return len(self.labels)
@@ -456,6 +455,12 @@ def get_dataloader(imgnet_dset: TensorDataset, batch_size: int, is_train = True,
     data_subset = data_transform(data_subset)
     labels_subset = imgnet_dset.tensors[1][split_indices]
     mask_subset = imgnet_dset.tensors[2][split_indices].permute(0, 3, 1, 2)
+    group_subset = imgnet_dset.tensors[3][split_indices]
     print(data_subset.shape, labels_subset.shape, mask_subset.shape)
-    new_dset = TensorDataset(data_subset, labels_subset, mask_subset)
+    new_dset = None
+    # Be consistent with currrent code
+    if is_train:
+        new_dset = TensorDataset(data_subset, labels_subset, mask_subset)
+    else:
+        new_dset = TensorDataset(data_subset, labels_subset, mask_subset, group_subset)
     return DataLoader(new_dset, batch_size=batch_size, shuffle=True, drop_last=drop_last)

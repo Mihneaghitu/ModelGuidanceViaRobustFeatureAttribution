@@ -17,7 +17,7 @@ class LesionNet(torch.nn.Sequential):
         )
 
 class PlantNet(torch.nn.Sequential):
-    def __init__(self, in_channels, out_dim):
+    def __init__(self, in_channels, out_dim, gain=None):
         output = torch.nn.Softmax(dim=-1) if out_dim > 1 else torch.nn.Sigmoid()
         super().__init__(
             torch.nn.Conv2d(in_channels, 32, 3, 1, 1),
@@ -36,6 +36,15 @@ class PlantNet(torch.nn.Sequential):
             torch.nn.Linear(1024, out_dim),
             output,
         )
+
+        if gain is not None:
+            self.init_weights(gain)
+
+    def init_weights(self, gain):
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
+                torch.nn.init.xavier_normal_(m.weight, gain=gain)
+                torch.nn.init.constant_(m.bias, 0)
 
 class DermaNet(torch.nn.Sequential):
     def __init__(self, in_channels, feature_size, out_dim, arch_type: str = "medium_large", init_with_small_weights: bool = False):

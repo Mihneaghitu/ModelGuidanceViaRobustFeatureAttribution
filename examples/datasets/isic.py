@@ -48,14 +48,14 @@ class ISICDataset(Dataset):
 
         for fname in _fnames:
             data_paths.append(os.path.join(dir_path, fname))
-            # if it does not have a patch, the mask is 0, and its group is 2 (patch_no_cancer)
+            # if it has patch, the group is 2 (i.e. group "patch no cancer") and there exists a mask
             if with_patch:
                 masks.append(os.path.join(self.masks_root, fname))
                 groups.append(2)
-            # if it has a patch, the mask is 1
+            # if there is no patch, no masks exist
             else:
                 masks.append("-1")
-                # if it has cancer, the group is 0, otherwise 1
+                # if it has cancer, the group is 0 (cancer), otherwise 1 (no patch no cancer)
                 if with_cancer:
                     groups.append(0)
                 else:

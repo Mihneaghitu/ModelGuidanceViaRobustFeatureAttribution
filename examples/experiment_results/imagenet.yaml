@@ -1,20 +1,21 @@
-pgd_r4:
-  test_acc: 0.9603
-  train_acc: 0.996
-  worst_group: 3
-  worst_group_acc: 0.94
-pgd_r4_pmo:
-  test_acc: 0.9723
-  train_acc: 0.996
-  worst_group: 3
-  worst_group_acc: 0.94
-smooth_r3:
-  test_acc: 0.976
-  train_acc: 1.0
-  worst_group: 3
-  worst_group_acc: 0.94
 std:
-  test_acc: 0.97
-  train_acc: 1.0
-  worst_group: 3
-  worst_group_acc: 0.9
+  macro_avg_over_labels: 0.75956
+  rcs: !!python/object/apply:numpy.core.multiarray.scalar
+  - !!python/object/apply:numpy.dtype
+    args:
+    - f8
+    - false
+    - true
+    state: !!python/tuple
+    - 3
+    - <
+    - null
+    - null
+    - null
+    - -1
+    - -1
+    - 0
+  - !!binary |
+    AAAAAAAAAAA=
+  test_acc: 0.79775
+  train_acc: 0.78232

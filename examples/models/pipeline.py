@@ -69,7 +69,6 @@ def train_model_with_certified_input_grad(
                 else:
                     print(f"Epoch {curr_epoch}, loss: {loss.item()}, reg: {inp_grad_reg}")
 
-
 def train_model_with_pgd_robust_input_grad(
     dl_train: torch.utils.data.DataLoader,
     n_epochs: int,
@@ -126,7 +125,7 @@ def train_model_with_pgd_robust_input_grad(
             optimizer.step()
             if not suppress_tqdm:
                 if i % 100 == 0:
-                    progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+                    progress_bar.set_postfix({"loss": loss.item(), "reg": k * inp_grad_reg})
 
 
 def train_model_with_smoothed_input_grad(
@@ -199,6 +198,33 @@ def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.Da
 
     return round(all_acc, 4)
 
+def test_macro_avg_label_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str, num_classes: int,
+                                  multi_class: bool = False, suppress_log: bool = False) -> float:
+
+    acc_per_label, num_elems_per_label = [0] * num_classes, [0] * num_classes
+    model.eval()
+    for data, ground_truth_labels, _, _ in dl_test:
+        data, ground_truth_labels = data.to(device), ground_truth_labels.to(device)
+        output = model(data).squeeze()
+        predicted_labels = None
+        if multi_class:
+            predicted_labels = output.argmax(dim=-1).squeeze()
+        else:
+            predicted_labels = (output > 0.5).int().squeeze()
+
+        for i in range(num_classes):
+            label_mask = ground_truth_labels == i
+            acc_per_label[i] += (predicted_labels[label_mask] == ground_truth_labels[label_mask]).sum().item()
+            num_elems_per_label[i] += label_mask.sum().item()
+
+    acc_per_label = torch.tensor(acc_per_label) / torch.tensor(num_elems_per_label)
+    macro_avg_acc = acc_per_label.mean().item()
+    if not suppress_log:
+        print("---- Macro averaged over labels accuracy ----")
+        print(f"Macro average label accuracy = {macro_avg_acc:.4g}")
+
+    return round(macro_avg_acc, 5)
+
 def test_model_avg_and_wg_accuracy(model: torch.nn.Sequential, dl_test_grouped: torch.utils.data.DataLoader, device: str, num_groups: int,
                                    multi_class: bool = False, suppress_log: bool = False) -> tuple[float, float, int]:
     acc_per_group, num_elems_for_group = [0] * num_groups, [0] * num_groups
@@ -239,7 +265,7 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
         test_batch, test_labels, test_masks = test_batch.to(device), test_labels.to(device), test_masks.to(device)
         # The MLX method does not really matter, as we return the grads
         grad_bounds = input_gradient_interval_regularizer(model, test_batch, test_labels, loss_fn, epsilon, 0.0, return_grads=True,
-            regularizer_type="std", batch_masks=test_masks, has_conv=has_conv, device=device)
+            regularizer_type="r4", batch_masks=test_masks, has_conv=has_conv, device=device)
         d_l, d_u = grad_bounds[1]
         d_l, d_u = d_l * test_masks, d_u * test_masks
         for idx in range(len(test_batch)):
@@ -283,7 +309,7 @@ def write_results_to_file(filename: str, results: dict, method: str) -> None:
         # Load the existing yaml file, append to it and write it back
         new_results = None
         with open(filename, "r", encoding="utf-8") as f:
-            new_results = yaml.load(f, Loader=yaml.FullLoader) or {}
+            new_results = yaml.load(f, Loader=yaml.Loader) or {}
             new_results[method] = results
         with open(filename, "w", encoding="utf-8") as f:
             yaml.dump(new_results, f)
@@ -293,7 +319,7 @@ def load_params_or_results_from_file(filename: str, method: str) -> dict:
     assert os.path.exists(filename), "File does not exist"
     results = None
     with open(filename, "r", encoding="utf-8") as f:
-        results = yaml.load(f, Loader=yaml.FullLoader)
+        results = yaml.load(f, Loader=yaml.Loader)
 
     return results[method] if results is not None else None
 

@@ -36,9 +36,16 @@ smooth_r3:
   restarts: 3
   weight_coeff: 1.0e-06
 std:
+  class_weights: null
   epsilon: -1
+  has_conv: true
   k: -1
-  lr: 0.0001
-  num_epochs: 5
-  restarts: 1
+  lr: 0.0005
+  multi_class: true
+  num_epochs: 4
+  restarts: 4
+  test_batch_size: 89
+  test_epsilon: -1
+  train_batch_size: 89
   weight_coeff: -1
+  with_k_schedule: false
