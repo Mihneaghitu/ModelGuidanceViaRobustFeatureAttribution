@@ -297,5 +297,3 @@ def get_rcs(dl_test: DataLoader, model_run_dir: str, device: str, suppress_log: 
     avg_rcs /= len(os.listdir(model_run_dir))
 
     return avg_rcs
-
-test_avg_delta("plant")

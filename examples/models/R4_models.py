@@ -46,6 +46,7 @@ class PlantNet(torch.nn.Sequential):
                 torch.nn.init.xavier_normal_(m.weight, gain=gain)
                 torch.nn.init.constant_(m.bias, 0)
 
+
 class DermaNet(torch.nn.Sequential):
     def __init__(self, in_channels, feature_size, out_dim, arch_type: str = "medium_large", init_with_small_weights: bool = False):
         self.latent_dim = {28: 2304, 64: 14400, 128: 61504, 224: 193600}

@@ -88,23 +88,6 @@ def input_gradient_interval_regularizer(
         interval_arithmetic.validate_interval(*intermediate[-1], msg=f"forward pass {module}")
 
     logits_l, logits_u = intermediate[-1]
-    #! =========================== Checkpoint to make training faster ===========================
-    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-    for module in modules:
-        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-            weight_sum = weight_sum + torch.sum(module.weight ** 2)
-    l2_reg = weight_reg_coeff * weight_sum
-    match regularizer_type:
-        case "ibp_ex":
-            y_bar = None
-            if loss_fn == "binary_cross_entropy":
-                y_bar = last_layer_act_func(logits_l)
-            else: # cross entropy
-                labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
-                # squeeze because logits are [batchsize x output_dim x 1]
-                y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
-            return l2_reg + criterion(y_bar.squeeze(), labels)
-    #! ==================================== End of Checkpoint ===================================
 
     # propagate through the loss function
     dl_l, dl_u, dl_n = bound_loss_function_derivative(loss_fn, logits_l, logits_u, logits_n, labels)
@@ -145,6 +128,11 @@ def input_gradient_interval_regularizer(
         grads.reverse()
         return grads
 
+    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+    for module in modules:
+        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+            weight_sum = weight_sum + torch.sum(module.weight ** 2)
+    l2_reg = weight_reg_coeff * weight_sum
     # pre-compute the regularization term for code clarity
     match regularizer_type:
         case "grad_cert":
@@ -161,11 +149,20 @@ def input_gradient_interval_regularizer(
             # make sure the input_grad is of the same shape as the input
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2) / input_grad.nelement()
             return reg_term + l2_reg
+        case "ibp_ex":
+            y_bar = None
+            if loss_fn == "binary_cross_entropy":
+                y_bar = last_layer_act_func(logits_l) * labels + last_layer_act_func(logits_u) * (1 - labels)
+            else: # cross entropy
+                labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
+                # squeeze because logits are [batchsize x output_dim x 1]
+                y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
+            return l2_reg + criterion(y_bar.squeeze(), labels)
         case "ibp_ex+r3":
             # ibp_ex term
             y_bar = None
             if loss_fn == "binary_cross_entropy":
-                y_bar = last_layer_act_func(logits_l)
+                y_bar = last_layer_act_func(logits_l) * labels + last_layer_act_func(logits_u) * (1 - labels)
             else: # cross entropy
                 labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
                 # squeeze because logits are [batchsize x output_dim x 1]

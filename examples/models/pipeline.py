@@ -258,6 +258,7 @@ def test_delta_input_robustness(dl_masked: torch.utils.data.DataLoader, model: t
     loss_fn: str, device: str, has_conv: bool = False, suppress_log: bool = False) -> tuple[float, float, float, float]:
     assert loss_fn in ["binary_cross_entropy", "cross_entropy"], "Only binary_cross_entropy and cross_entropy supported"
     # The model needs to be delta input robust only in the irrelevant features
+    model.eval()
     num_robust, min_robust_delta, num_test_samples = 0, 0, 0
     max_upper_bound, min_lower_bound = 0, 0
     model = model.to(device).eval()
