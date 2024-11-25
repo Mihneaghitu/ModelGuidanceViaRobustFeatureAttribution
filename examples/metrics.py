@@ -203,15 +203,17 @@ def core_spur_accuracy(test_dloader, model, device, noise_sigma=0.25, num_trials
 # ------------------------------------ Test functions ------------------------------------
 # ----------------------------------------------------------------------------------------
 def test_avg_delta(dset_name: str):
-    assert dset_name in ["derma_mnist", "plant", "decoy_mnist"]
-    dl_test, model_dir, model, device, loss_fn, eps, has_conv = None, None, None, "cuda:1", None, None, True
-    if dset_name == "derma_mnist":
-        test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
-        dl_test = derma_mnist.get_dataloader(test_dset, 256)
-        model = DermaNet(3, 64, 1)
+    assert dset_name in ["isic", "plant", "decoy_mnist", "imagenet"]
+    dl_test, model_dir, model, device, loss_fn, eps, has_conv = None, None, None, "cuda:0", None, None, True
+    if dset_name == "isic":
+        data_root = "/vol/bitbucket/mg2720/isic/"
+
+        isic_test_grouped = isic.ISICDataset(data_root, is_train=False, grouped=True)
+        dl_test = isic.get_loader_from_dataset(isic_test_grouped, batch_size=256, shuffle=False)
+        model = LesionNet(3, 1)
         loss_fn = "binary_cross_entropy"
-        model_dir = "saved_experiment_models/performance/derma_mnist"
-        eps = 0.05
+        model_dir = "saved_experiment_models/performance/isic"
+        eps = 1
     elif dset_name == "plant":
         split_root = "/vol/bitbucket/mg2720/plant/rgb_dataset_splits"
         data_root = "/vol/bitbucket/mg2720/plant/rgb_data"
@@ -231,7 +233,7 @@ def test_avg_delta(dset_name: str):
         model_dir = "saved_experiment_models/performance/decoy_mnist"
         has_conv = False
         eps = 0.1
-    for method in ["pgd_r4"]:#["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
+    for method in ["std"]:
         avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
         print(f"Method {method} avg delta = {avg_delta}")
 
@@ -297,3 +299,5 @@ def get_rcs(dl_test: DataLoader, model_run_dir: str, device: str, suppress_log: 
     avg_rcs /= len(os.listdir(model_run_dir))
 
     return avg_rcs
+
+# test_avg_delta("isic")

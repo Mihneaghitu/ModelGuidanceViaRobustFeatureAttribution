@@ -1,3 +1,19 @@
+r3:
+  class_weights:
+  - 1
+  - 9
+  epsilon: 0.1
+  has_conv: true
+  k: 0.1
+  lr: 0.0003
+  multi_class: false
+  num_epochs: 10
+  restarts: 3
+  test_batch_size: 256
+  test_epsilon: 0.1
+  train_batch_size: 256
+  weight_coeff: -1
+  with_k_schedule: false
 std:
   class_weights:
   - 1
