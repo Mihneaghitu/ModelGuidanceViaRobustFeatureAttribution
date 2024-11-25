@@ -1,36 +1,51 @@
 ibp_ex:
-  alpha_soft: 0.95
+  class_weights:
+  - 1.9
+  - 1
+  epsilon: 0.01
+  has_conv: true
+  k: 0.01
+  lr: 0.0001
+  multi_class: false
+  num_epochs: 18
+  restarts: 3
+  test_batch_size: 50
+  test_epsilon: 0.01
+  train_batch_size: 50
+  weight_coeff: 5.0e-05
+  with_k_schedule: false
+ibp_ex+r3:
+  class_weights:
+  - 1.9
+  - 1
+  epsilon: 0.01
+  has_conv: true
+  k: 0.01
+  lr: 0.0001
+  multi_class: false
+  num_epochs: 19
+  restarts: 3
+  test_batch_size: 50
+  test_epsilon: 0.01
+  train_batch_size: 50
+  weight_coeff: 5.0e-05
+  with_k_schedule: false
+pgd_r4:
   class_weights:
   - 2.3
   - 1
-  epsilon: 0.02
+  epsilon: 0.03
   has_conv: true
-  k: 0.01
-  lr: 0.0002
+  k: 0.003
+  lr: 5.0e-05
   multi_class: false
-  num_epochs: 12
+  num_epochs: 15
   restarts: 1
   test_batch_size: 50
   test_epsilon: 0.01
   train_batch_size: 50
-  weight_coeff: -1
-  with_k_schedule: false
-pgd_r4:
-  epsilon: 0.03
-  test_epsilon: 0.01
-  k: 0.003
   weight_coeff: 5.0e-05
-  num_epochs: 18
-  lr: 5.0e-05
-  restarts: 3
-  train_batch_size: 50
-  test_batch_size: 50
-  class_weights:
-  - 3.15
-  - 1
-  multi_class: false
-  has_conv: true
-  gain: 0.15
+  with_k_schedule: false
 r3:
   class_weights:
   - 4.5
@@ -63,6 +78,38 @@ r4:
   test_epsilon: 0.01
   train_batch_size: 50
   weight_coeff: -1
+  with_k_schedule: false
+rand_r4:
+  class_weights:
+  - 2.1
+  - 1
+  epsilon: 0.025
+  has_conv: true
+  k: 0.05
+  lr: 5.0e-05
+  multi_class: false
+  num_epochs: 21
+  restarts: 3
+  test_batch_size: 50
+  test_epsilon: 0.01
+  train_batch_size: 50
+  weight_coeff: 0.0003
+  with_k_schedule: false
+smooth_r3:
+  class_weights:
+  - 2.4
+  - 1
+  epsilon: 0.01
+  has_conv: true
+  k: 0.01
+  lr: 7.0e-05
+  multi_class: false
+  num_epochs: 17
+  restarts: 3
+  test_batch_size: 50
+  test_epsilon: 0.01
+  train_batch_size: 50
+  weight_coeff: 0.0001
   with_k_schedule: false
 std:
   class_weights:

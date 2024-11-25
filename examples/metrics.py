@@ -231,7 +231,7 @@ def test_avg_delta(dset_name: str):
         model_dir = "saved_experiment_models/performance/decoy_mnist"
         has_conv = False
         eps = 0.1
-    for method in ["r4"]:#["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
+    for method in ["pgd_r4"]:#["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
         avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
         print(f"Method {method} avg delta = {avg_delta}")
 

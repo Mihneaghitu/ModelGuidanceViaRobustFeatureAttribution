@@ -88,7 +88,22 @@ def input_gradient_interval_regularizer(
         interval_arithmetic.validate_interval(*intermediate[-1], msg=f"forward pass {module}")
 
     logits_l, logits_u = intermediate[-1]
-
+    #! =========================== Checkpoint to make training faster ===========================
+    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+    for module in modules:
+        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
+            weight_sum = weight_sum + torch.sum(module.weight ** 2)
+    l2_reg = weight_reg_coeff * weight_sum
+    if regularizer_type == "ibp_ex":
+        y_bar = None
+        if loss_fn == "binary_cross_entropy":
+            y_bar = last_layer_act_func(logits_l.squeeze()) * labels + last_layer_act_func(logits_u.squeeze()) * (1 - labels)
+        else: # cross entropy
+            labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
+            # squeeze because logits are [batchsize x output_dim x 1]
+            y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
+        return l2_reg + criterion(y_bar.squeeze(), labels)
+    #! ==================================== End of Checkpoint ===================================
     # propagate through the loss function
     dl_l, dl_u, dl_n = bound_loss_function_derivative(loss_fn, logits_l, logits_u, logits_n, labels)
     dl_l, dl_u = dl_l.squeeze(-1), dl_u.squeeze(-1)
@@ -108,31 +123,27 @@ def input_gradient_interval_regularizer(
     # ================================= INPUT GRAD COMPUTATION =================================
     # Need to unsqueeze the batch dimension if not conv to satisfy the quirks of this function (experimented on isic and decoy_mnist)
     input_grad = None
-    if has_conv:
-        if loss_fn == "cross_entropy":
-            dl_n = dl_n.squeeze(-1)
-        for i in range(len(modules) - 1, -1, -1):
-            dl_n, dl_n_1 = propagate_module_backward(modules[i], dl_n, dl_n, *intermediate_nominal[i], 0) # 0 model epsilon
-            interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
-            assert torch.allclose(dl_n, dl_n_1)
-        input_grad = dl_n
-    else:
-        activations_n = nominal_forward_pass(batch.flatten(start_dim=1).unsqueeze(-1), params_n_dense)
-        input_grad = nominal_backward_pass(dl_n, params_n_dense, activations_n, with_input_grad=True)[0]
-    # This will happen when we have a Flatten() module at the beginning of the model
-    if input_grad.shape != batch_masks.shape:
-        input_grad = input_grad.reshape(batch_masks.shape)
-    grads.append((input_grad, None))
+    if return_grads or regularizer_type in ["r3", "ibp_ex+r3"]:
+        if has_conv:
+            if loss_fn == "cross_entropy":
+                dl_n = dl_n.squeeze(-1)
+            for i in range(len(modules) - 1, -1, -1):
+                dl_n, dl_n_1 = propagate_module_backward(modules[i], dl_n, dl_n, *intermediate_nominal[i], 0) # 0 model epsilon
+                interval_arithmetic.validate_interval(dl_l, dl_u, msg=f"backward pass {modules[i]}")
+                assert torch.allclose(dl_n, dl_n_1)
+            input_grad = dl_n
+        else:
+            activations_n = nominal_forward_pass(batch.flatten(start_dim=1).unsqueeze(-1), params_n_dense)
+            input_grad = nominal_backward_pass(dl_n, params_n_dense, activations_n, with_input_grad=True)[0]
+        # This will happen when we have a Flatten() module at the beginning of the model
+        if input_grad.shape != batch_masks.shape:
+            input_grad = input_grad.reshape(batch_masks.shape)
+        grads.append((input_grad, None))
 
     if return_grads:
         grads.reverse()
         return grads
 
-    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-    for module in modules:
-        if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
-            weight_sum = weight_sum + torch.sum(module.weight ** 2)
-    l2_reg = weight_reg_coeff * weight_sum
     # pre-compute the regularization term for code clarity
     match regularizer_type:
         case "grad_cert":
@@ -149,20 +160,11 @@ def input_gradient_interval_regularizer(
             # make sure the input_grad is of the same shape as the input
             reg_term = reg_term + torch.sum((input_grad.squeeze() * batch_masks) ** 2) / input_grad.nelement()
             return reg_term + l2_reg
-        case "ibp_ex":
-            y_bar = None
-            if loss_fn == "binary_cross_entropy":
-                y_bar = last_layer_act_func(logits_l) * labels + last_layer_act_func(logits_u) * (1 - labels)
-            else: # cross entropy
-                labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
-                # squeeze because logits are [batchsize x output_dim x 1]
-                y_bar = last_layer_act_func(logits_l).squeeze() * labels_one_hot + last_layer_act_func(logits_u).squeeze() * (1 - labels_one_hot)
-            return l2_reg + criterion(y_bar.squeeze(), labels)
         case "ibp_ex+r3":
             # ibp_ex term
             y_bar = None
             if loss_fn == "binary_cross_entropy":
-                y_bar = last_layer_act_func(logits_l) * labels + last_layer_act_func(logits_u) * (1 - labels)
+                y_bar = last_layer_act_func(logits_l.squeeze()) * labels + last_layer_act_func(logits_u.squeeze()) * (1 - labels)
             else: # cross entropy
                 labels_one_hot = torch.nn.functional.one_hot(labels, num_classes=modules[-1].out_features)
                 # squeeze because logits are [batchsize x output_dim x 1]
