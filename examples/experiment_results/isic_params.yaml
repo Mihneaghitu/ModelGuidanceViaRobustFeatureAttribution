@@ -1,3 +1,35 @@
+ibp_ex:
+  class_weights:
+  - 1
+  - 9
+  epsilon: 0.2
+  has_conv: true
+  k: 0.3
+  lr: 0.001
+  multi_class: false
+  num_epochs: 12
+  restarts: 3
+  test_batch_size: 256
+  test_epsilon: 0.1
+  train_batch_size: 256
+  weight_coeff: 5.0e-05
+  with_k_schedule: false
+ibp_ex+r3:
+  class_weights:
+  - 1
+  - 9
+  epsilon: 0.25
+  has_conv: true
+  k: 0.325
+  lr: 0.001
+  multi_class: false
+  num_epochs: 14
+  restarts: 3
+  test_batch_size: 256
+  test_epsilon: 0.1
+  train_batch_size: 256
+  weight_coeff: 0.0001
+  with_k_schedule: false
 r3:
   class_weights:
   - 1
@@ -13,6 +45,22 @@ r3:
   test_epsilon: 0.1
   train_batch_size: 256
   weight_coeff: -1
+  with_k_schedule: false
+smooth_r3:
+  class_weights:
+  - 1
+  - 9
+  epsilon: 0.1
+  has_conv: true
+  k: 0.1
+  lr: 0.0002
+  multi_class: false
+  num_epochs: 9
+  restarts: 3
+  test_batch_size: 256
+  test_epsilon: 0.1
+  train_batch_size: 256
+  weight_coeff: 5.0e-05
   with_k_schedule: false
 std:
   class_weights:

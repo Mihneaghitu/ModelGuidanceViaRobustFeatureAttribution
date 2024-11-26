@@ -1,3 +1,23 @@
+ibp_ex:
+  avg_group_acc: 0.8369
+  macro_avg_over_labels: 0.82813
+  max_upper_bound: 1.01441
+  min_lower_bound: -0.88961
+  min_robust_delta: 1.78467
+  test_acc: 0.8325
+  train_acc: 0.8363
+  worst_group: 1
+  worst_group_acc: 0.69626
+ibp_ex+r3:
+  avg_group_acc: 0.84184
+  macro_avg_over_labels: 0.83333
+  max_upper_bound: 1.5964
+  min_lower_bound: -1.39954
+  min_robust_delta: 2.878
+  test_acc: 0.83797
+  train_acc: 0.8456
+  worst_group: 1
+  worst_group_acc: 0.7091
 r3:
   avg_group_acc: 0.75507
   macro_avg_over_labels: 0.72536
@@ -8,6 +28,16 @@ r3:
   train_acc: 0.77673
   worst_group: 1
   worst_group_acc: 0.63003
+smooth_r3:
+  avg_group_acc: 0.74417
+  macro_avg_over_labels: 0.70923
+  max_upper_bound: 0.001
+  min_lower_bound: -0.00125
+  min_robust_delta: 0.002
+  test_acc: 0.7727
+  train_acc: 0.77423
+  worst_group: 0
+  worst_group_acc: 0.62839
 std:
   avg_group_acc: 0.8091
   macro_avg_over_labels: 0.8202
