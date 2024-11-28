@@ -28,6 +28,16 @@ r3:
   train_acc: 0.77673
   worst_group: 1
   worst_group_acc: 0.63003
+r4:
+  avg_group_acc: 0.85565
+  macro_avg_over_labels: 0.85397
+  max_upper_bound: 0.49843
+  min_lower_bound: -0.45324
+  min_robust_delta: 0.90167
+  test_acc: 0.8431
+  train_acc: 0.85377
+  worst_group: 1
+  worst_group_acc: 0.7152
 smooth_r3:
   avg_group_acc: 0.74417
   macro_avg_over_labels: 0.70923

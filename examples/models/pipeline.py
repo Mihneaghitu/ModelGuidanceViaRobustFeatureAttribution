@@ -21,6 +21,7 @@ def train_model_with_certified_input_grad(
     k_schedule: callable = None,
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
+    weight_decay: float = 0.0,
     suppress_tqdm: bool = False
 ) -> None:
     loss_fn = None
@@ -30,7 +31,7 @@ def train_model_with_certified_input_grad(
         loss_fn = "cross_entropy"
     else:
         raise ValueError("Criterion not supported")
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # pre-train the model
     progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
     model = model.to(device)

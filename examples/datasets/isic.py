@@ -11,7 +11,7 @@ from skimage.segmentation import slic
 import cv2
 
 class ISICDataset(Dataset):
-    def __init__(self, data_root: str, is_train: bool = True, grouped: bool = False):
+    def __init__(self, data_root: str, is_train: bool = True, grouped: bool = False, soft_mask_eps: float = None):
         self.data_root_cancer = os.path.join(data_root, "processed/cancer")
         self.data_root_no_cancer = os.path.join(data_root, "processed/no_cancer")
         self.data_root_patch_no_cancer = os.path.join(data_root, "processed/patch_no_cancer_again")
@@ -33,6 +33,8 @@ class ISICDataset(Dataset):
         self.masks = [self.masks[i] for i in split_indices]
         self.groups = [self.groups[i] for i in split_indices]
         self.grouped = grouped
+
+        self.soft_mask_eps = soft_mask_eps
 
     def __collect_path_from_dir(self, dir_path: str) -> None:
         with_cancer = dir_path == self.data_root_cancer
@@ -78,6 +80,8 @@ class ISICDataset(Dataset):
         if self.masks[idx] != "-1":
             mask = Image.open(self.masks[idx])
             mask = self.transform(mask)
+            if self.soft_mask_eps is not None:
+                mask = mask + (1 - mask) * self.soft_mask_eps
         else:
             mask = torch.zeros_like(img)
         mask = mask.float()
@@ -86,7 +90,6 @@ class ISICDataset(Dataset):
             return img, label, mask, group
         else:
             return img, label, mask
-
 
 def get_loader_from_dataset(dataset: ISICDataset, batch_size: int, shuffle: bool = True) -> DataLoader:
     return DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle)
