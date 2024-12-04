@@ -1,0 +1,15 @@
+std:
+  class_weights: -1
+  epsilon: 0.1
+  has_conv: false
+  k: -1
+  lr: 0.0001
+  multi_class: true
+  num_epochs: 40
+  restarts: 3
+  test_batch_size: 128
+  test_epsilon: 0.1
+  train_batch_size: 64
+  weight_coeff: -1
+  weight_decay: 0.0001
+  with_k_schedule: false

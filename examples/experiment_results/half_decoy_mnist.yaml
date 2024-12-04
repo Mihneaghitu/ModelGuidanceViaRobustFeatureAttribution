@@ -1,0 +1,9 @@
+std:
+  avg_group_acc: 0.23018
+  max_upper_bound: 78.49291
+  min_lower_bound: -79.16961
+  min_robust_delta: 155.12833
+  test_acc: 0.23237
+  train_acc: 0.9996
+  worst_group: 9
+  worst_group_acc: 0.10836

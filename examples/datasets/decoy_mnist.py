@@ -5,13 +5,14 @@ from urllib.request import urlretrieve
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-
+from torchvision import transforms
+from torchvision.datasets import MNIST
+from PIL import Image
 
 def get_dataloaders(train_batchsize, test_batchsize=500):
     """
     Get MNIST dataset as a multi-class classification problem
     """
-
     curr_dir_path = os.path.dirname(os.path.abspath(__file__))
     decoy_mnist_data_root = os.path.join(curr_dir_path, 'data/DECOY_MNIST/decoy-mnist.npz')
     if not os.path.exists(decoy_mnist_data_root):
@@ -146,3 +147,82 @@ def randomize_img_swatch(data: torch.Tensor, labels: torch.Tensor, swatches_per_
         )
 
     return randomized_imgs
+
+def get_half_decoy_masked_dataloaders(train_batchsize, test_batchsize=500):
+    # get the datasets
+    curr_dir_path = os.path.dirname(os.path.abspath(__file__))
+    data_root = os.path.join(curr_dir_path, 'data')
+    rows, cols = 28, 28
+    train_dset = MNIST(root=data_root, train=True, download=True, transform=transforms.ToTensor())
+    test_dset = MNIST(root=data_root, train=False, transform=transforms.ToTensor())
+    train_imgs, train_labels = train_dset.data, train_dset.targets
+    test_imgs, test_labels = test_dset.data, test_dset.targets
+
+    # setup the new dset here, before the scaling
+    new_train_imgs = torch.zeros_like(train_imgs, dtype=torch.float32)
+    new_test_imgs = torch.zeros_like(test_imgs, dtype=torch.float32)
+    train_masks = torch.zeros_like(train_imgs, dtype=torch.float32)
+    test_masks = torch.zeros_like(test_imgs, dtype=torch.float32)
+    #@ Resize the images
+    train_imgs = transforms.functional.resize(train_imgs, size=[rows // 2, cols])
+    test_imgs = transforms.functional.resize(test_imgs, size=[rows // 2, cols])
+
+    #@ apply the appropriate scaling and transposition
+    train_imgs = torch.tensor(train_imgs.clone().detach(), dtype=torch.float32) / 255
+    test_imgs = torch.tensor(test_imgs.clone().detach(), dtype=torch.float32) / 255
+    train_labels = torch.tensor(train_labels.clone().detach(), dtype=torch.int64)
+    test_labels = torch.tensor(test_labels.clone().detach(), dtype=torch.int64)
+
+
+    dl_train, dl_test = get_dataloaders(train_batchsize, test_batchsize)
+    train_label_tensors = dl_train.dataset.tensors[1]
+    train_input_tensors = dl_train.dataset.tensors[0]
+    swatches_color_dict = get_swatches_color_dict(train_input_tensors, train_label_tensors)
+    decoy_positions_train = torch.randint(2, (train_input_tensors.shape[0],))
+    decoy_positions_test = torch.randint(2, (test_imgs.shape[0],))
+    print(swatches_color_dict)
+    train_swatches_colors = torch.tensor([swatches_color_dict[int(label)] for label in train_labels])
+    test_swatches_colors = torch.tensor([swatches_color_dict[int(label)] for label in torch.randint(0, 10, (test_imgs.shape[0],))])
+
+    #@ Make the train set and masks
+    for idx, train_img in enumerate(train_imgs):
+        swatch = torch.ones((rows // 2, cols)) * train_swatches_colors[idx]
+        mask = torch.zeros((rows, cols))
+        # Top swatch
+        if decoy_positions_train[idx] == 1:
+            new_train_imgs[idx][:rows // 2] = swatch
+            new_train_imgs[idx][rows // 2:] = train_img
+            mask[:rows // 2] = torch.ones((rows // 2, cols))
+            train_masks[idx] = mask
+        # Bottom swatch
+        else:
+            new_train_imgs[idx][rows // 2:] = swatch
+            new_train_imgs[idx][:rows // 2] = train_img
+            mask[rows // 2:] = torch.ones((rows // 2, cols))
+            train_masks[idx] = mask
+
+
+    #@ Make the test set and masks
+    for idx, test_img in enumerate(test_imgs):
+        swatch = torch.ones((rows // 2, cols)) * test_swatches_colors[idx]
+        mask = torch.zeros((rows, cols))
+        # resize the image
+        # Top swatch
+        if decoy_positions_test[idx] == 1:
+            new_test_imgs[idx][:rows // 2] = swatch
+            new_test_imgs[idx][rows // 2:] = test_img
+            mask[:rows // 2] = torch.ones((rows // 2, cols))
+            test_masks[idx] = mask
+        # Bottom swatch
+        else:
+            new_test_imgs[idx][rows // 2:] = swatch
+            new_test_imgs[idx][:rows // 2] = test_img
+            mask[rows // 2:] = torch.ones((rows // 2, cols))
+            test_masks[idx] = mask
+
+    masks_dset = torch.utils.data.TensorDataset(new_train_imgs, train_labels, train_masks)
+    dl_masks_train = torch.utils.data.DataLoader(masks_dset, batch_size=dl_train.batch_size, shuffle=True)
+    masks_dset = torch.utils.data.TensorDataset(new_test_imgs, test_labels, test_masks, test_labels)
+    dl_masks_test = torch.utils.data.DataLoader(masks_dset, batch_size=dl_test.batch_size, shuffle=True)
+
+    return dl_masks_train, dl_masks_test

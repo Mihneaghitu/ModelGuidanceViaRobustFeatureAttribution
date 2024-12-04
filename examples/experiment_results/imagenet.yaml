@@ -1,5 +1,5 @@
 std:
-  macro_avg_over_labels: 0.75956
+  macro_avg_over_labels: 0.7352
   rcs: !!python/object/apply:numpy.core.multiarray.scalar
   - !!python/object/apply:numpy.dtype
     args:
@@ -17,5 +17,5 @@ std:
     - 0
   - !!binary |
     AAAAAAAAAAA=
-  test_acc: 0.79775
-  train_acc: 0.78232
+  test_acc: 0.7303
+  train_acc: 0.7528

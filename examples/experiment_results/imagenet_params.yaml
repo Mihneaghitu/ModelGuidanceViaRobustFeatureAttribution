@@ -43,7 +43,7 @@ std:
   lr: 0.0005
   multi_class: true
   num_epochs: 4
-  restarts: 4
+  restarts: 1
   test_batch_size: 89
   test_epsilon: -1
   train_batch_size: 89

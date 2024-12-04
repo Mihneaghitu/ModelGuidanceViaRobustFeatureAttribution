@@ -282,14 +282,14 @@ def test_macro_over_labels_and_wg_acc(dset_name: str):
         print(f"Macro average over labels = {macro_avg_over_labels}")
         print(f"Macro average group acc = {macro_avg_group_acc}, worst group acc = {worst_group_acc}, worst group = {worst_group}")
 
-def get_rcs(dl_test: DataLoader, model_run_dir: str, device: str, suppress_log: bool = False) -> float:
+def get_rcs(dl_test: DataLoader, model_run_dir: str, device: str, eps: str, suppress_log: bool = False) -> float:
     model = SalientImageNet()
     model.eval()
     avg_rcs = 0
     for run_file in os.listdir(model_run_dir):
         model.load_state_dict(torch.load(f"{model_run_dir}/{run_file}"))
         model = model.to(device)
-        core_acc, spur_acc, _, _ = core_spur_accuracy(dl_test, model, device, noise_sigma=0.001, apply_norm=False)
+        core_acc, spur_acc, _, _ = core_spur_accuracy(dl_test, model, device, noise_sigma=eps, apply_norm=False)
         rcs = rel_score(core_acc, spur_acc)
         avg_rcs += rcs
         if not suppress_log:

@@ -18,6 +18,16 @@ ibp_ex+r3:
   train_acc: 0.8456
   worst_group: 1
   worst_group_acc: 0.7091
+pgd_r4:
+  avg_group_acc: 0.85116
+  macro_avg_over_labels: 0.85658
+  max_upper_bound: 0.22514
+  min_lower_bound: -0.21253
+  min_robust_delta: 0.4
+  test_acc: 0.82593
+  train_acc: 0.83033
+  worst_group: 1
+  worst_group_acc: 0.66651
 r3:
   avg_group_acc: 0.75507
   macro_avg_over_labels: 0.72536
@@ -38,6 +48,16 @@ r4:
   train_acc: 0.85377
   worst_group: 1
   worst_group_acc: 0.7152
+rand_r4:
+  avg_group_acc: 0.84927
+  macro_avg_over_labels: 0.8589
+  max_upper_bound: 0.17714
+  min_lower_bound: -0.16746
+  min_robust_delta: 0.32167
+  test_acc: 0.81697
+  train_acc: 0.81733
+  worst_group: 1
+  worst_group_acc: 0.64287
 smooth_r3:
   avg_group_acc: 0.74417
   macro_avg_over_labels: 0.70923

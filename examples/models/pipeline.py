@@ -83,13 +83,13 @@ def train_model_with_pgd_robust_input_grad(
     weight_reg_coeff: float = 0.0,
     class_weights: list[float] = None,
     num_iterations: int = 10,
-    clip_grad_bound = None,
+    weight_decay: float = 0.0,
     k_schedule: callable = None,
     suppress_tqdm: bool = False
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # pre-train the model
     progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
     model = model.to(device).train()
@@ -105,8 +105,7 @@ def train_model_with_pgd_robust_input_grad(
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_pgd_regularizer(
-                x, u, model, m, criterion, epsilon, num_iterations=num_iterations, regularizer_type=mlx_method, device=device,
-                weight_reg_coeff=weight_reg_coeff, clip_grad_bound=clip_grad_bound
+                x, u, model, m, criterion, epsilon, num_iterations=num_iterations, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff
             )
             if mlx_method == "std":
                 assert inp_grad_reg == 0
@@ -140,12 +139,13 @@ def train_model_with_smoothed_input_grad(
     k: float, # input reg weighting coefficient
     device: str,
     weight_reg_coeff: float = 0.0,
+    weight_decay: float = 0.0,
     class_weights: list[float] = None,
     suppress_tqdm: bool = False
 ) -> None:
     if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
         raise ValueError("Criterion not supported")
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
     model = model.to(device).train()
     for _ in progress_bar:
