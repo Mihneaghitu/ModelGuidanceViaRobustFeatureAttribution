@@ -16,19 +16,19 @@ ibp_ex:
   with_k_schedule: false
 ibp_ex+r3:
   class_weights:
-  - 1.9
+  - 1.85
   - 1
   epsilon: 0.01
   has_conv: true
   k: 0.01
-  lr: 0.0001
+  lr: 8.0e-05
   multi_class: false
-  num_epochs: 19
+  num_epochs: 20
   restarts: 3
   test_batch_size: 50
   test_epsilon: 0.01
   train_batch_size: 50
-  weight_coeff: 5.0e-05
+  weight_decay: 5.0e-05
   with_k_schedule: false
 pgd_r4:
   class_weights:

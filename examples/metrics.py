@@ -154,7 +154,7 @@ def rel_score(core_acc, spur_acc):
 
     return (core_acc - spur_acc) / (2 * min(avg, 1-avg))
 
-def core_spur_accuracy(test_dloader, model, device, noise_sigma=0.25, num_trials=5, apply_norm=True):
+def core_spur_accuracy(test_dloader, model, device, noise_sigma=0.25, num_trials=10, apply_norm=False):
     '''
     Core regions are taken to be dilated core masks, and spurious regions are 1-dilated core masks
     Use Salient Imagenet test set for 'dset', or any dataset with soft segmentation masks for core regions.
@@ -233,7 +233,7 @@ def test_avg_delta(dset_name: str):
         model_dir = "saved_experiment_models/performance/decoy_mnist"
         has_conv = False
         eps = 0.1
-    for method in ["std"]:
+    for method in ["ibp_ex+r3"]:
         avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
         print(f"Method {method} avg delta = {avg_delta}")
 
@@ -299,5 +299,3 @@ def get_rcs(dl_test: DataLoader, model_run_dir: str, device: str, eps: str, supp
     avg_rcs /= len(os.listdir(model_run_dir))
 
     return avg_rcs
-
-# test_avg_delta("isic")
