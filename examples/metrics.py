@@ -10,6 +10,7 @@ from models.pipeline import test_delta_input_robustness, test_model_accuracy
 import numpy as np
 from torchvision.models import ResNet18_Weights
 from tqdm import tqdm
+from math import fabs
 
 
 def get_restart_avg_and_worst_group_accuracy_with_stddev(
@@ -282,7 +283,7 @@ def test_macro_over_labels_and_wg_acc(dset_name: str):
         print(f"Macro average over labels = {macro_avg_over_labels}")
         print(f"Macro average group acc = {macro_avg_group_acc}, worst group acc = {worst_group_acc}, worst group = {worst_group}")
 
-def get_rcs(dl_test: DataLoader, model_run_dir: str, device: str, eps: str, suppress_log: bool = False) -> float:
+def get_rcs_obsolete(dl_test: DataLoader, model_run_dir: str, device: str, eps: float, suppress_log: bool = False) -> float:
     model = SalientImageNet()
     model.eval()
     avg_rcs = 0
@@ -299,3 +300,67 @@ def get_rcs(dl_test: DataLoader, model_run_dir: str, device: str, eps: str, supp
     avg_rcs /= len(os.listdir(model_run_dir))
 
     return avg_rcs
+
+def lambda_rcs_acc(net, test_dl, device):
+    corrs, noisy_corrs, dset_size = 0, 0, 0
+    for batch_x, batch_y, batch_mask, _ in test_dl:
+        noise = torch.randn(size=batch_x.shape) * 2
+        batch_x, batch_y, batch_mask, noise = batch_x.to(device), batch_y.to(device), batch_mask.to(device), noise.to(device)
+        with torch.no_grad():
+            pred_y = torch.argmax(net(batch_x), dim=-1)
+            noisy_preds = torch.argmax(net(batch_x + noise * batch_mask), dim=-1)
+            corrs += (pred_y == batch_y).sum()
+            noisy_corrs += (noisy_preds == batch_y).sum()
+            dset_size += len(pred_y)
+    acc, noisy_acc = corrs / dset_size, noisy_corrs / dset_size
+    return acc, noisy_acc
+
+def get_avg_rcs(dl_test_spurious: DataLoader, dl_test_core: DataLoader, model_run_dir: str, device: str, suppress_logs: bool = False) -> float:
+    model = SalientImageNet()
+    model.eval()
+    avg_rcs, avg_spur_acc = 0, 0
+
+    for run_file in os.listdir(model_run_dir):
+        model.load_state_dict(torch.load(f"{model_run_dir}/{run_file}"))
+        model = model.to(device)
+        acc_spur, noisy_acc_spur = lambda_rcs_acc(model, dl_test_spurious, device)
+        acc_core, noisy_acc_core = lambda_rcs_acc(model, dl_test_core, device)
+
+        avg_acc = (noisy_acc_core + noisy_acc_spur) / 2
+        rcs_for_run = (noisy_acc_core - noisy_acc_spur) / (2 * min(avg_acc, 1 - avg_acc))
+        avg_rcs += round(float(rcs_for_run), 5)
+        avg_spur_acc += round(float(acc_spur), 5)
+
+        #* We make a slightly different calculation. Core and spurious accuracies are obtained by perturbing core and spurious masks
+        #* instead of perturbing 1-core and 1-spurious masks as proposed in the original paper.
+        #* Approximating the obtained core_acc as 1-core_acc (that we would have gotten if we had perturbed 1-core_mask),
+        #* similarly for spu_acc, we report RCS as spu_acc-core_acc/denominator.
+        if not suppress_logs:
+            print("RCS:", rcs_for_run)
+            print(f"Core accuracy = {acc_core}, spurious accuracy = {acc_spur}")
+    avg_rcs /= len(os.listdir(model_run_dir))
+    avg_spur_acc /= len(os.listdir(model_run_dir))
+    if not suppress_logs:
+        print(f"Average RCS = {-avg_rcs}")
+        print(f"Average spurious accuracy = {avg_spur_acc}")
+
+    return -avg_rcs, avg_spur_acc
+
+def get_rcs_for_run(dl_test_spurious: DataLoader, dl_test_core: DataLoader, model: SalientImageNet, device: str, suppress_logs: bool = False) -> float:
+    model.eval()
+    model = model.to(device)
+    acc_spur, noisy_acc_spur = lambda_rcs_acc(model, dl_test_spurious, device)
+    acc_core, noisy_acc_core = lambda_rcs_acc(model, dl_test_core, device)
+
+    avg_acc = (noisy_acc_core + noisy_acc_spur) / 2
+    rcs_for_run = (noisy_acc_core - noisy_acc_spur) / (2 * min(avg_acc, 1 - avg_acc))
+    rcs_for_run = round(float(rcs_for_run), 5)
+    acc_spur = round(float(acc_spur), 5)
+    if not suppress_logs:
+        print(f"Avg Acc = {avg_acc}, 2 * min(avg_acc, 1 - avg_acc) = {2 * min(avg_acc, 1 - avg_acc)}")
+        print("RCS:", -rcs_for_run)
+        print(f"Core accuracy = {acc_core}, spurious accuracy = {acc_spur}")
+        print(f"Noisy core accuracy = {noisy_acc_core}, noisy spurious accuracy = {noisy_acc_spur}")
+
+    # Report (-RCS)
+    return  -rcs_for_run, acc_spur

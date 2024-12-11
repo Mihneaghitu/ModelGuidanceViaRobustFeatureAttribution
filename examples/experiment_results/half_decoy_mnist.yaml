@@ -7,3 +7,12 @@ std:
   train_acc: 0.9996
   worst_group: 9
   worst_group_acc: 0.10836
+r4:
+  avg_group_acc: 0.68017
+  max_upper_bound: 5.74188
+  min_lower_bound: -5.86032
+  min_robust_delta: 6.651
+  test_acc: 0.68
+  train_acc: 0.84487
+  worst_group: 9
+  worst_group_acc: 0.407

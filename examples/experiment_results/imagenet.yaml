@@ -1,21 +1,9 @@
+pgd_r4:
+  rcs: 0.70435
+  spur_acc: 0.99107
+r3:
+  rcs: 0.50581
+  spur_acc: 0.95536
 std:
-  macro_avg_over_labels: 0.77417
-  rcs: !!python/object/apply:numpy.core.multiarray.scalar
-  - !!python/object/apply:numpy.dtype
-    args:
-    - f8
-    - false
-    - true
-    state: !!python/tuple
-    - 3
-    - <
-    - null
-    - null
-    - null
-    - -1
-    - -1
-    - 0
-  - !!binary |
-    AAAAAAAAAAA=
-  test_acc: 0.8652
-  train_acc: 0.9017
+  rcs: 0.48485
+  spur_acc: 0.99107

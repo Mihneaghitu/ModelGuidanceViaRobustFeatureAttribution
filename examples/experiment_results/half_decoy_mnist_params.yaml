@@ -13,3 +13,18 @@ std:
   weight_coeff: -1
   weight_decay: 0.0001
   with_k_schedule: false
+r4:
+  class_weights: -1
+  epsilon: 0.5
+  has_conv: false
+  k: 0.6
+  lr: 0.004
+  multi_class: true
+  num_epochs: 50
+  restarts: 3
+  test_batch_size: 128
+  test_epsilon: 0.1
+  train_batch_size: 256
+  weight_coeff: -1
+  weight_decay: 0.0001
+  with_k_schedule: false

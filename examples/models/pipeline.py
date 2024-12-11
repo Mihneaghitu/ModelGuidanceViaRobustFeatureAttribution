@@ -58,7 +58,7 @@ def train_model_with_certified_input_grad(
                 criterion = torch.nn.BCELoss(weight=batch_weights)
             std_loss = criterion(output, u)
             if k_schedule is not None:
-                k = k_schedule(curr_epoch, n_epochs, std_loss.item(), inp_grad_reg)
+                k = k_schedule(curr_epoch, n_epochs)
             loss = std_loss + k * inp_grad_reg
             # Backward and optimize
             optimizer.zero_grad()
@@ -66,9 +66,9 @@ def train_model_with_certified_input_grad(
             optimizer.step()
             if i % 100 == 0:
                 if not suppress_tqdm:
-                    progress_bar.set_postfix({"loss": loss.item(), "reg": inp_grad_reg})
+                    progress_bar.set_postfix({"loss (entropy)": loss.item(), "reg": k * inp_grad_reg})
                 else:
-                    print(f"Epoch {curr_epoch}, loss: {loss.item()}, reg: {inp_grad_reg}")
+                    print(f"Epoch {curr_epoch}, loss (entropy): {loss.item()}, reg: {k * inp_grad_reg}")
 
 def train_model_with_pgd_robust_input_grad(
     dl_train: torch.utils.data.DataLoader,

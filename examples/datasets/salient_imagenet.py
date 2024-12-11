@@ -231,14 +231,14 @@ class MyConcatDataset(Dataset):
         self.full_dat = ConcatDataset(self.dats)
         self.labels = []
         for i, _dat in enumerate(self.dats):
-            self.labels += [i]*len(_dat)
+            self.labels += [i] * len(_dat)
 
         rng = np.random.default_rng(42)
         _ln = len(self.labels)
         all_idxs = rng.permuted(list(range(_ln)))
-        train_ln, val_ln, test_ln = int(_ln*0.6), int(_ln*0.15), int(_ln*0.25)
-        train_idxs, val_idxs, test_idxs = all_idxs[:train_ln], all_idxs[train_ln:train_ln+val_ln], all_idxs[train_ln+val_ln:]
-        self.split_dict = {'train': train_idxs, 'val': val_idxs, 'test': test_idxs}
+        train_ln = int(_ln*0.75)
+        train_idxs, test_idxs = all_idxs[:train_ln], all_idxs[train_ln:]
+        self.split_dict = {'train': train_idxs, 'test': test_idxs}
 
     def __getitem__(self, idx):
         img, mask = self.full_dat[idx]
@@ -463,4 +463,22 @@ def get_dataloader(imgnet_dset: TensorDataset, batch_size: int, is_train = True,
         new_dset = TensorDataset(data_subset, labels_subset, mask_subset)
     else:
         new_dset = TensorDataset(data_subset, labels_subset, mask_subset, group_subset)
+
     return DataLoader(new_dset, batch_size=batch_size, shuffle=True, drop_last=drop_last)
+
+#* The train dataloader for every method contains only examples with spurious features
+def get_dataloader_train(spurious_train: TensorDataset, batch_size: int, drop_last: bool = False) -> DataLoader:
+    # permute data and mask
+    permuted_data = spurious_train.tensors[0].permute(0, 3, 1, 2).float()
+    permuted_mask = spurious_train.tensors[2].permute(0, 3, 1, 2).float()
+    # remove the groups - not needed for train
+    new_spurious_train = TensorDataset(permuted_data, spurious_train.tensors[1], permuted_mask)
+    return DataLoader(new_spurious_train, batch_size=batch_size, shuffle=True, drop_last=drop_last)
+
+#* The test dataloader for every method contains examples with both spurious and core feature
+def get_dataloader_test(feature_dset: TensorDataset, batch_size: int, drop_last: bool = False) -> DataLoader:
+    # permute data and mask
+    permuted_data = feature_dset.tensors[0].permute(0, 3, 1, 2).float()
+    permuted_mask = feature_dset.tensors[2].permute(0, 3, 1, 2).float()
+    permuted_feature_dset = TensorDataset(permuted_data, feature_dset.tensors[1], permuted_mask, feature_dset.tensors[3])
+    return DataLoader(permuted_feature_dset, batch_size=batch_size, shuffle=True, drop_last=drop_last)

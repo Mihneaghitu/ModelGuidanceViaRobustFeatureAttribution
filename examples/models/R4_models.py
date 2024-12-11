@@ -149,7 +149,7 @@ class SalientImageNet(torch.nn.Module):
 
     def forward(self, x):
         y = self.resnet(x)
-        # y = self.dropout(y)
+        y = self.dropout(y)
         y = self.fc(y)
         y = self.softmax(y)
         return y
