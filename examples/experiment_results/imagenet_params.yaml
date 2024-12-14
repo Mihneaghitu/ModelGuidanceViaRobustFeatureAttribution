@@ -13,13 +13,6 @@ pgd_r4:
   train_batch_size: 33
   weight_decay: 0
   with_k_schedule: false
-pgd_r4_pmo:
-  epsilon: 0.03
-  k: 0.3
-  lr: 0.0001
-  num_epochs: 7
-  restarts: 3
-  weight_coeff: 1.0e-05
 r3:
   class_weights: null
   epsilon: 0
@@ -29,27 +22,42 @@ r3:
   multi_class: true
   num_epochs: 32
   restarts: 1
-  seed: 22
+  seed: 1
   test_batch_size: 33
   test_epsilon: 0
   train_batch_size: 33
   weight_decay: 1.0e-05
   with_k_schedule: false
-r4:
-  delta_threshold: 1
-  epsilon: 0.01
-  k: 0.01
-  lr: 0.0005
-  num_epochs: 14
-  restarts: 3
-  weight_coeff: -1
+rand_r4:
+  class_weights: null
+  epsilon: 1
+  has_conv: true
+  k: 10000
+  lr: 5.0e-05
+  multi_class: true
+  num_epochs: 25
+  restarts: 1
+  seed: 22
+  test_batch_size: 33
+  test_epsilon: 1
+  train_batch_size: 33
+  weight_decay: 1.0e-07
+  with_k_schedule: false
 smooth_r3:
-  epsilon: 0.01
-  k: 0.4
-  lr: 8.0e-05
-  num_epochs: 7
-  restarts: 3
-  weight_coeff: 1.0e-06
+  class_weights: null
+  epsilon: 0.75
+  has_conv: true
+  k: 100
+  lr: 6.0e-05
+  multi_class: true
+  num_epochs: 20
+  restarts: 1
+  seed: 1
+  test_batch_size: 33
+  test_epsilon: 0.75
+  train_batch_size: 33
+  weight_decay: 1.0e-05
+  with_k_schedule: false
 std:
   class_weights: null
   epsilon: -1
