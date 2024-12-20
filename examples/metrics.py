@@ -89,7 +89,6 @@ def get_restart_macro_avg_acc_over_labels_with_stddev(
 
     return round(macro_avg_over_labels, 5), round(stddev_over_labels, 5)
 
-
 def get_avg_acc_with_stddev(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
     num_classes: int) -> tuple[float, float]:
     num_runs = len(os.listdir(model_dir))
@@ -115,90 +114,6 @@ def get_avg_rob_metrics(model: torch.nn.Sequential, test_dloader: DataLoader, de
             ls[run_idx] = l
             us[run_idx] = u
     return deltas.mean(), ls.mean(), us.mean(), deltas.std(), ls.std(), us.std()
-
-def dilate_erode(masks, dilate=True, iterations=15, kernel=5):
-    ''' Dilate or erode tensor of soft segmentation masks'''
-    assert kernel % 2 == 1
-    half_k = kernel // 2
-    batch_size, _, side_len, _ = masks.shape
-
-    out = masks[:,0,:,:].clone()
-    padded = torch.zeros(batch_size, side_len+2*half_k, side_len+2*half_k, device=masks.device)
-    if not dilate:
-        padded = 1 + padded
-    for itr in range(iterations):
-        all_padded = []
-        centered = padded.clone()
-        centered[:, half_k:half_k+side_len, half_k:half_k+side_len]; all_padded.append(centered)
-        for j in range(1, half_k+1):
-            left, right, up, down = [padded.clone() for _ in range(4)]
-            left[:, half_k-j:half_k-j+side_len, half_k:half_k+side_len] = out; all_padded.append(left)
-            right[:, half_k+j:half_k+j+side_len, half_k:half_k+side_len] = out; all_padded.append(right)
-            up[:, half_k:half_k+side_len, half_k+j:half_k+j+side_len] = out; all_padded.append(up)
-            down[:, half_k:half_k+side_len, half_k-j:half_k-j+side_len] = out; all_padded.append(down)
-        all_padded = torch.stack(all_padded)
-        out = torch.max(all_padded, dim=0)[0] if dilate else torch.min(all_padded, dim=0)[0]
-        out = out[:, half_k:half_k+side_len, half_k:half_k+side_len]
-
-    out = torch.stack([out, out, out], dim=1)
-    out = out / torch.max(out)
-    return out
-
-
-def rel_score(core_acc, spur_acc):
-    '''
-    Computes relative core sensitivity for scalar values core_acc and spur_acc
-    '''
-    avg = 0.5 * (core_acc + spur_acc)
-    if avg == 0 or avg == 1:
-        return 0
-
-    return (core_acc - spur_acc) / (2 * min(avg, 1-avg))
-
-def core_spur_accuracy(test_dloader, model, device, noise_sigma=0.25, num_trials=10, apply_norm=False):
-    '''
-    Core regions are taken to be dilated core masks, and spurious regions are 1-dilated core masks
-    Use Salient Imagenet test set for 'dset', or any dataset with soft segmentation masks for core regions.
-    Returns overall core and spurious accuracy, as well as per class metrics.
-    '''
-    normalize = ResNet18_Weights.DEFAULT.transforms()
-    cnt_by_class = dict({i:0 for i in range(1000)})
-    core_cc_by_class, spur_cc_by_class = dict({i:0 for i in range(1000)}), dict({i:0 for i in range(1000)})
-
-    for dat in test_dloader:
-        imgs, labels, masks, _ = [x.cuda(device) for x in dat]
-
-        idx_with_masks = (masks.flatten(1).sum(1) != 0)
-        imgs, labels, masks = [x[idx_with_masks] for x in [imgs, labels, masks]]
-
-        masks = dilate_erode(masks)
-
-        for _ in range(num_trials):
-            noise = torch.randn_like(imgs, device=imgs.device) * noise_sigma
-            noisy_core, noisy_spur = [torch.clamp(imgs + (x * noise), 0, 1) for x in [masks, 1-masks]]
-            if apply_norm:
-                noisy_core, noisy_spur = [normalize(x) for x in [noisy_core, noisy_spur]]
-            noisy_core_preds, noisy_spur_preds = [model(x).argmax(1) for x in [noisy_core, noisy_spur]]
-
-            for y in np.unique(labels.cpu().numpy()):
-                core_cc_by_class[y] += (noisy_spur_preds[labels == y] == y).sum().item()
-                spur_cc_by_class[y] += (noisy_core_preds[labels == y] == y).sum().item()
-                cnt_by_class[y] += (labels == y).sum().item()
-
-    total_cnt, total_core_cc, total_spur_cc = 0, 0, 0
-    core_acc_by_class, spur_acc_by_class = {}, {}
-    for c in cnt_by_class:
-        if cnt_by_class[c] == 0:
-            continue
-        total_core_cc += core_cc_by_class[c]
-        total_spur_cc += spur_cc_by_class[c]
-        total_cnt += cnt_by_class[c]
-        core_acc_by_class[c] = core_cc_by_class[c] / cnt_by_class[c]
-        spur_acc_by_class[c] = spur_cc_by_class[c] / cnt_by_class[c]
-
-    core_acc, spur_acc = [np.average(list(x.values())) for x in [core_acc_by_class, spur_acc_by_class]]
-    return core_acc, spur_acc, core_acc_by_class, spur_acc_by_class
-
 
 # ----------------------------------------------------------------------------------------
 # ------------------------------------ Test functions ------------------------------------
@@ -282,24 +197,6 @@ def test_macro_over_labels_and_wg_acc(dset_name: str):
         )
         print(f"Macro average over labels = {macro_avg_over_labels}")
         print(f"Macro average group acc = {macro_avg_group_acc}, worst group acc = {worst_group_acc}, worst group = {worst_group}")
-
-def get_rcs_obsolete(dl_test: DataLoader, model_run_dir: str, device: str, eps: float, suppress_log: bool = False) -> float:
-    model = SalientImageNet()
-    model.eval()
-    avg_rcs = 0
-    for run_file in os.listdir(model_run_dir):
-        model.load_state_dict(torch.load(f"{model_run_dir}/{run_file}"))
-        model = model.to(device)
-        core_acc, spur_acc, _, _ = core_spur_accuracy(dl_test, model, device, noise_sigma=eps, apply_norm=False)
-        rcs = rel_score(core_acc, spur_acc)
-        avg_rcs += rcs
-        if not suppress_log:
-            print(f"Core acc = {core_acc}, spur acc = {spur_acc}")
-            print(f"Rcs = {rcs}")
-
-    avg_rcs /= len(os.listdir(model_run_dir))
-
-    return avg_rcs
 
 def lambda_rcs_acc(net, test_dl, device):
     corrs, noisy_corrs, dset_size = 0, 0, 0

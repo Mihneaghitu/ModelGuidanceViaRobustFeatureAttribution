@@ -1,13 +1,15 @@
-
 import os
+import sys
 from urllib.request import urlretrieve
+sys.path.append("../")
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import transforms
 from torchvision.datasets import MNIST
-from PIL import Image
+from datasets.corruption import MaskCorruption
+
 
 def get_dataloaders(train_batchsize, test_batchsize=500):
     """
@@ -148,6 +150,77 @@ def randomize_img_swatch(data: torch.Tensor, labels: torch.Tensor, swatches_per_
 
     return randomized_imgs
 
+#* ===================================================================================
+#* ======================= DATA LOADERS WITH CORRUPTED MASKS =========================
+#* ===================================================================================
+
+def __gen_misposition_mask()  -> torch.Tensor:
+    pass
+
+def __get_swatch_pos(data: torch.Tensor) -> str:
+    pass
+
+def gen_shift_mask(data: torch.Tensor) -> torch.Tensor:
+    pass
+
+def gen_dilation_mask(data: torch.Tensor) -> torch.Tensor:
+    pass
+
+def gen_shrink_mask(data: torch.Tensor) -> torch.Tensor:
+    pass
+
+
+def get_train_dl_with_corrupted_masks(dl_train: DataLoader, correct_ratio: float, corruption_type: MaskCorruption) -> tuple[DataLoader, DataLoader]:
+    # Extract the swatches values for each different label
+    train_label_tensors = dl_train.dataset.tensors[1]
+    train_input_tensors = dl_train.dataset.tensors[0]
+
+    swatches_color_dict = get_swatches_color_dict(train_input_tensors, train_label_tensors)
+
+    # Obtain the indices in the dataset that do not have corrupted masks
+    all_indices = torch.randperm(len(dl_train.dataset))
+    correct_indices = all_indices[:int(correct_ratio * len(dl_train.dataset))].tolist()
+
+    # make a corner mask
+    check_mask = torch.zeros(28, 28)
+    corner_mask = torch.ones(4, 4)
+    check_mask[:4, :4] = corner_mask
+    check_mask[-4:, :4] = corner_mask
+    check_mask[:4, -4:] = corner_mask
+    check_mask[-4:, -4:] = corner_mask
+    check_mask = check_mask.bool()
+    # ======= Construct the masks for the training set =======
+    # Extract the datasets from the dataloader
+    train_data_inputs, train_data_labels = dl_train.dataset.tensors[0], dl_train.dataset.tensors[1] # i.e. the first tuple element, which is the input
+    # So, mark as 1 the irrelevant features
+    train_masks = torch.empty_like(train_data_inputs)
+    for idx, (data_input, label) in enumerate(zip(train_data_inputs, train_data_labels)):
+        if idx in correct_indices:
+            train_masks[idx] = torch.where(torch.isclose(data_input, swatches_color_dict[int(label)], atol=1e-5), 1, 0)
+            train_masks[idx] *= check_mask
+        else:
+            match corruption_type:
+                case MaskCorruption.MISPOSITION:
+                    train_masks[idx] = __gen_misposition_mask(data_input, label)
+                case MaskCorruption.SHIFT:
+                    train_masks[idx] = gen_shift_mask(data_input, label)
+                case MaskCorruption.DILATION:
+                    train_masks[idx] = gen_dilation_mask(data_input, label)
+                case MaskCorruption.SHRINK:
+                    train_masks[idx] = gen_shrink_mask(data_input, label)
+                case _:
+                    raise ValueError("Invalid corruption type")
+
+    masks_dset = torch.utils.data.TensorDataset(train_data_inputs, train_data_labels, train_masks)
+    dl_masks_train = torch.utils.data.DataLoader(masks_dset, batch_size=dl_train.batch_size, shuffle=True)
+    # ========================================================
+
+    return dl_masks_train
+
+
+#! ===================================================================================
+#! =========================== HALF DECOY MNIST DATASET ==============================
+#! ===================================================================================
 def get_half_decoy_masked_dataloaders(train_batchsize, test_batchsize=500):
     # get the datasets
     curr_dir_path = os.path.dirname(os.path.abspath(__file__))

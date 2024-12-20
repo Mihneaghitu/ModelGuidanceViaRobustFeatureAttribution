@@ -1,14 +1,14 @@
+from copy import deepcopy
+import os
 from medmnist import DermaMNIST
 import torch
-import torchvision.transforms as transforms
-from torchvision.ops import Permute
-import os
 from torch.utils.data import Dataset
 import numpy as np
 
 class DecoyDermaMNIST(Dataset):
     def __init__(self, is_train: bool, size: int = 28, override_dir: str = None):
         self.size = size
+        self.is_train = is_train
         curr_dir = os.path.dirname(os.path.realpath(__file__))
         data_dir = os.path.join(curr_dir, "data")
 
@@ -28,25 +28,34 @@ class DecoyDermaMNIST(Dataset):
         train_targets = torch.cat((train_data.labels, valid_data.labels), dim=0)
         test_input = test_data.imgs
         test_targets = test_data.labels
-        self.dset_inputs, self.dset_labels, self.dset_masks = None, None, None
+        self.dset_inputs, self.dset_labels, self.dset_masks, self.dset_groups = None, None, None, None
         # BENIGN LESIONS ARE THE MAJORITY CLASS IN THE DATASET AND THEIR LABEL IS 5 (count 5364 for train)
         #! We make it a binary classification problem by setting the label of benign lesions to 0 and the rest to 1
         if is_train:
             self.dset_labels = torch.where(train_targets == 5, 0, 1).to(torch.float32)
-            self.dset_inputs, self.dset_masks = self.__generate_swatches_and_masks(train_input, self.dset_labels)
+            self.dset_inputs, self.dset_masks = self.generate_train_swatches_and_masks(train_input, self.dset_labels)
         else:
-            self.dset_inputs = test_input
             self.dset_labels = torch.where(test_targets == 5, 0, 1).to(torch.float32)
             # We want to
-            self.dset_masks = self.__generate_masks_for_test(test_input.shape[0])
+            self.dset_inputs, self.dset_masks = self.generate_test_swatches_and_masks(test_input, self.dset_labels)
+            self.dset_groups = deepcopy(self.dset_labels.clone().detach())
 
     def __len__(self):
         return self.dset_inputs.shape[0]
 
     def __getitem__(self, idx):
-        return self.dset_inputs[idx], self.dset_labels[idx], self.dset_masks[idx]
+        if self.is_train:
+            return self.dset_inputs[idx], self.dset_labels[idx], self.dset_masks[idx]
 
-    def __generate_swatches_and_masks(self, data: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.dset_inputs[idx], self.dset_labels[idx], self.dset_masks[idx], self.dset_groups[idx]
+
+    def generate_train_swatches_and_masks(self, data: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.__gen_swatches_and_masks(data, labels, randomize=False)
+
+    def generate_test_swatches_and_masks(self, data: torch.Tensor, labels: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.__gen_swatches_and_masks(data, labels, randomize=True)
+
+    def __gen_swatches_and_masks(self, data: torch.Tensor, labels: torch.Tensor, randomize: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
         masks = torch.zeros_like(data, dtype=torch.float32)
         swatch_label_0_values, swatch_label_1_values = [0.5, 0.5, 0.7], [0.5, 0.7, 0.5]
         corner_size = self.size // 4
@@ -59,6 +68,10 @@ class DecoyDermaMNIST(Dataset):
         corner_br[:, -corner_size:, -corner_size:] = corner
         for idx, label in enumerate(labels):
             swatch_color_data_point = swatch_label_0_values if label == 0 else swatch_label_1_values
+            if randomize:
+                #@ i.e. test
+                randomized_label = int(torch.randint(0, 2, (1, )).item())
+                swatch_color_data_point = swatch_label_0_values if randomized_label == 0 else swatch_label_1_values
             # Randomly choose a corner to place the swatch
             corner_choice = torch.randint(4, (1,)).item()
             if corner_choice == 0: # Top left
@@ -74,21 +87,6 @@ class DecoyDermaMNIST(Dataset):
                 data[idx][i] = torch.where(masks[idx][i] == 1, swatch_color_data_point[i], data[idx][i])
 
         return data, masks
-
-    def __generate_masks_for_test(self, num_samples: int) -> torch.Tensor:
-        corner_size = self.size // 5
-        corner_base = torch.zeros(3, self.size, self.size, dtype=torch.float32)
-        corner = torch.ones(3, corner_size, corner_size, dtype=torch.float32)
-        corner_tl, corner_tr, corner_bl, corner_br = corner_base.clone(), corner_base.clone(), corner_base.clone(), corner_base.clone()
-        corner_tl[:, :corner_size, :corner_size] = corner
-        corner_tr[:, :corner_size, -corner_size:] = corner
-        corner_bl[:, -corner_size:, :corner_size] = corner
-        corner_br[:, -corner_size:, -corner_size:] = corner
-
-        universal_mask = corner_base + corner_tl + corner_tr + corner_bl + corner_br
-        masks = universal_mask.unsqueeze(0).repeat(num_samples, 1, 1, 1)
-
-        return masks
 
 class BasicDermaMNIST(Dataset):
     def __init__(self, dset_inputs: torch.Tensor, dset_labels: torch.Tensor, dset_masks: torch.Tensor):

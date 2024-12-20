@@ -62,7 +62,7 @@ class DermaNet(torch.nn.Sequential):
     def __init_with_small_weights(self):
         for m in self.modules():
             if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
-                torch.nn.init.xavier_normal_(m.weight, gain=0.1)
+                torch.nn.init.xavier_normal_(m.weight, gain=0.3)
                 torch.nn.init.constant_(m.bias, 0)
 
 
