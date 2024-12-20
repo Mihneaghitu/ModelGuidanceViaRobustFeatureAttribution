@@ -153,7 +153,6 @@ def test_avg_delta(dset_name: str):
         avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
         print(f"Method {method} avg delta = {avg_delta}")
 
-
 def test_macro_over_labels_and_wg_acc(dset_name: str):
     assert dset_name in ["isic", "plant", "decoy_mnist", "imagenet"]
     dev = torch.device("cuda:1")
