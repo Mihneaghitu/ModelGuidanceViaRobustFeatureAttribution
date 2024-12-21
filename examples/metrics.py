@@ -89,8 +89,7 @@ def get_restart_macro_avg_acc_over_labels_with_stddev(
 
     return round(macro_avg_over_labels, 5), round(stddev_over_labels, 5)
 
-def get_avg_acc_with_stddev(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
-    num_classes: int) -> tuple[float, float]:
+def get_avg_acc_with_stddev(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str, num_classes: int) -> tuple[float, float]:
     num_runs = len(os.listdir(model_dir))
     acc_sum = np.zeros(num_runs)
     with torch.no_grad():

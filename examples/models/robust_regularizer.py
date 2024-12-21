@@ -282,8 +282,7 @@ def input_gradient_pgd_regularizer(
 
         adv_batch_step = pgd_adv_input + epsilon * perturbation_masks * torch.sign(pgd_adv_input.grad.data)
         delta = torch.clamp(adv_batch_step - batch, min=-epsilon, max=epsilon)
-        adv_batch_step = torch.clamp(batch + delta, min=batch.min(), max=batch.max()).detach_()
-        pgd_adv_input = adv_batch_step
+        pgd_adv_input = torch.clamp(batch + delta, min=batch.min(), max=batch.max()).detach_()
 
     # Compute the loss for the interval regularizer
     match regularizer_type:
