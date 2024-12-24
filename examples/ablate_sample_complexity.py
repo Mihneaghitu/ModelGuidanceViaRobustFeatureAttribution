@@ -12,6 +12,8 @@ from datasets import derma_mnist, decoy_mnist
 from metrics import get_restart_avg_and_worst_group_accuracy_with_stddev, get_avg_rob_metrics
 
 def ablate(dset_name: str,
+           train_dloader: torch.utils.data.DataLoader,
+           test_dloader: torch.utils.data.DataLoader,
            train_func: dict[str, callable],
            device: torch.device,
            mask_ratios: list[float],
@@ -26,8 +28,9 @@ def ablate(dset_name: str,
         os.makedirs(root_dir + method, exist_ok=True)
         # Load the params
         params_dict = load_params_or_results_from_file(f"experiment_results/{dset_name}_params.yaml", method)
-        train_batch_size  = params_dict["train_batch_size"]
         class_weights = params_dict["class_weights"]
+        if not isinstance(class_weights, list):
+            class_weights = None
         test_epsilon = params_dict["test_epsilon"]
         multi_class = params_dict["multi_class"]
         num_epochs = params_dict["num_epochs"]
@@ -39,9 +42,9 @@ def ablate(dset_name: str,
         # optional ones
         weight_decay = 0
         weight_coeff = 0
-        if "weight_decay" in params_dict:
+        if "weight_decay" in params_dict and params_dict["weight_decay"] > 0:
             weight_decay = params_dict["weight_decay"]
-        if "weight_coeff" in params_dict:
+        if "weight_coeff" in params_dict and params_dict["weight_coeff"] > 0:
             weight_coeff = params_dict["weight_coeff"]
         for mask_ratio in mask_ratios:
             mask_ratio_dir = root_dir + method + f"/ratio_{int(mask_ratio * 100)}"
@@ -49,16 +52,15 @@ def ablate(dset_name: str,
             # Manipulate masks based on the dataset
             new_dl_train = None
             if dset_name == "derma_mnist":
-                train_dloader = derma_mnist.get_dataloader(dl_train.dataset, train_batch_size)
                 new_dl_train = derma_mnist.remove_masks(mask_ratio, train_dloader, with_data_removal)
             else:
-                new_dl_train = decoy_mnist.remove_masks(mask_ratio, dl_train, with_data_removal)
+                new_dl_train = decoy_mnist.remove_masks(mask_ratio, train_dloader, with_data_removal)
             for i in range(restarts):
                 # Seed 0
                 torch.manual_seed(i)
                 curr_model, loss_fn, criterion = None, "binary_cross_entropy", torch.nn.BCELoss()
                 if dset_name == "derma_mnist":
-                    curr_model = DermaNet(3, IMG_SIZE, 1).to(device)
+                    curr_model = DermaNet(3, 64, 1).to(device)
                 else:
                     curr_model = FCNAugmented(784, 10, 512, 1).to(device)
                     loss_fn, criterion = "cross_entropy", torch.nn.CrossEntropyLoss()
@@ -70,38 +72,43 @@ def ablate(dset_name: str,
                 sig = inspect.signature(train_func[method])
                 required_args = new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method, k, device
                 if sig.parameters.get("has_conv"):
-                    required_args += (*required_args, has_conv)
-                train_func[method](required_args, weight_reg_coeff=weight_coeff, weight_decay=weight_decay, suppress_tqdm=True, class_weights=class_weights)
+                    required_args = (*required_args, has_conv)
+                train_func[method](*required_args, weight_reg_coeff=weight_coeff, weight_decay=weight_decay, suppress_tqdm=True, class_weights=class_weights)
                 # Save the model
                 torch.save(curr_model.state_dict(), f"{mask_ratio_dir}/run_{i}.pt")
             empty_model, num_groups = None, None
             if dset_name == "derma_mnist":
-                empty_model = DermaNet(3, IMG_SIZE, 1).to(device)
+                empty_model = DermaNet(3, 64, 1).to(device)
                 num_groups = 2
             else:
                 empty_model = FCNAugmented(784, 10, 512, 1).to(device)
                 num_groups = 10
             #* Measure (core and spurious) accuracy metrics
-            macro_avg_acc, wg_acc, wg, stddev_group_acc, stddev_wg_acc = get_restart_avg_and_worst_group_accuracy_with_stddev(
-                dl_test, f"{mask_ratio_dir}", empty_model, device, num_groups, multi_class=multi_class, suppress_log=True
+            macro_avg_acc, wg_acc, wg, stddev_group_acc, stddev_wg_acc, acc_per_group, stddev_per_group = get_restart_avg_and_worst_group_accuracy_with_stddev(
+                test_dloader, mask_ratio_dir, empty_model, device, num_groups, multi_class=multi_class, suppress_log=True, return_stddev_per_group=True
             )
             #* Measure robustness metrics
             delta_mean, ls_mean, us_mean, delta_std, *_ = get_avg_rob_metrics(
-                empty_model, dl_test, device, mask_ratio_dir, test_epsilon, loss_fn, has_conv=has_conv
+                empty_model, test_dloader, device, mask_ratio_dir, test_epsilon, loss_fn, has_conv=has_conv
             )
+            delta_mean, ls_mean, us_mean, delta_std = round(float(delta_mean.item()), 5), round(float(ls_mean.item()), 5), round(float(us_mean.item()), 5), round(float(delta_std.item()), 5)
             if write_to_file:
                 write_results_to_file(f"experiment_results/{dset_name}_sample_complexity" + suffix + ".yaml",
                       {"avg_group_acc": round(macro_avg_acc, 5),
                        "worst_group_acc": round(wg_acc, 5),
                        "worst_group": wg,
-                       "stddev_group_acc": stddev_group_acc,
+                       "stddev_acc": stddev_group_acc,
+                       "stddev_per_group": stddev_per_group,
+                       "acc_per_group": acc_per_group,
                        "stddev_worst_group_acc": stddev_wg_acc,
-                       "min_lower_bound": round(ls_mean, 5),
-                       "max_upper_bound": round(us_mean, 5),
-                       "min_robust_delta": round(delta_mean, 5),
+                       "lb_mean": round(ls_mean, 5),
+                       "ub_mean": round(us_mean, 5),
+                       "delta_mean": round(delta_mean, 5),
                        "delta_stddev": round(delta_std, 5),
                        }, method + f"_{int(mask_ratio * 100)}")
 
+# def test():
+#     sys.argv = ["", "decoy_mnist", "0", "d0"]
 assert len(sys.argv) == 4
 assert sys.argv[1] in ["derma_mnist", "decoy_mnist"]
 assert sys.argv[2] in ["0", "1"] # 0 no data removal, 1 with data removal
@@ -109,31 +116,30 @@ assert sys.argv[3] in ["d0", "d1"] # d0 GPU 0, d1 GPU 1
 #* General setup
 funcs = {
     "r4": train_model_with_certified_input_grad,
-         "ibp_ex": train_model_with_certified_input_grad,
-         "pgd_r4": train_model_with_pgd_robust_input_grad,
-         "rand_r4": train_model_with_smoothed_input_grad}
+    "ibp_ex": train_model_with_certified_input_grad,
+    "pgd_r4": train_model_with_pgd_robust_input_grad,
+    "rand_r4": train_model_with_smoothed_input_grad
+}
 dev = torch.device("cuda:" + sys.argv[3][-1])
 # mask ratios
 mrs = [0.8, 0.6, 0.4, 0.2]
 if not bool(int(sys.argv[2])): # only masks are removed
     mrs.append(0)
 remove_data = bool(int(sys.argv[2]))
-
 #* Specific dataset setup
 match sys.argv[1]:
     case "decoy_mnist":
+        funcs["r3"] = train_model_with_certified_input_grad
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
-        funcs["r3"] = train_model_with_certified_input_grad,
-        ablate("decoy_mnist", funcs, dev, mask_ratios=mrs, write_to_file=True, with_data_removal=remove_data,
-               methods=["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"])
+        ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
+               write_to_file=True, with_data_removal=remove_data)
     case "derma_mnist":
         funcs["r3"] = train_model_with_pgd_robust_input_grad
-        IMG_SIZE = 64
-        train_dset = derma_mnist.DecoyDermaMNIST(True, size=IMG_SIZE)
-        test_dset = derma_mnist.DecoyDermaMNIST(False, size=IMG_SIZE)
+        train_dset = derma_mnist.DecoyDermaMNIST(True, size=64)
+        test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 100)
-        ablate("derma_mnist", funcs, dev, methods=["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"], mask_ratios=mrs,
-               with_data_removal=remove_data, write_to_file=True)
+        ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
+               write_to_file=True, with_data_removal=remove_data)
     case _:
         raise ValueError("Only 'decoy_mnist' and 'derma_mnist' are supported")

@@ -15,7 +15,8 @@ from math import fabs
 
 def get_restart_avg_and_worst_group_accuracy_with_stddev(
     dl_test_grouped: torch.utils.data.DataLoader, model_run_dir: str, model: torch.nn.Sequential, device: str, num_groups: int,
-    multi_class: bool = False, suppress_log: bool = False) -> tuple[float, float, int, float, float]:
+    multi_class: bool = False, suppress_log: bool = False, return_stddev_per_group: bool = False) \
+        -> tuple[float, float, int, float, float | float, float, int, float, float, list[float], list[float]]:
     restarts = len(os.listdir(model_run_dir))
     acc_per_group, num_elems_for_group = np.zeros((restarts, num_groups)), np.zeros((restarts, num_groups))
     for run in range(restarts):
@@ -53,6 +54,13 @@ def get_restart_avg_and_worst_group_accuracy_with_stddev(
         print(f"Min group accuracy = {worst_group_acc:.4g}, group idx = {worst_group}")
         print(f"Group accuracies averaged over run = {group_acc_averaged_over_runs}")
 
+    if return_stddev_per_group:
+        # process a bit so yaml can serialize it
+        group_acc_averaged_over_runs = group_acc_averaged_over_runs.tolist()
+        stddev_per_group = std_dev_per_group.tolist()
+        group_acc_averaged_over_runs = [round(float(acc), 5) for acc in group_acc_averaged_over_runs]
+        stddev_per_group = [round(float(stddev), 5) for stddev in stddev_per_group]
+        return round(macro_avg_group_acc, 5), round(worst_group_acc, 5), worst_group, round(std_dev_group_acc, 5), round(std_dev_for_worst_group, 5), group_acc_averaged_over_runs, stddev_per_group
     return round(macro_avg_group_acc, 5), round(worst_group_acc, 5), worst_group, round(std_dev_group_acc, 5), round(std_dev_for_worst_group, 5)
 
 def get_restart_macro_avg_acc_over_labels_with_stddev(
@@ -118,7 +126,7 @@ def get_avg_rob_metrics(model: torch.nn.Sequential, test_dloader: DataLoader, de
 # ------------------------------------ Test functions ------------------------------------
 # ----------------------------------------------------------------------------------------
 def test_avg_delta(dset_name: str):
-    assert dset_name in ["isic", "plant", "decoy_mnist", "imagenet"]
+    assert dset_name in ["isic", "plant", "decoy_mnist", "derma", "imagenet"]
     dl_test, model_dir, model, device, loss_fn, eps, has_conv = None, None, None, "cuda:0", None, None, True
     if dset_name == "isic":
         data_root = "/vol/bitbucket/mg2720/isic/"
@@ -140,6 +148,15 @@ def test_avg_delta(dset_name: str):
         loss_fn = "binary_cross_entropy"
         model_dir = "saved_experiment_models/performance/plant"
         eps = 0.01
+    elif dset_name == "derma":
+        IMG_SIZE = 64
+        test_dset = derma_mnist.DecoyDermaMNIST(False, size=IMG_SIZE)
+        dl_test = derma_mnist.get_dataloader(test_dset, 100)
+        model = DermaNet(3, IMG_SIZE, 1)
+        loss_fn = "binary_cross_entropy"
+        model_dir = "saved_experiment_models/performance/derma_mnist"
+        has_conv = True
+        eps = 0.01
     else :
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
@@ -148,7 +165,7 @@ def test_avg_delta(dset_name: str):
         model_dir = "saved_experiment_models/performance/decoy_mnist"
         has_conv = False
         eps = 0.1
-    for method in ["ibp_ex+r3"]:
+    for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
         avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
         print(f"Method {method} avg delta = {avg_delta}")
 

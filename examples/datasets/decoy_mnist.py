@@ -46,20 +46,23 @@ def get_dataloaders(train_batchsize, test_batchsize=500):
 
     return dl_train, dl_test
 
-def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal: bool = False, r4_soft: bool = False) -> DataLoader:
+def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal: bool = False, non_mask_softness: bool = False) -> DataLoader:
     if ratio_preserved == 1:
         return dloader
+    if ratio_preserved == 0:
+        return DataLoader(TensorDataset(dloader.dataset.tensors[0], dloader.dataset.tensors[1],
+            torch.zeros_like(dloader.dataset.tensors[2])), batch_size=dloader.batch_size, shuffle=True)
     ratio_removed = 1 - ratio_preserved
-    num_classes = 10
+    num_groups = 10
     # group by label
     labels = dloader.dataset.tensors[1]
     flatten = lambda l: [item for sublist in l for item in sublist]
     indices_per_label = [flatten((labels == i).nonzero()) for i in range(10)]
     indices_per_label = [np.array(idx) for idx in indices_per_label]
 
-    indices_per_label_removed = [None] * num_classes
-    indices_per_label_preserved = [None] * num_classes
-    for i in range(num_classes):
+    indices_per_label_removed = [None] * num_groups
+    indices_per_label_preserved = [None] * num_groups
+    for i in range(num_groups):
         indices_of_indices_removed = np.random.choice(indices_per_label[i].shape[0], int(ratio_removed * indices_per_label[i].shape[0]), replace=False)
         indices_of_indices_preserved = np.delete(np.arange(indices_per_label[i].shape[0]), indices_of_indices_removed)
         indices_per_label_removed[i] = indices_per_label[i][indices_of_indices_removed]
@@ -71,18 +74,16 @@ def remove_masks(ratio_preserved: float, dloader: DataLoader, with_data_removal:
         new_data = (dloader.dataset.tensors[0].clone())[non_zero_masks_indices]
         new_labels = (dloader.dataset.tensors[1].clone())[non_zero_masks_indices]
         new_masks = (dloader.dataset.tensors[2].clone())[non_zero_masks_indices]
-        dloader = DataLoader(TensorDataset(new_data, new_labels, new_masks), batch_size=dloader.batch_size, shuffle=True)
+        return DataLoader(TensorDataset(new_data, new_labels, new_masks), batch_size=dloader.batch_size, shuffle=True)
     else:
         new_masks = dloader.dataset.tensors[2].clone()
         for zero_mask_index in zero_masks_indices:
-            if r4_soft:
-                new_masks[zero_mask_index] = torch.ones_like(new_masks[zero_mask_index])
-                new_masks[zero_mask_index] /= 100
+            if non_mask_softness:
+                new_masks[zero_mask_index] = new_masks[zero_mask_index].clone() / 100
             else:
                 new_masks[zero_mask_index] = torch.zeros_like(new_masks[zero_mask_index])
-        dloader = DataLoader(TensorDataset(dloader.dataset.tensors[0], dloader.dataset.tensors[1], new_masks), batch_size=dloader.batch_size, shuffle=True)
+        return DataLoader(TensorDataset(dloader.dataset.tensors[0], dloader.dataset.tensors[1], new_masks), batch_size=dloader.batch_size, shuffle=True)
 
-    return dloader
 
 def get_swatches_color_dict(data: torch.Tensor, label: torch.Tensor) -> dict:
     # Extract the swatches values for each different label
@@ -154,23 +155,86 @@ def randomize_img_swatch(data: torch.Tensor, labels: torch.Tensor, swatches_per_
 #* ======================= DATA LOADERS WITH CORRUPTED MASKS =========================
 #* ===================================================================================
 
+def __get_swatch_pos(original_mask: torch.Tensor) -> str:
+    if original_mask[0, 0] > 0:
+        return "top_left"
+    elif original_mask[0, -1] > 0:
+        return "top_right"
+    elif original_mask[-1, 0] > 0:
+        return "bottom_left"
+    elif original_mask[-1, -1] > 0:
+        return "bottom_right"
+    else:
+        raise ValueError("Invalid mask")
+
 def __gen_misposition_mask()  -> torch.Tensor:
-    pass
+    # Mask is 4 x 4, so choose random init start row and column between 4 and 23
+    start_row = int(torch.randint(5, 24, (1,)))
+    start_col = int(torch.randint(5, 24, (1,)))
+    mask = torch.zeros(28, 28)
+    mask[start_row:start_row + 4, start_col:start_col + 4] = torch.ones(4, 4)
 
-def __get_swatch_pos(data: torch.Tensor) -> str:
-    pass
+    return mask.bool()
 
-def gen_shift_mask(data: torch.Tensor) -> torch.Tensor:
-    pass
+def gen_shift_mask(init_pos: str) -> torch.Tensor:
+    assert init_pos in ["top_left", "top_right", "bottom_left", "bottom_right"]
+    # Here we are able to shift in 2 directions for every corner
+    # Since the mask is 4 x 4, we can shift by 1, 2 or 3 in the row and column directions
+    shift_row = int(torch.randint(1, 4, (1,)))
+    shift_col = int(torch.randint(1, 4, (1,)))
+    corner = torch.ones(4, 4)
+    mask = torch.zeros(28, 28)
+    match init_pos:
+        case "top_left":
+            mask[shift_row:shift_row + 4, shift_col:shift_col + 4] = corner
+        case "top_right":
+            mask[shift_row:shift_row + 4, -(4 + shift_col):-shift_col] = corner
+        case "bottom_left":
+            mask[-(4 + shift_row):-shift_row, shift_col:shift_col + 4] = corner
+        case "bottom_right":
+            mask[-(4 + shift_row):-shift_row, -(4 + shift_col):-shift_col] = corner
 
-def gen_dilation_mask(data: torch.Tensor) -> torch.Tensor:
-    pass
+    return mask.bool()
 
-def gen_shrink_mask(data: torch.Tensor) -> torch.Tensor:
-    pass
+def gen_dilation_mask(init_pos: str) -> torch.Tensor:
+    assert init_pos in ["top_left", "top_right", "bottom_left", "bottom_right"]
+    # Here we are able to dilate in 2 directions for every corner
+    # We shall dilate it proportionally, by 1, 2 or 3, 4 in the row and column directions (i.e. at most double its size)
+    dilation = int(torch.randint(1, 5, (1,)))
+    corner = torch.ones(dilation + 4, dilation + 4)
+    mask = torch.zeros(28, 28)
+    match init_pos:
+        case "top_left":
+            mask[:4 + dilation, :4 + dilation] = corner
+        case "top_right":
+            mask[:4 + dilation, -(4 + dilation):] = corner
+        case "bottom_left":
+            mask[-(4 + dilation):, :4 + dilation] = corner
+        case "bottom_right":
+            mask[-(4 + dilation):, -(4 + dilation):] = corner
 
+    return mask.bool()
 
-def get_train_dl_with_corrupted_masks(dl_train: DataLoader, correct_ratio: float, corruption_type: MaskCorruption) -> tuple[DataLoader, DataLoader]:
+def gen_shrink_mask(init_pos: str) -> torch.Tensor:
+    assert init_pos in ["top_left", "top_right", "bottom_left", "bottom_right"]
+    # Similar to dilation, we can shrink the mask by 1, 2 or 3 in the row and column directions (simultaneously)
+    shrink = int(torch.randint(1, 4, (1,)))
+    new_size = 4 - shrink
+    corner = torch.ones(new_size, new_size)
+    mask = torch.zeros(28, 28)
+    match init_pos:
+        case "top_left":
+            mask[:new_size, :new_size] = corner
+        case "top_right":
+            mask[:new_size, -new_size:] = corner
+        case "bottom_left":
+            mask[-new_size:, :new_size] = corner
+        case "bottom_right":
+            mask[-new_size:, -new_size:] = corner
+
+    return mask.bool()
+
+def get_train_dl_with_corrupted_masks(dl_train: DataLoader, correct_ratio: float, corruption_type: MaskCorruption) -> DataLoader:
     # Extract the swatches values for each different label
     train_label_tensors = dl_train.dataset.tensors[1]
     train_input_tensors = dl_train.dataset.tensors[0]
@@ -178,6 +242,8 @@ def get_train_dl_with_corrupted_masks(dl_train: DataLoader, correct_ratio: float
     swatches_color_dict = get_swatches_color_dict(train_input_tensors, train_label_tensors)
 
     # Obtain the indices in the dataset that do not have corrupted masks
+    # We sample from an uniform distribution and the distribution of labels is uniform as well in MNIST
+    # So we should roughly obtain an equal number of samples for each label
     all_indices = torch.randperm(len(dl_train.dataset))
     correct_indices = all_indices[:int(correct_ratio * len(dl_train.dataset))].tolist()
 
@@ -199,15 +265,18 @@ def get_train_dl_with_corrupted_masks(dl_train: DataLoader, correct_ratio: float
             train_masks[idx] = torch.where(torch.isclose(data_input, swatches_color_dict[int(label)], atol=1e-5), 1, 0)
             train_masks[idx] *= check_mask
         else:
+            original_mask = torch.where(torch.isclose(data_input, swatches_color_dict[int(label)], atol=1e-5), 1, 0)
+            original_mask *= check_mask
+            pos_as_str = __get_swatch_pos(original_mask)
             match corruption_type:
                 case MaskCorruption.MISPOSITION:
-                    train_masks[idx] = __gen_misposition_mask(data_input, label)
+                    train_masks[idx] = __gen_misposition_mask()
                 case MaskCorruption.SHIFT:
-                    train_masks[idx] = gen_shift_mask(data_input, label)
+                    train_masks[idx] = gen_shift_mask(pos_as_str)
                 case MaskCorruption.DILATION:
-                    train_masks[idx] = gen_dilation_mask(data_input, label)
+                    train_masks[idx] = gen_dilation_mask(pos_as_str)
                 case MaskCorruption.SHRINK:
-                    train_masks[idx] = gen_shrink_mask(data_input, label)
+                    train_masks[idx] = gen_shrink_mask(pos_as_str)
                 case _:
                     raise ValueError("Invalid corruption type")
 
