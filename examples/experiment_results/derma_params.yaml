@@ -48,19 +48,19 @@ pgd_r4:
   with_k_schedule: false
 r3:
   class_weights:
-  - 1
+  - 1.3
   - 2.0272
   epsilon: 0.01
   has_conv: true
   k: 1000
-  lr: 5.0e-06
+  lr: 2.0e-06
   multi_class: false
-  num_epochs: 15
+  num_epochs: 24
   restarts: 3
   test_batch_size: 256
   test_epsilon: 0.01
   train_batch_size: 256
-  weight_decay: 0.0001
+  weight_decay: 1.0e-08
   with_k_schedule: false
 r4:
   class_weights:

@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import numpy as np
 import torch
-from corruption import MaskCorruption
+from .corruption import MaskCorruption
 from medmnist import DermaMNIST
 from torch.utils.data import Dataset
 
@@ -76,23 +76,26 @@ class DecoyDermaMNIST(Dataset):
                 #@ i.e. test
                 randomized_label = int(torch.randint(0, 2, (1, )).item())
                 swatch_color_data_point = swatch_label_0_values if randomized_label == 0 else swatch_label_1_values
-                #! Also for test we want the masks to be in all corners -> this would mean that by measuring robustness
-                #! (i.e. delta) we are robuts in ANY area that might contain spurious features (we also do the same for Decoy-MNIST)
-                masks[idx] += corner_tl + corner_tr + corner_bl + corner_br
-            else:
-                # Randomly choose a corner to place the swatch
-                corner_choice = torch.randint(4, (1,)).item()
-                if corner_choice == 0: # Top left
-                    masks[idx] += corner_tl
-                elif corner_choice == 1: # Top right
-                    masks[idx] += corner_tr
-                elif corner_choice == 2: # Bottom left
-                    masks[idx] += corner_bl
-                else: # Bottom right
-                    masks[idx] += corner_br
+            # Randomly choose a corner to place the swatch
+            corner_choice = torch.randint(4, (1,)).item()
+            if corner_choice == 0: # Top left
+                masks[idx] += corner_tl
+            elif corner_choice == 1: # Top right
+                masks[idx] += corner_tr
+            elif corner_choice == 2: # Bottom left
+                masks[idx] += corner_bl
+            else: # Bottom right
+                masks[idx] += corner_br
             # channel
             for i in range(3):
                 data[idx][i] = torch.where(masks[idx][i] == 1, swatch_color_data_point[i], data[idx][i])
+
+            if randomize:
+                #! Also for test we want the masks to be in all corners -> this would mean that by measuring robustness
+                #! (i.e. delta) we are robuts in ANY area that might contain spurious features (we also do the same for Decoy-MNIST)
+                masks[idx] = torch.zeros_like(masks[idx])
+                masks[idx] += corner_tl + corner_tr + corner_bl + corner_br
+                #* Note: this code block is in a weird place, but the way the code is structured, it is the best place to put it (unfortunately)
 
         return data, masks
 
