@@ -99,7 +99,7 @@ def ablate(dset_name: str,
                 num_groups = 10
             #* Measure (core and spurious) accuracy metrics
             macro_avg_acc, wg_acc, wg, stddev_group_acc, stddev_wg_acc, acc_per_group, stddev_per_group = get_restart_avg_and_worst_group_accuracy_with_stddev(
-                test_dloader, mask_ratio_dir, empty_model, device, num_groups, multi_class=multi_class, suppress_log=False, return_stddev_per_group=True
+                test_dloader, mask_ratio_dir, empty_model, device, num_groups, multi_class=multi_class, suppress_log=True, return_stddev_per_group=True
             )
             #* Measure robustness metrics
             delta_mean, ls_mean, us_mean, delta_std, *_ = get_avg_rob_metrics(
@@ -122,8 +122,8 @@ def ablate(dset_name: str,
                        }, method + f"_{int(mask_ratio * 100)}")
 
 # def test():
-#     sys.argv = ["", "decoy_mnist", "0", "d0"]
-assert len(sys.argv) == 4
+#     sys.argv = ["", "decoy_mnist", "MISPOS", "d0"]
+assert len(sys.argv) == 4, "Usage: python ablate_mask_corruption.py <dataset> <corruption_type> <device>"
 assert sys.argv[1] in ["derma_mnist", "decoy_mnist"]
 assert sys.argv[2] in ["MISPOS", "SHIFT", "SHRINK", "DILATE"]
 assert sys.argv[3] in ["d0", "d1"] # d0 GPU 0, d1 GPU 1
@@ -136,7 +136,7 @@ funcs = {
 }
 dev = torch.device("cuda:" + sys.argv[3][-1])
 # mask ratios
-mrs = [0.8, 0.6, 0.4, 0.2]
+mrs = [0.8, 0.6, 0.4, 0.2, 0.0]
 CORR_TYPE = None
 match sys.argv[2]:
     case "MISPOS":

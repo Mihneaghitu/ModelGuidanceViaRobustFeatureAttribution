@@ -158,6 +158,7 @@ def remove_masks(ratio_preserved: float, dloader: torch.utils.data.DataLoader, w
 #! ====================== MASK CORRUPTION ABLATION ===================
 #! ===================================================================
 def __get_swatch_pos(original_mask: torch.Tensor) -> str:
+    original_mask = original_mask[0] # channel 0, doesn't matter since mask is repeated across channels
     if original_mask[0, 0] > 0:
         return "top_left"
     elif original_mask[0, -1] > 0:
@@ -225,7 +226,7 @@ def gen_shrink_mask(init_pos: str, num_channels: int, img_size: int, swatch_size
     assert init_pos in ["top_left", "top_right", "bottom_left", "bottom_right"]
     # Similar to dilation, we can shrink the mask by min 1, max swatch_size in the row and column directions (simultaneously)
     shrink = int(torch.randint(1, swatch_size, (1,)))
-    new_size = 4 - shrink
+    new_size = swatch_size - shrink
     corner = torch.ones(new_size, new_size)
     mask = torch.zeros(img_size, img_size)
     match init_pos:

@@ -8,33 +8,37 @@ import numpy as np
 import seaborn as sns
 from examples.datasets import derma_mnist, decoy_mnist
 from examples.models.R4_models import DermaNet
-from examples.metrics import get_avg_acc_with_stddev, get_avg_rob_metrics, get_avg_and_worst_label_acc_with_stddev
+from examples.metrics import get_restart_avg_and_worst_group_accuracy_with_stddev, get_avg_rob_metrics
+from examples.models.pipeline import load_params_or_results_from_file
 from examples.models.fully_connected import FCNAugmented
 import pandas as pd
 
 
-def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False, methods: list[str] = ["r3", "ibp_ex+r3", "r4", "rand_r4"]) -> None:
+def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with_data: bool = False, methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
-    suffix = "data_and_mask" if with_data else "mask"
-    dl_test, model_dir, model, eps, has_conv, num_classes, loss_fn = None, None, None, None, None, None, None
+    if methods is None:
+        methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
+    dl_test, model_dir, model, eps, has_conv, loss_fn, num_groups = None, None, None, None, None, None, None
+    result_file_suffix = "_data_removal" if with_data else ""
+    result_yaml_file = f"experiment_results/{dset_name}_sample_complexity{result_file_suffix}.yaml"
     if dset_name == "decoy_mnist":
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
         model = FCNAugmented(784, 10, 512, 1)
         loss_fn = "cross_entropy"
         eps = 0.1
-        model_dir = f"saved_experiment_models/ablations/{suffix}/decoy_mnist"
+        model_dir = "saved_experiment_models/performance/decoy_mnist"
         has_conv = False
-        num_classes = 10
+        num_groups = 10
     if dset_name == "derma_mnist":
         test_derma = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_test = derma_mnist.get_dataloader(test_derma, 256)
         model = DermaNet(3, 64, 1)
         loss_fn = "binary_cross_entropy"
-        eps = 0.05
-        model_dir = f"saved_experiment_models/ablations/{suffix}/derma_mnist"
+        eps = 0.01
+        model_dir = "saved_experiment_models/performance/derma_mnist"
         has_conv = True
-        num_classes = 2
+        num_groups = 2
     dset_name = dset_name.replace("_", " ")
 
     sns.set_theme(context="poster", font_scale=3)
@@ -42,97 +46,124 @@ def make_mask_ablation_paper_plots(dset_name: str, with_data: bool = False, meth
     ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0])
     if with_data:
         ratios = ratios[:-1] # the 0 data does not make any sense, it is basically a randomly initialized model
-    fig, ax = plt.subplots(2, 2, figsize=(70, 45))
+    fig, ax = plt.subplots(1, 2, figsize=(70, 28))
+    min_wg, max_wg = 1, 0
     for method in methods:
-        mean_wg_accs, std_wg_dev_accs = [], [],
-        mean_delta, mean_lb, mean_ub, std_dev_delta, std_dev_lb, std_dev_ub = [], [], [], [], [], []
-        for ratio in ratios:
-            dir_for_method = model_dir + f"/{method}" + f"/ratio_{int(ratio * 100)}"
-            avg_wg_acc_ratio, std_wg_dev_acc_ratio = get_avg_and_worst_label_acc_with_stddev(model, dl_test, "cuda:0", num_classes, dir_for_method)
-            mean_wg_accs.append(avg_wg_acc_ratio)
-            std_wg_dev_accs.append(std_wg_dev_acc_ratio)
-            avg_delta_ratio, avg_lb_ratio, avg_ub_ratio, std_delta_ratio, std_lb_ratio, std_ub_ratio = get_avg_rob_metrics(
-                model, dl_test, "cuda:0", dir_for_method, eps, loss_fn, has_conv)
-            mean_delta.append(avg_delta_ratio)
-            mean_lb.append(avg_lb_ratio)
-            mean_ub.append(avg_ub_ratio)
-            std_dev_delta.append(std_delta_ratio)
-            std_dev_lb.append(std_lb_ratio)
-            std_dev_ub.append(std_ub_ratio)
+        mean_wg_accs, stddev_wg_accs, mean_delta, std_dev_delta = [], [], [], []
+        #* Measure acc and rob metrics for ratio 1
+        _, wg_acc, _, _, stddev_wg_acc = get_restart_avg_and_worst_group_accuracy_with_stddev(dl_test, model_dir + f"/{method}", model, device, num_groups, multi_class=(num_groups > 2), suppress_log=True)
+        delta_mean, _, _, delta_std, *_ = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv=has_conv)
+        delta_mean, delta_std = round(float(delta_mean.item()), 5), round(float(delta_std.item()), 5)
+        mean_wg_accs.append(wg_acc)
+        stddev_wg_accs.append(stddev_wg_acc)
+        mean_delta.append(delta_mean)
+        std_dev_delta.append(delta_std)
+        for ratio in ratios[1:]:
+            abl_results_for_method_and_ratio = load_params_or_results_from_file(result_yaml_file, method + f"_{int(ratio * 100)}")
+            mean_wg_accs.append(abl_results_for_method_and_ratio["worst_group_acc"])
+            stddev_wg_accs.append(abl_results_for_method_and_ratio["stddev_worst_group_acc"])
+            mean_delta.append(abl_results_for_method_and_ratio["delta_mean"])
+            std_dev_delta.append(abl_results_for_method_and_ratio["delta_stddev"])
 
+        min_wg, max_wg = min(min_wg, *mean_wg_accs), max(max_wg, *mean_wg_accs)
         xlabel_suffix = "and data" if with_data else ""
-        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][0], linewidth=10, estimator=None)
-        sns.lineplot(x=ratios, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0][1], linewidth=10, estimator=None)
-        sns.lineplot(x=ratios, y=mean_lb, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][0], linewidth=10, estimator=None)
-        sns.lineplot(x=ratios, y=mean_ub, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1][1], linewidth=10, estimator=None)
-        ax[0][0].fill_between(ratios, np.array(mean_wg_accs) - np.array(std_wg_dev_accs), np.array(mean_wg_accs) + np.array(std_wg_dev_accs), alpha=0.15)
-        ax[0][0].xaxis.set_inverted(True)
-        ax[0][0].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Worst Group Test Accuracy")
-        ax[0][1].fill_between(ratios, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
-        ax[0][1].xaxis.set_inverted(True)
-        ax[0][1].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel=r'Average $\delta$')
-        ax[0][1].set_yscale("symlog")
-        ax[1][0].fill_between(ratios, np.array(mean_lb) - np.array(std_dev_lb), np.array(mean_lb) + np.array(std_dev_lb), alpha=0.15)
-        ax[1][0].xaxis.set_inverted(True)
-        ax[1][0].set_yscale("symlog")
-        ax[1][0].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Lower Bound")
-        ax[1][1].fill_between(ratios, np.array(mean_ub) - np.array(std_dev_ub), np.array(mean_ub) + np.array(std_dev_ub), alpha=0.15)
-        ax[1][1].xaxis.set_inverted(True)
-        ax[1][1].set_yscale("symlog")
-        ax[1][1].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Upper Bound")
+        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None)
+        sns.lineplot(x=ratios, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
+        ax[0].fill_between(ratios, np.array(mean_wg_accs) - np.array(stddev_wg_accs), np.array(mean_wg_accs) + np.array(stddev_wg_accs), alpha=0.15)
+        ax[0].xaxis.set_inverted(True)
+        ax[0].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Worst Group Test Accuracy")
+        ax[1].fill_between(ratios, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
+        ax[1].xaxis.set_inverted(True)
+        ax[1].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel=r'Average $\delta$')
+        ax[1].set_yscale("symlog")
 
+    ax[0].set_ylim([min_wg * 0.95, max_wg * 1.05])
     title_suffix = "and data" if with_data else ""
-    ax[0][0].set_title(f"Worst group test accuracy for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
-    ax[0][1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n upon varying the ratio of mask {title_suffix}",
+    ax[0].set_title(f"Worst group test accuracy for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
+    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n upon varying the ratio of mask {title_suffix}",
                        weight="bold")
-    ax[1][0].set_title(f"Average lower bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
-    ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
 
     plt.tight_layout()
     plt.show()
 
+def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, corruption_type: int, methods: list[str] = None) -> None:
+    assert dset_name in ["decoy_mnist", "derma_mnist"]
+    if methods is None:
+        methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
+    dl_test, model_dir, model, eps, has_conv, loss_fn, num_groups = None, None, None, None, None, None, None
+    result_file_suffix = None
+    match corruption_type:
+        case 0:
+            result_file_suffix = "_misposition"
+        case 1:
+            result_file_suffix = "_shift"
+        case 2:
+            result_file_suffix = "_shrink"
+        case 3:
+            result_file_suffix = "_dilation"
+    result_yaml_file = f"experiment_results/{dset_name}_sample_complexity{result_file_suffix}.yaml"
+    if dset_name == "decoy_mnist":
+        dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
+        _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
+        model = FCNAugmented(784, 10, 512, 1)
+        loss_fn = "cross_entropy"
+        eps = 0.1
+        model_dir = "saved_experiment_models/performance/decoy_mnist"
+        has_conv = False
+        num_groups = 10
+    if dset_name == "derma_mnist":
+        test_derma = derma_mnist.DecoyDermaMNIST(False, size=64)
+        dl_test = derma_mnist.get_dataloader(test_derma, 256)
+        model = DermaNet(3, 64, 1)
+        loss_fn = "binary_cross_entropy"
+        eps = 0.01
+        model_dir = "saved_experiment_models/performance/derma_mnist"
+        has_conv = True
+        num_groups = 2
+    dset_name = dset_name.replace("_", " ")
 
-def make_performance_plots_for_dset(dset_name: str) -> None:
-    curr_dirname = os.path.dirname(os.path.realpath(__file__))
-    fname = os.path.join(curr_dirname, f"{dset_name}.yaml")
-    results = None
-    with open(fname, "r", encoding="utf8") as f:
-        results = yaml.load(f, Loader=yaml.FullLoader)
+    sns.set_theme(context="poster", font_scale=3)
+    sns.color_palette("bright")
+    ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0])
+    fig, ax = plt.subplots(1, 2, figsize=(70, 28))
+    min_wg, max_wg = 1, 0
+    for method in methods:
+        mean_wg_accs, stddev_wg_accs, mean_delta, std_dev_delta = [], [], [], []
+        #* Measure acc and rob metrics for ratio 1
+        _, wg_acc, _, _, stddev_wg_acc = get_restart_avg_and_worst_group_accuracy_with_stddev(dl_test, model_dir + f"/{method}", model, device, num_groups, multi_class=(num_groups > 2), suppress_log=True)
+        delta_mean, _, _, delta_std, *_ = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv=has_conv)
+        delta_mean, delta_std = round(float(delta_mean.item()), 5), round(float(delta_std.item()), 5)
+        mean_wg_accs.append(wg_acc)
+        stddev_wg_accs.append(stddev_wg_acc)
+        mean_delta.append(delta_mean)
+        std_dev_delta.append(delta_std)
+        for ratio in ratios[1:]:
+            abl_results_for_method_and_ratio = load_params_or_results_from_file(result_yaml_file, method + f"_{int(ratio * 100)}")
+            mean_wg_accs.append(abl_results_for_method_and_ratio["worst_group_acc"])
+            stddev_wg_accs.append(abl_results_for_method_and_ratio["stddev_worst_group_acc"])
+            mean_delta.append(abl_results_for_method_and_ratio["delta_mean"])
+            std_dev_delta.append(abl_results_for_method_and_ratio["delta_stddev"])
 
-    ticks_acc = np.array(["std", "r3", "ibp_ex", "ibp_ex+r3", "r4"])
-    ticks_rob = ticks_acc[1:]
-    test_accs = np.array([results[tick]["test_acc"] for tick in ticks_acc])
-    robust_delta = np.array([results[tick]["min_robust_delta"] for tick in ticks_rob])
-    lower_bounds_avg = np.array([results[tick]["min_lower_bound"] for tick in ticks_rob])
-    upper_bounds_avg = np.array([results[tick]["max_upper_bound"] for tick in ticks_rob])
+        min_wg, max_wg = min(min_wg, *mean_wg_accs), max(max_wg, *mean_wg_accs)
+        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None)
+        sns.lineplot(x=ratios, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
+        ax[0].fill_between(ratios, np.array(mean_wg_accs) - np.array(stddev_wg_accs), np.array(mean_wg_accs) + np.array(stddev_wg_accs), alpha=0.15)
+        ax[0].xaxis.set_inverted(True)
+        ax[0].set(xlabel=f"% of corrupted masks ({result_file_suffix[1:]})\n", ylabel="Average Worst Group Test Accuracy")
+        ax[1].fill_between(ratios, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
+        ax[1].xaxis.set_inverted(True)
+        ax[1].set(xlabel=f"% of corrupted masks ({result_file_suffix[1:]})\n", ylabel=r'Average $\delta$')
+        ax[1].set_yscale("symlog")
 
-    ticks_acc = np.array(["STD", "R3", "IBP_EX", "IBP_EX+R3", "R4"])
-    ticks_rob = ticks_acc[1:]
-    _, ax = plt.subplots(2, 2, figsize=(17, 13))
-    color_gradient_accs = ["#ff7ca0", "#ffa7b4", "#ffcbd2", "#ffb979", "#ffa463"]
-    color_gradient_delta = ["#fae442", "#ddf969", "#a9f36a", "#57e86b"]
-    color_gradient_lb = ["#d92122", "#b8203d", "#971e58",  "#761d72"]
-    color_gradient_ub = ["#0000ff", "#4d4dff", "#7a7aff", "#bcbcff"]
-    # make the color a gradient with specified hex color
-    ax[0, 0].bar(ticks_acc, test_accs, color=color_gradient_accs)
-    ax[0, 0].set_ylim([min(test_accs) - 0.1, max(test_accs) + 0.1])
-    ax[0, 0].set_title("Test Accuracy")
+    ax[0].set_ylim([min_wg * 0.95, max_wg * 1.05])
+    ax[0].set_title(f"Worst group test accuracy for {dset_name.upper()} upon \n varying the ratio of corrupted masks", weight="bold")
+    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n upon varying the ratio of corrupted masks",
+                       weight="bold")
 
-    ax[0, 1].bar(ticks_rob, robust_delta, color=color_gradient_delta)
-    ax[0, 1].set_yscale("symlog")
-    ax[0, 1].set_title("Delta for which test set is certifiably 1-delta-input-robust")
-
-    ax[1, 0].bar(ticks_rob, lower_bounds_avg, color=color_gradient_lb)
-    ax[1, 0].set_yscale("symlog")
-    ax[1, 0].set_title("Minimum lower bound (averaged over the number of runs)")
-
-    ax[1, 1].bar(ticks_rob, upper_bounds_avg, color=color_gradient_ub)
-    ax[1, 1].set_yscale("symlog")
-    ax[1, 1].set_title("Maximum upper bound (averaged over the number of runs)")
-
+    plt.tight_layout()
     plt.show()
 
-
+#TODO: Change the implementation for this as well
 def make_model_ablation_paper_plots(dset_name: str) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
     methods = ["r3", "r4", "ibp_ex+r3", "rand_r4"]
@@ -169,9 +200,10 @@ def make_model_ablation_paper_plots(dset_name: str) -> None:
         for sz_nm, arch in zip(size_names, model_archs):
             model = DermaNet(*arch) if dset_name == "derma_mnist" else FCNAugmented(*arch)
             dir_for_method = model_dir + f"/{method}" + f"/{sz_nm}"
-            avg_acc_ratio, std_dev_acc_ratio = get_avg_acc_with_stddev(model, dl_test, "cuda:0", dir_for_method, num_classes)
-            mean_accs.append(avg_acc_ratio)
-            std_dev_accs.append(std_dev_acc_ratio)
+            # TODO
+            # avg_acc_ratio, std_dev_acc_ratio = get_restart_avg_and_worst_group_accuracy_with_stddev(model, dl_test, "cuda:0", dir_for_method, num_classes)
+            # mean_accs.append(avg_acc_ratio)
+            # std_dev_accs.append(std_dev_acc_ratio)
             avg_delta_ratio, avg_lb_ratio, avg_ub_ratio, std_delta_ratio, std_lb_ratio, std_ub_ratio = get_avg_rob_metrics(
                 model, dl_test, "cuda:0", dir_for_method, eps, loss_fn, has_conv)
             mean_delta.append(avg_delta_ratio)
@@ -205,104 +237,4 @@ def make_model_ablation_paper_plots(dset_name: str) -> None:
     ax[1][1].set_title(f"Average upper bound for {dset_name.upper()} upon \n varying the model size", weight="bold")#, fontsize=60)
 
     plt.tight_layout()
-    plt.show()
-
-def make_sample_complexity_plots_for_dset(dset_name: str, with_data_removal: bool = False) -> None:
-    curr_dirname = os.path.dirname(os.path.realpath(__file__))
-    perf_fname = os.path.join(curr_dirname, f"{dset_name}.yaml")
-    suffix =  "" if not with_data_removal else "_data_removal"
-    ablation_fname = os.path.join(curr_dirname, f"{dset_name}_sample_complexity{suffix}.yaml")
-    x_ticks = np.array([0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    results_for_methods, results_perf, results_abl = {}, None, None
-    all_methods = ["r3", "ibp_ex", "ibp_ex+r3", "r4"]
-    with open(perf_fname, "r", encoding="utf8") as f:
-        results_perf = yaml.load(f, Loader=yaml.FullLoader)
-    with open(ablation_fname, "r", encoding="utf8") as f:
-        results_abl = yaml.load(f, Loader=yaml.FullLoader)
-    t = set()
-    for k in results_abl.keys():
-        if k.startswith("r3"):
-            t.add(k.rsplit("_", 1)[1])
-    x_ticks = np.array(sorted([int(i) / 100 for i in t]))
-    x_ticks = np.insert(x_ticks, 0, 0)
-    x_ticks = np.append(x_ticks, 1)
-    for method_ratio in results_abl.keys():
-        method, ratio = method_ratio.rsplit("_", 1)
-        ratio = int(ratio) / 100
-        if method not in results_for_methods:
-            results_for_methods[method] = {}
-        results_for_methods[method][ratio] = results_abl[method_ratio]
-
-    fig, ax = plt.subplots(2, 2, figsize=(20, 15))
-    for method in all_methods:
-        test_acc_abl, delta_abl, lower_bound_abl, upper_bound_abl = [], [], [], []
-        test_acc_abl.append(results_perf["std"]["test_acc"]) # i.e. for 0% mask ratio
-        delta_abl.append(results_perf["std"]["min_robust_delta"])
-        lower_bound_abl.append(results_perf["std"]["min_lower_bound"])
-        upper_bound_abl.append(results_perf["std"]["max_upper_bound"])
-        for ratio in x_ticks[1:-1]:
-            test_acc_abl.append(results_for_methods[method][ratio]["test_acc"])
-            delta_abl.append(results_for_methods[method][ratio]["min_robust_delta"])
-            lower_bound_abl.append(results_for_methods[method][ratio]["min_lower_bound"])
-            upper_bound_abl.append(results_for_methods[method][ratio]["max_upper_bound"])
-        test_acc_abl.append(results_perf[method]["test_acc"])
-        delta_abl.append(results_perf[method]["min_robust_delta"])
-        lower_bound_abl.append(results_perf[method]["min_lower_bound"])
-        upper_bound_abl.append(results_perf[method]["max_upper_bound"])
-        test_acc_abl, delta_abl = np.array(test_acc_abl), np.array(delta_abl)
-        lower_bound_abl, upper_bound_abl = np.array(lower_bound_abl), np.array(upper_bound_abl)
-
-        ax[0, 0].plot(x_ticks, test_acc_abl, label=method)
-        ax[0, 0].xaxis.set_inverted(True)
-        ax[0, 0].set_title("Test Accuracy for different mask ratios")
-        ax[0, 0].legend()
-
-
-        ax[0, 1].plot(x_ticks[1:], delta_abl[1:], label=method)
-        ax[0, 1].xaxis.set_inverted(True)
-        ax[0, 1].set_title("Delta for which test set is certifiably 1-delta-input-robust for different mask ratios")
-        ax[0, 1].legend()
-
-        ax[1, 0].plot(x_ticks[1:], lower_bound_abl[1:], label=method)
-        ax[1, 0].xaxis.set_inverted(True)
-        ax[1, 0].set_title("Minimum lower bound (averaged over the number of runs) for different mask ratios")
-        ax[1, 0].legend()
-
-        ax[1, 1].plot(x_ticks[1:], upper_bound_abl[1:], label=method)
-        ax[1, 1].xaxis.set_inverted(True)
-        ax[1, 1].set_title("Maximum upper bound (averaged over the number of runs) for different mask ratios")
-        ax[1, 1].legend()
-
-    fig.tight_layout()
-
-    plt.show()
-
-def make_size_ablation_plots_for_medmnist() -> None:
-    curr_dirname = os.path.dirname(os.path.realpath(__file__))
-    fname = os.path.join(curr_dirname, "derma_size.yaml")
-    results = None
-    with open(fname, "r", encoding="utf8") as f:
-        results = yaml.load(f, Loader=yaml.FullLoader)
-
-    ticks = np.array(list(results.keys()))
-    fig, ax = plt.subplots(2, 2, figsize=(20, 15))
-    test_accs = np.array([results[tick]["test_acc"] for tick in ticks])
-    robust_delta = np.array([results[tick]["min_robust_delta"] for tick in ticks])
-    lower_bounds_avg = np.array([results[tick]["min_lower_bound"] for tick in ticks])
-    upper_bounds_avg = np.array([results[tick]["max_upper_bound"] for tick in ticks])
-    ticks = np.array([f"img size {str(tick)}" for tick in ticks])
-
-    ax[0, 0].bar(ticks, test_accs, color="#0000FF", width=0.75)
-    ax[0, 0].set_title("Test Accuracy")
-
-    ax[0, 1].bar(ticks, robust_delta, color="#00FF00", width=0.75)
-    ax[0, 1].set_title("Delta for which test set is certifiably 1-delta-input-robust")
-
-    ax[1, 0].bar(ticks, lower_bounds_avg, color="#FF0000", width=0.75)
-    ax[1, 0].set_title("Minimum lower bound (averaged over the number of runs)")
-
-    ax[1, 1].bar(ticks, upper_bounds_avg, color="#0000FF", width=0.75)
-    ax[1, 1].set_title("Maximum upper bound (averaged over the number of runs)")
-
-
     plt.show()

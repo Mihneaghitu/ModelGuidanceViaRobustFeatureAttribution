@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 import sys
 sys.path.append("../")
+from typing import Union
 from datasets import derma_mnist, isic, plant, decoy_mnist, salient_imagenet
 from models.R4_models import DermaNet, PlantNet, SalientImageNet, LesionNet
 from models.fully_connected import FCNAugmented
@@ -16,7 +17,7 @@ from math import fabs
 def get_restart_avg_and_worst_group_accuracy_with_stddev(
     dl_test_grouped: torch.utils.data.DataLoader, model_run_dir: str, model: torch.nn.Sequential, device: str, num_groups: int,
     multi_class: bool = False, suppress_log: bool = False, return_stddev_per_group: bool = False) \
-        -> tuple[float, float, int, float, float | float, float, int, float, float, list[float], list[float]]:
+        -> Union[tuple[float, float, int, float, float], tuple[float, float, int, float, float, list[float], list[float]]]:
     restarts = len(os.listdir(model_run_dir))
     acc_per_group, num_elems_for_group = np.zeros((restarts, num_groups)), np.zeros((restarts, num_groups))
     for run in range(restarts):
