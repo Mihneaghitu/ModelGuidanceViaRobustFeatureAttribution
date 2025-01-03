@@ -1,9 +1,7 @@
 import sys
-import os
 sys.path.append("../")
 sys.path.append("../../")
 import matplotlib.pyplot as plt
-import yaml
 import numpy as np
 import seaborn as sns
 from examples.datasets import derma_mnist, decoy_mnist
@@ -11,15 +9,14 @@ from examples.models.R4_models import DermaNet
 from examples.metrics import get_restart_avg_and_worst_group_accuracy_with_stddev, get_avg_rob_metrics
 from examples.models.pipeline import load_params_or_results_from_file
 from examples.models.fully_connected import FCNAugmented
-import pandas as pd
 
-
-def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with_data: bool = False, methods: list[str] = None) -> None:
+def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with_data: bool = False, with_l2_prop: bool = False,  methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
     dl_test, model_dir, model, eps, has_conv, loss_fn, num_groups = None, None, None, None, None, None, None
     result_file_suffix = "_data_removal" if with_data else ""
+    result_file_suffix = result_file_suffix + "_propl2" if with_l2_prop else result_file_suffix
     result_yaml_file = f"experiment_results/{dset_name}_sample_complexity{result_file_suffix}.yaml"
     if dset_name == "decoy_mnist":
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
@@ -84,7 +81,9 @@ def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with
                        weight="bold")
 
     plt.tight_layout()
+    plt.savefig(f"paper_plots_r4/{dset_name}_sample_complexity{result_file_suffix}.png")
     plt.show()
+
 
 def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, corruption_type: int, methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
@@ -161,6 +160,8 @@ def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, co
                        weight="bold")
 
     plt.tight_layout()
+    dset_name = dset_name.replace(" ", "_")
+    plt.savefig(f"paper_plots_r4/{dset_name}_sample_complexity{result_file_suffix}.png")
     plt.show()
 
 #TODO: Change the implementation for this as well

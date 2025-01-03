@@ -1,0 +1,400 @@
+ibp_ex_0:
+  acc_per_group:
+  - 0.70097
+  - 0.68323
+  avg_group_acc: 0.6921
+  delta_mean: 6073.08
+  delta_stddev: 101.60884
+  lb_mean: -3036.54924
+  stddev_acc: 0.01254
+  stddev_per_group:
+  - 0.0826
+  - 0.10299
+  stddev_worst_group_acc: 0.10299
+  ub_mean: 3036.53084
+  worst_group: 1
+  worst_group_acc: 0.68323
+ibp_ex_20:
+  acc_per_group:
+  - 0.69923
+  - 0.68373
+  avg_group_acc: 0.69148
+  delta_mean: 6066.99467
+  delta_stddev: 99.18563
+  lb_mean: -3033.50659
+  stddev_acc: 0.01096
+  stddev_per_group:
+  - 0.08248
+  - 0.10653
+  stddev_worst_group_acc: 0.10653
+  ub_mean: 3033.48804
+  worst_group: 1
+  worst_group_acc: 0.68373
+ibp_ex_40:
+  acc_per_group:
+  - 0.69774
+  - 0.68926
+  avg_group_acc: 0.6935
+  delta_mean: 6018.454
+  delta_stddev: 96.81091
+  lb_mean: -3009.23608
+  stddev_acc: 0.006
+  stddev_per_group:
+  - 0.07891
+  - 0.10037
+  stddev_worst_group_acc: 0.10037
+  ub_mean: 3009.21785
+  worst_group: 1
+  worst_group_acc: 0.68926
+ibp_ex_60:
+  acc_per_group:
+  - 0.69774
+  - 0.68624
+  avg_group_acc: 0.69199
+  delta_mean: 5231.205
+  delta_stddev: 53.86351
+  lb_mean: -2615.61174
+  stddev_acc: 0.00813
+  stddev_per_group:
+  - 0.0821
+  - 0.10469
+  stddev_worst_group_acc: 0.10469
+  ub_mean: 2615.59367
+  worst_group: 1
+  worst_group_acc: 0.68624
+ibp_ex_80:
+  acc_per_group:
+  - 0.69774
+  - 0.68574
+  avg_group_acc: 0.69174
+  delta_mean: 3753.394
+  delta_stddev: 88.11287
+  lb_mean: -1876.70308
+  stddev_acc: 0.00848
+  stddev_per_group:
+  - 0.08193
+  - 0.1015
+  stddev_worst_group_acc: 0.1015
+  ub_mean: 1876.6908
+  worst_group: 1
+  worst_group_acc: 0.68574
+pgd_r4_0:
+  acc_per_group:
+  - 0.66741
+  - 0.78012
+  avg_group_acc: 0.72377
+  delta_mean: 6263.329
+  delta_stddev: 228.80265
+  lb_mean: -3131.66007
+  stddev_acc: 0.0797
+  stddev_per_group:
+  - 0.06502
+  - 0.09819
+  stddev_worst_group_acc: 0.06502
+  ub_mean: 3131.66919
+  worst_group: 0
+  worst_group_acc: 0.66741
+pgd_r4_20:
+  acc_per_group:
+  - 0.67537
+  - 0.77259
+  avg_group_acc: 0.72398
+  delta_mean: 6251.838
+  delta_stddev: 224.63331
+  lb_mean: -3125.9139
+  stddev_acc: 0.06875
+  stddev_per_group:
+  - 0.05019
+  - 0.07547
+  stddev_worst_group_acc: 0.05019
+  ub_mean: 3125.92399
+  worst_group: 0
+  worst_group_acc: 0.67537
+pgd_r4_40:
+  acc_per_group:
+  - 0.67611
+  - 0.77108
+  avg_group_acc: 0.7236
+  delta_mean: 5854.70833
+  delta_stddev: 191.30091
+  lb_mean: -2927.34937
+  stddev_acc: 0.06716
+  stddev_per_group:
+  - 0.04918
+  - 0.07361
+  stddev_worst_group_acc: 0.04918
+  ub_mean: 2927.35881
+  worst_group: 0
+  worst_group_acc: 0.67611
+pgd_r4_60:
+  acc_per_group:
+  - 0.66716
+  - 0.78715
+  avg_group_acc: 0.72716
+  delta_mean: 4051.21333
+  delta_stddev: 125.41878
+  lb_mean: -2025.60189
+  stddev_acc: 0.08484
+  stddev_per_group:
+  - 0.06022
+  - 0.08778
+  stddev_worst_group_acc: 0.06022
+  ub_mean: 2025.61125
+  worst_group: 0
+  worst_group_acc: 0.66716
+pgd_r4_80:
+  acc_per_group:
+  - 0.66866
+  - 0.78564
+  avg_group_acc: 0.72715
+  delta_mean: 3036.23667
+  delta_stddev: 143.25223
+  lb_mean: -1518.11373
+  stddev_acc: 0.08272
+  stddev_per_group:
+  - 0.0626
+  - 0.08594
+  stddev_worst_group_acc: 0.0626
+  ub_mean: 1518.12301
+  worst_group: 0
+  worst_group_acc: 0.66866
+r3_0:
+  acc_per_group:
+  - 0.68456
+  - 0.67721
+  avg_group_acc: 0.68089
+  delta_mean: 5785.37867
+  delta_stddev: 142.92826
+  lb_mean: -2892.69084
+  stddev_acc: 0.0052
+  stddev_per_group:
+  - 0.05285
+  - 0.088
+  stddev_worst_group_acc: 0.088
+  ub_mean: 2892.68774
+  worst_group: 1
+  worst_group_acc: 0.67721
+r3_20:
+  acc_per_group:
+  - 0.68432
+  - 0.67771
+  avg_group_acc: 0.68101
+  delta_mean: 5785.256
+  delta_stddev: 143.45645
+  lb_mean: -2892.62956
+  stddev_acc: 0.00467
+  stddev_per_group:
+  - 0.05171
+  - 0.08714
+  stddev_worst_group_acc: 0.08714
+  ub_mean: 2892.62663
+  worst_group: 1
+  worst_group_acc: 0.67771
+r3_40:
+  acc_per_group:
+  - 0.68432
+  - 0.6747
+  avg_group_acc: 0.67951
+  delta_mean: 5782.61
+  delta_stddev: 141.8461
+  lb_mean: -2891.30656
+  stddev_acc: 0.0068
+  stddev_per_group:
+  - 0.05244
+  - 0.08534
+  stddev_worst_group_acc: 0.08534
+  ub_mean: 2891.30347
+  worst_group: 1
+  worst_group_acc: 0.6747
+r3_60:
+  acc_per_group:
+  - 0.68481
+  - 0.67671
+  avg_group_acc: 0.68076
+  delta_mean: 5783.82667
+  delta_stddev: 143.59682
+  lb_mean: -2891.91479
+  stddev_acc: 0.00573
+  stddev_per_group:
+  - 0.05255
+  - 0.08746
+  stddev_worst_group_acc: 0.08746
+  ub_mean: 2891.91187
+  worst_group: 1
+  worst_group_acc: 0.67671
+r3_80:
+  acc_per_group:
+  - 0.68456
+  - 0.6742
+  avg_group_acc: 0.67938
+  delta_mean: 5772.76767
+  delta_stddev: 142.33197
+  lb_mean: -2886.38542
+  stddev_acc: 0.00733
+  stddev_per_group:
+  - 0.05285
+  - 0.08897
+  stddev_worst_group_acc: 0.08897
+  ub_mean: 2886.38249
+  worst_group: 1
+  worst_group_acc: 0.6742
+r4_0:
+  acc_per_group:
+  - 0.77728
+  - 0.79367
+  avg_group_acc: 0.78548
+  delta_mean: 0.63833
+  delta_stddev: 0.4544
+  lb_mean: -0.31923
+  stddev_acc: 0.01159
+  stddev_per_group:
+  - 0.04609
+  - 0.03959
+  stddev_worst_group_acc: 0.04609
+  ub_mean: 0.31912
+  worst_group: 0
+  worst_group_acc: 0.77728
+r4_20:
+  acc_per_group:
+  - 0.78175
+  - 0.78966
+  avg_group_acc: 0.78571
+  delta_mean: 0.60133
+  delta_stddev: 0.3819
+  lb_mean: -0.30073
+  stddev_acc: 0.00559
+  stddev_per_group:
+  - 0.04426
+  - 0.03928
+  stddev_worst_group_acc: 0.04426
+  ub_mean: 0.30062
+  worst_group: 0
+  worst_group_acc: 0.78175
+r4_40:
+  acc_per_group:
+  - 0.782
+  - 0.79468
+  avg_group_acc: 0.78834
+  delta_mean: 0.61367
+  delta_stddev: 0.41352
+  lb_mean: -0.30695
+  stddev_acc: 0.00896
+  stddev_per_group:
+  - 0.0464
+  - 0.03533
+  stddev_worst_group_acc: 0.0464
+  ub_mean: 0.30683
+  worst_group: 0
+  worst_group_acc: 0.782
+r4_60:
+  acc_per_group:
+  - 0.76933
+  - 0.79769
+  avg_group_acc: 0.78351
+  delta_mean: 1.34
+  delta_stddev: 1.43107
+  lb_mean: -0.67014
+  stddev_acc: 0.02006
+  stddev_per_group:
+  - 0.04427
+  - 0.04618
+  stddev_worst_group_acc: 0.04427
+  ub_mean: 0.6699
+  worst_group: 0
+  worst_group_acc: 0.76933
+r4_80:
+  acc_per_group:
+  - 0.77405
+  - 0.79518
+  avg_group_acc: 0.78461
+  delta_mean: 1.432
+  delta_stddev: 1.54498
+  lb_mean: -0.71613
+  stddev_acc: 0.01494
+  stddev_per_group:
+  - 0.04467
+  - 0.03701
+  stddev_worst_group_acc: 0.04467
+  ub_mean: 0.71601
+  worst_group: 0
+  worst_group_acc: 0.77405
+rand_r4_0:
+  acc_per_group:
+  - 0.71936
+  - 0.6757
+  avg_group_acc: 0.69753
+  delta_mean: 6432.89033
+  delta_stddev: 195.00704
+  lb_mean: -3216.45549
+  stddev_acc: 0.03087
+  stddev_per_group:
+  - 0.03303
+  - 0.06551
+  stddev_worst_group_acc: 0.06551
+  ub_mean: 3216.43514
+  worst_group: 1
+  worst_group_acc: 0.6757
+rand_r4_20:
+  acc_per_group:
+  - 0.71414
+  - 0.68273
+  avg_group_acc: 0.69844
+  delta_mean: 6422.04667
+  delta_stddev: 189.64032
+  lb_mean: -3211.03337
+  stddev_acc: 0.02221
+  stddev_per_group:
+  - 0.02575
+  - 0.05126
+  stddev_worst_group_acc: 0.05126
+  ub_mean: 3211.01335
+  worst_group: 1
+  worst_group_acc: 0.68273
+rand_r4_40:
+  acc_per_group:
+  - 0.71713
+  - 0.67671
+  avg_group_acc: 0.69692
+  delta_mean: 6302.34033
+  delta_stddev: 178.1157
+  lb_mean: -3151.18034
+  stddev_acc: 0.02858
+  stddev_per_group:
+  - 0.03116
+  - 0.06379
+  stddev_worst_group_acc: 0.06379
+  ub_mean: 3151.15999
+  worst_group: 1
+  worst_group_acc: 0.67671
+rand_r4_60:
+  acc_per_group:
+  - 0.71787
+  - 0.6757
+  avg_group_acc: 0.69679
+  delta_mean: 5140.72567
+  delta_stddev: 92.33828
+  lb_mean: -2570.37354
+  stddev_acc: 0.02982
+  stddev_per_group:
+  - 0.03134
+  - 0.06088
+  stddev_worst_group_acc: 0.06088
+  ub_mean: 2570.35221
+  worst_group: 1
+  worst_group_acc: 0.6757
+rand_r4_80:
+  acc_per_group:
+  - 0.71588
+  - 0.68173
+  avg_group_acc: 0.69881
+  delta_mean: 3802.512
+  delta_stddev: 91.10269
+  lb_mean: -1901.26253
+  stddev_acc: 0.02415
+  stddev_per_group:
+  - 0.03186
+  - 0.06615
+  stddev_worst_group_acc: 0.06615
+  ub_mean: 1901.24959
+  worst_group: 1
+  worst_group_acc: 0.68173
