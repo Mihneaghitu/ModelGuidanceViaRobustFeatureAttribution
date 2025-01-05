@@ -85,7 +85,7 @@ def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with
     plt.show()
 
 
-def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, corruption_type: int, methods: list[str] = None) -> None:
+def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, corruption_type: int, with_l2_prop: bool = False, methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
@@ -100,6 +100,7 @@ def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, co
             result_file_suffix = "_shrink"
         case 3:
             result_file_suffix = "_dilation"
+    result_file_suffix = result_file_suffix + "_propl2" if with_l2_prop else result_file_suffix
     result_yaml_file = f"experiment_results/{dset_name}_sample_complexity{result_file_suffix}.yaml"
     if dset_name == "decoy_mnist":
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
@@ -163,6 +164,53 @@ def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, co
     dset_name = dset_name.replace(" ", "_")
     plt.savefig(f"paper_plots_r4/{dset_name}_sample_complexity{result_file_suffix}.png")
     plt.show()
+
+
+def make_mask_abl_hmap(dset_name: str,  methods: list[str] = None) -> None:
+    assert dset_name in ["decoy_mnist", "derma_mnist"]
+    if methods is None:
+        methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
+    result_yaml_file = f"experiment_results/{dset_name}_hmap.yaml"
+    dset_as_title = dset_name.replace("_", " ").upper()
+
+    sns.set_theme(context="poster", font_scale=1.6)
+    sns.color_palette("bright")
+    ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0])
+    fig, ax = plt.subplots(3, 2, figsize=(35, 46))
+    for method_idx, method in enumerate(methods):
+        # Pull up the weight decay or weight reg coeff from the saved parameters
+        perf_param_file = f"experiment_results/{dset_name}_params.yaml"
+        method_params = load_params_or_results_from_file(perf_param_file, method)
+        wreg_init = None
+        if "weight_decay" in method_params and method_params["weight_decay"] > 0:
+            wreg_init = method_params["weight_decay"]
+        elif "weight_coeff" in method_params and method_params["weight_coeff"] > 0:
+            wreg_init = method_params["weight_coeff"]
+        else:
+            wreg_init = 0
+        wregs_for_method = [wreg_init / 1000, wreg_init / 100, wreg_init / 10, wreg_init, wreg_init * 10, wreg_init * 100]
+        min_wg, max_wg = 100, 0
+        row, col = method_idx // 2, method_idx % 2
+        mean_wg_accs = np.zeros((len(wregs_for_method), len(ratios)))
+        #* Measure acc and rob metrics for ratio 1
+        for wreg_id, _ in enumerate(wregs_for_method):
+            for ridx, ratio in enumerate(ratios):
+                key_name = f"{method}wd_{wreg_id}_{int(ratio * 100)}"
+                abl_results_for_method_and_ratio = load_params_or_results_from_file(result_yaml_file, key_name)
+                mean_wg_accs[int(wreg_id)][ridx] = abl_results_for_method_and_ratio["worst_group_acc"] * 100
+        min_wg, max_wg = min(min_wg, *mean_wg_accs.flatten()), max(max_wg, *mean_wg_accs.flatten())
+
+        # Round every element in wregs_for_method to 1 decimal and scientific notation
+        wregs_for_method = [f"{wreg:.0e}" for wreg in wregs_for_method]
+        sns.heatmap(mean_wg_accs, ax=ax[row][col], xticklabels=ratios, yticklabels=wregs_for_method, annot=True, fmt=".1f",
+                    vmin=min_wg * 0.95, vmax=max_wg * 1.05, linewidth=.3)
+        ax[row][col].set(xlabel="% of masks\n\n", ylabel="Weight decay")
+        ax[row][col].set_title(f"Worst group test accuracy for dataset \n {dset_as_title} and method {method}", weight="bold")
+
+    plt.subplots_adjust(wspace=0.3, hspace=0.3)
+    plt.savefig(f"paper_plots_r4/{dset_name}_mask_hmap.png")
+    plt.show()
+
 
 #TODO: Change the implementation for this as well
 def make_model_ablation_paper_plots(dset_name: str) -> None:

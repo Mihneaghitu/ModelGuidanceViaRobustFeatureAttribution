@@ -19,6 +19,7 @@ def ablate(dset_name: str,
            non_corrupted_mask_ratios: list[float],
            methods: list[str],
            corruption_type: corruption.MaskCorruption,
+           decrease_l2_strength: bool = False,
            write_to_file: bool = False) -> None:
     suffix, ablation_type = None, None
     match corruption_type:
@@ -36,6 +37,8 @@ def ablate(dset_name: str,
             ablation_type = "shrink"
         case _:
             raise ValueError("Only 'misposition', 'shift', 'dilation' and 'shrink' are supported")
+    suffix += "_propl2" if decrease_l2_strength else ""
+    ablation_type += "_propl2" if decrease_l2_strength else ""
     root_dir = f"saved_experiment_models/ablations/{ablation_type}/{dset_name}/"
     os.makedirs(root_dir, exist_ok=True)
     for method in methods:
@@ -61,6 +64,9 @@ def ablate(dset_name: str,
         if "weight_coeff" in params_dict and params_dict["weight_coeff"] > 0:
             weight_coeff = params_dict["weight_coeff"]
         for mask_ratio in non_corrupted_mask_ratios:
+            if decrease_l2_strength:
+                weight_coeff = weight_coeff * mask_ratio
+                weight_decay = weight_decay * mask_ratio
             mask_ratio_dir = root_dir + method + f"/ratio_{int(mask_ratio * 100)}"
             os.makedirs(mask_ratio_dir, exist_ok=True)
             # Manipulate masks based on the dataset
@@ -75,6 +81,8 @@ def ablate(dset_name: str,
                 curr_model, loss_fn, criterion = None, "binary_cross_entropy", torch.nn.BCELoss()
                 if dset_name == "derma_mnist":
                     curr_model = DermaNet(3, 64, 1).to(device)
+                    if decrease_l2_strength:
+                        weight_coeff, weight_decay = weight_coeff * 0.05, weight_decay * 0.05
                 else:
                     curr_model = FCNAugmented(784, 10, 512, 1).to(device)
                     loss_fn, criterion = "cross_entropy", torch.nn.CrossEntropyLoss()
@@ -123,10 +131,11 @@ def ablate(dset_name: str,
 
 # def test():
 #     sys.argv = ["", "decoy_mnist", "MISPOS", "d0"]
-assert len(sys.argv) == 4, "Usage: python ablate_mask_corruption.py <dataset> <corruption_type> <device>"
-assert sys.argv[1] in ["derma_mnist", "decoy_mnist"]
-assert sys.argv[2] in ["MISPOS", "SHIFT", "SHRINK", "DILATE"]
-assert sys.argv[3] in ["d0", "d1"] # d0 GPU 0, d1 GPU 1
+assert len(sys.argv) == 5, "Usage: python ablate_mask_corruption.py <dataset> <corruption_type> <device> <decrease_l2_strength>"
+assert sys.argv[1] in ["derma_mnist", "decoy_mnist"], "Only 'derma_mnist' and 'decoy_mnist' are supported"
+assert sys.argv[2] in ["MISPOS", "SHIFT", "SHRINK", "DILATE"], "Only 'MISPOS', 'SHIFT', 'SHRINK' and 'DILATE' are supported"
+assert sys.argv[3] in ["d0", "d1"], "Only 'd0' (GPU 0) and 'd1' (GPU 1) are supported"
+assert sys.argv[4] in ["dl2", "ndl2"], "Only 'dl2' and 'ndl2' are supported"
 #* General setup
 funcs = {
     "r4": train_model_with_certified_input_grad,
@@ -147,6 +156,7 @@ match sys.argv[2]:
         CORR_TYPE = corruption.MaskCorruption.SHRINK
     case "DILATE":
         CORR_TYPE = corruption.MaskCorruption.DILATION
+propl2 = sys.argv[4] == "dl2"
 #* Specific dataset setup
 match sys.argv[1]:
     case "decoy_mnist":
@@ -154,13 +164,13 @@ match sys.argv[1]:
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
         ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
-               CORR_TYPE, write_to_file=True)
+               CORR_TYPE, write_to_file=True, decrease_l2_strength=propl2)
     case "derma_mnist":
         funcs["r3"] = train_model_with_pgd_robust_input_grad
         train_dset = derma_mnist.DecoyDermaMNIST(True, size=64)
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 100)
         ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
-               CORR_TYPE, write_to_file=True)
+               CORR_TYPE, write_to_file=True, decrease_l2_strength=propl2)
     case _:
         raise ValueError("Only 'decoy_mnist' and 'derma_mnist' are supported")

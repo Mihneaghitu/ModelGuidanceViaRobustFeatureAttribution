@@ -20,8 +20,7 @@ def make_hmap(dset_name: str,
            methods: list[str],
            with_data_removal: bool = False,
            write_to_file: bool = False) -> None:
-    ablation_type = "hmap"
-    root_dir = f"saved_experiment_models/ablations/{ablation_type}/{dset_name}/"
+    root_dir = f"saved_experiment_models/ablations/hmap/{dset_name}/"
     os.makedirs(root_dir, exist_ok=True)
     for method in methods:
         os.makedirs(root_dir + method, exist_ok=True)
@@ -46,21 +45,21 @@ def make_hmap(dset_name: str,
         if "weight_coeff" in params_dict and params_dict["weight_coeff"] > 0:
             weight_coeff = params_dict["weight_coeff"]
         wd_init = weight_coeff if weight_coeff > 0 else weight_decay
-        for mask_ratio in mask_ratios:
-            mask_ratio_dir = root_dir + method + f"/ratio_{int(mask_ratio * 100)}"
-            os.makedirs(mask_ratio_dir, exist_ok=True)
-            # Manipulate masks based on the dataset
-            new_dl_train = None
-            if dset_name == "derma_mnist":
-                new_dl_train = derma_mnist.remove_masks(mask_ratio, train_dloader, with_data_removal)
+        wd_ratios = [wd_init / 1000, wd_init / 100, wd_init / 10, wd_init, wd_init * 10, wd_init * 100]
+        for idx_wd, wd in enumerate(wd_ratios):
+            if "weight_coeff" in params_dict and params_dict["weight_coeff"] > 0:
+                weight_coeff = wd
             else:
-                new_dl_train = decoy_mnist.remove_masks(mask_ratio, train_dloader, with_data_removal)
-            for idx_wd, wd in enumerate([wd_init / 1000, wd_init / 100, wd_init / 10, wd_init, wd_init * 10, wd_init * 100]):
-                mask_and_wd_ratio_dir = mask_ratio_dir + f"/wd_{idx_wd}"
-                if "weight_coeff" in params_dict and params_dict["weight_coeff"] > 0:
-                    weight_coeff = wd
+                weight_decay = wd
+            for mask_ratio in mask_ratios:
+                mask_and_wd_ratio_dir = root_dir + method + f"/wd_{idx_wd}" + f"/ratio_{int(mask_ratio * 100)}"
+                os.makedirs(mask_and_wd_ratio_dir, exist_ok=True)
+                # Manipulate masks based on the dataset
+                new_dl_train = None
+                if dset_name == "derma_mnist":
+                    new_dl_train = derma_mnist.remove_masks(mask_ratio, train_dloader, with_data_removal)
                 else:
-                    weight_decay = wd
+                    new_dl_train = decoy_mnist.remove_masks(mask_ratio, train_dloader, with_data_removal)
                 for i in range(restarts):
                     # Seed 0
                     torch.manual_seed(i)
@@ -91,11 +90,11 @@ def make_hmap(dset_name: str,
                     num_groups = 10
                 #* Measure (core and spurious) accuracy metrics
                 macro_avg_acc, wg_acc, wg, stddev_group_acc, stddev_wg_acc, acc_per_group, stddev_per_group = get_restart_avg_and_worst_group_accuracy_with_stddev(
-                    test_dloader, mask_ratio_dir, empty_model, device, num_groups, multi_class=multi_class, suppress_log=True, return_stddev_per_group=True
+                    test_dloader, mask_and_wd_ratio_dir, empty_model, device, num_groups, multi_class=multi_class, suppress_log=True, return_stddev_per_group=True
                 )
                 #* Measure robustness metrics
                 delta_mean, ls_mean, us_mean, delta_std, *_ = get_avg_rob_metrics(
-                    empty_model, test_dloader, device, mask_ratio_dir, test_epsilon, loss_fn, has_conv=has_conv
+                    empty_model, test_dloader, device, mask_and_wd_ratio_dir, test_epsilon, loss_fn, has_conv=has_conv
                 )
                 delta_mean, ls_mean, us_mean, delta_std = round(float(delta_mean.item()), 5), round(float(ls_mean.item()), 5), round(float(us_mean.item()), 5), round(float(delta_std.item()), 5)
                 if write_to_file:
@@ -111,7 +110,7 @@ def make_hmap(dset_name: str,
                            "ub_mean": round(us_mean, 5),
                            "delta_mean": round(delta_mean, 5),
                            "delta_stddev": round(delta_std, 5),
-                           }, method + f"_{int(mask_ratio * 100)}_wd_{idx_wd}")
+                           }, method + f"wd_{idx_wd}_{int(mask_ratio * 100)}")
 
 def ablate(dset_name: str,
            train_dloader: torch.utils.data.DataLoader,
@@ -241,6 +240,8 @@ if not bool(int(sys.argv[2])): # only masks are removed
 remove_data = bool(int(sys.argv[2]))
 dl2 = sys.argv[4] == "dl2"
 hm = sys.argv[5] == "hm"
+if hm:
+    mrs.insert(0, 1)
 #* Specific dataset setup
 match sys.argv[1]:
     case "decoy_mnist":
@@ -248,7 +249,7 @@ match sys.argv[1]:
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
         if hm:
-            pass
+            make_hmap("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
         else:
             ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
                    write_to_file=True, with_data_removal=remove_data, decrease_l2_strength=dl2)
@@ -258,7 +259,7 @@ match sys.argv[1]:
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 100)
         if hm:
-            pass
+            make_hmap("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
         else:
             ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
                    write_to_file=True, with_data_removal=remove_data, decrease_l2_strength=dl2)
