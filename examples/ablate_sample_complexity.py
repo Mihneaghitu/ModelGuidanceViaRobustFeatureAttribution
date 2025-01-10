@@ -46,6 +46,9 @@ def make_hmap(dset_name: str,
             weight_coeff = params_dict["weight_coeff"]
         wd_init = weight_coeff if weight_coeff > 0 else weight_decay
         wd_ratios = [wd_init / 1000, wd_init / 100, wd_init / 10, wd_init, wd_init * 10, wd_init * 100]
+        #* Hardcode this special case because R4 DecoyMNIST best model has 0 weight regularization
+        if method == "r3" and dset_name == "decoy_mnist":
+            wd_ratios = [0.001, 0.01, 0.1, 0, 1, 10]
         for idx_wd, wd in enumerate(wd_ratios):
             if "weight_coeff" in params_dict and params_dict["weight_coeff"] > 0:
                 weight_coeff = wd
@@ -229,8 +232,9 @@ assert sys.argv[5] in ["hm", "nhm"], "Only hm and nhm are supported, hm means he
 funcs = {
     "r4": train_model_with_certified_input_grad,
     "ibp_ex": train_model_with_certified_input_grad,
+    "ibp_ex+r3": train_model_with_certified_input_grad,
     "pgd_r4": train_model_with_pgd_robust_input_grad,
-    "rand_r4": train_model_with_smoothed_input_grad
+    "rand_r4": train_model_with_smoothed_input_grad,
 }
 dev = torch.device("cuda:" + sys.argv[3][-1])
 # mask ratios
@@ -249,7 +253,7 @@ match sys.argv[1]:
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
         if hm:
-            make_hmap("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
+            make_hmap("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "ibp_ex+r3", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
         else:
             ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
                    write_to_file=True, with_data_removal=remove_data, decrease_l2_strength=dl2)
@@ -259,7 +263,7 @@ match sys.argv[1]:
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 100)
         if hm:
-            make_hmap("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
+            make_hmap("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "ibp_ex+r3", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
         else:
             ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
                    write_to_file=True, with_data_removal=remove_data, decrease_l2_strength=dl2)
