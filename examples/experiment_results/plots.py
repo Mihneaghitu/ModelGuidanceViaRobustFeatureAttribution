@@ -5,6 +5,7 @@ sys.path.append("../../")
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap, Colormap
 from examples.datasets import derma_mnist, decoy_mnist
 from examples.models.R4_models import DermaNet
 from examples.metrics import get_restart_avg_and_worst_group_accuracy_with_stddev, get_avg_rob_metrics
@@ -246,8 +247,15 @@ def make_r4_worst_mask_corr_plot(dset_name: str, device: str, with_l2_prop: bool
     dset_name = dset_name.replace("_", " ")
 
     sns.set_theme(context="poster", font_scale=3)
-    sns.color_palette("bright")
-    ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0])
+    # sns.set_palette("pastel")
+    palette = sns.color_palette(["#f97171", "#d24459", "#791551", "#252525"]).as_hex()
+    sns.set_palette(palette)
+    ratios = None
+    if dset_name == "decoy mnist":
+        ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0.16, 0.12, 0.08, 0.04, 0])
+    else:
+        ratios = np.array([1, 0.96, 0.92, 0.88, 0.84, 0.8, 0.6, 0.4, 0.2, 0])
+    xlabel_ratios = np.array(list(map(lambda x: 1 - x, ratios)))
     fig, ax = plt.subplots(1, 2, figsize=(70, 28))
     min_wg, max_wg = 1, 0
     _, r4_100_wg_acc, _, _, r4_100_stddev_wg_acc = get_restart_avg_and_worst_group_accuracy_with_stddev(dl_test, model_dir + "/r4", model, device, num_groups, multi_class=(num_groups > 2), suppress_log=True)
@@ -268,12 +276,18 @@ def make_r4_worst_mask_corr_plot(dset_name: str, device: str, with_l2_prop: bool
             std_dev_delta.append(abl_results_for_method_and_ratio["delta_stddev"])
 
         min_wg, max_wg = min(min_wg, *mean_wg_accs), max(max_wg, *mean_wg_accs)
-        lsty = "dotted" if corr_type == "DILATE" and dset_name == "derma mnist" else "solid"
-        sns.lineplot(x=np.flip(ratios), y=mean_wg_accs, label=corr_type, marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None, linestyle=lsty)
-        sns.lineplot(x=np.flip(ratios), y=mean_delta, label=corr_type, marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
-        ax[0].fill_between(np.flip(ratios), np.array(mean_wg_accs) - np.array(stddev_wg_accs), np.array(mean_wg_accs) + np.array(stddev_wg_accs), alpha=0.15)
+        lsty = "solid"
+        if corr_type == "DILATE" and dset_name == "derma mnist":
+            lsty = "dashdot"
+        if corr_type == "SHRINK" and dset_name == "decoy mnist":
+            lsty = "dotted"
+        sns.lineplot(x=xlabel_ratios, y=mean_wg_accs, label=corr_type, marker="o", legend="full", ax=ax[0], linewidth=10,
+                     estimator=None, linestyle=lsty)
+        sns.lineplot(x=xlabel_ratios, y=mean_delta, label=corr_type, marker="o", legend="full", ax=ax[1], linewidth=10,
+                     estimator=None)
+        ax[0].fill_between(xlabel_ratios, np.array(mean_wg_accs) - np.array(stddev_wg_accs), np.array(mean_wg_accs) + np.array(stddev_wg_accs), alpha=0.15)
         ax[0].set(xlabel="% of corrupted masks \n", ylabel="Average Worst Group Test Accuracy")
-        ax[1].fill_between(np.flip(ratios), np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
+        ax[1].fill_between(xlabel_ratios, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
         ax[1].set(xlabel="% of corrupted masks \n", ylabel=r'Average $\delta$')
         ax[1].set_yscale("symlog")
 

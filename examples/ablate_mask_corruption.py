@@ -157,20 +157,22 @@ match sys.argv[2]:
     case "DILATE":
         CORR_TYPE = corruption.MaskCorruption.DILATION
 propl2 = sys.argv[4] == "dl2"
+# mrs = [0.96, 0.92, 0.88, 0.84] if sys.argv[1] == "derma_mnist" else [0.16, 0.12, 0.08, 0.04]
+mlx_methods = ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"]
 #* Specific dataset setup
 match sys.argv[1]:
     case "decoy_mnist":
         funcs["r3"] = train_model_with_certified_input_grad
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
-        ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
+        ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, mlx_methods,
                CORR_TYPE, write_to_file=True, decrease_l2_strength=propl2)
     case "derma_mnist":
         funcs["r3"] = train_model_with_pgd_robust_input_grad
         train_dset = derma_mnist.DecoyDermaMNIST(True, size=64)
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 100)
-        ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
+        ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, mlx_methods,
                CORR_TYPE, write_to_file=True, decrease_l2_strength=propl2)
     case _:
         raise ValueError("Only 'decoy_mnist' and 'derma_mnist' are supported")
