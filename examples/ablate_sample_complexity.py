@@ -149,10 +149,13 @@ def ablate(dset_name: str,
         # optional ones
         weight_decay = 0
         weight_coeff = 0
+        num_samples = None
         if "weight_decay" in params_dict and params_dict["weight_decay"] > 0:
             weight_decay = params_dict["weight_decay"]
         if "weight_coeff" in params_dict and params_dict["weight_coeff"] > 0:
             weight_coeff = params_dict["weight_coeff"]
+        if "num_samples" in params_dict:
+            num_samples = params_dict["num_samples"]
         for mask_ratio in mask_ratios:
             if decrease_l2_strength:
                 weight_coeff = weight_coeff * mask_ratio
@@ -183,7 +186,10 @@ def ablate(dset_name: str,
                 required_args = new_dl_train, num_epochs, curr_model, lr, criterion, epsilon, method, k, device
                 if sig.parameters.get("has_conv"):
                     required_args = (*required_args, has_conv)
-                train_func[method](*required_args, weight_reg_coeff=weight_coeff, weight_decay=weight_decay, suppress_tqdm=True, class_weights=class_weights)
+                if num_samples is not None:
+                    train_func[method](*required_args, num_samples=num_samples, weight_reg_coeff=weight_coeff, weight_decay=weight_decay, suppress_tqdm=True, class_weights=class_weights)
+                else:
+                    train_func[method](*required_args, weight_reg_coeff=weight_coeff, weight_decay=weight_decay, suppress_tqdm=True, class_weights=class_weights)
                 # Save the model
                 torch.save(curr_model.state_dict(), f"{mask_ratio_dir}/run_{i}.pt")
             empty_model, num_groups = None, None
@@ -239,6 +245,7 @@ funcs = {
 dev = torch.device("cuda:" + sys.argv[3][-1])
 # mask ratios
 mrs = [0.8, 0.6, 0.4, 0.2]
+mlx_methods = ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"]
 if not bool(int(sys.argv[2])): # only masks are removed
     mrs.append(0)
 remove_data = bool(int(sys.argv[2]))
@@ -246,6 +253,9 @@ dl2 = sys.argv[4] == "dl2"
 hm = sys.argv[5] == "hm"
 if hm:
     mrs.insert(0, 1)
+    mlx_methods.append("ibp_ex+r3")
+#TODO: Remove next line
+mlx_methods = ["rand_r4"]
 #* Specific dataset setup
 match sys.argv[1]:
     case "decoy_mnist":
@@ -253,9 +263,9 @@ match sys.argv[1]:
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
         dl_train, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
         if hm:
-            make_hmap("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "ibp_ex+r3", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
+            make_hmap("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, mlx_methods, write_to_file=True)
         else:
-            ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
+            ablate("decoy_mnist", dl_train, dl_test, funcs, dev, mrs, mlx_methods,
                    write_to_file=True, with_data_removal=remove_data, decrease_l2_strength=dl2)
     case "derma_mnist":
         funcs["r3"] = train_model_with_pgd_robust_input_grad
@@ -263,9 +273,9 @@ match sys.argv[1]:
         test_dset = derma_mnist.DecoyDermaMNIST(False, size=64)
         dl_train, dl_test = derma_mnist.get_dataloader(train_dset, 256), derma_mnist.get_dataloader(test_dset, 100)
         if hm:
-            make_hmap("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "ibp_ex+r3", "r4", "pgd_r4", "rand_r4"], write_to_file=True)
+            make_hmap("derma_mnist", dl_train, dl_test, funcs, dev, mrs, mlx_methods, write_to_file=True)
         else:
-            ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"],
+            ablate("derma_mnist", dl_train, dl_test, funcs, dev, mrs, mlx_methods,
                    write_to_file=True, with_data_removal=remove_data, decrease_l2_strength=dl2)
     case _:
         raise ValueError("Only 'decoy_mnist' and 'derma_mnist' are supported")

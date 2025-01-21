@@ -44,23 +44,27 @@ r4:
   worst_group: 1
   worst_group_acc: 0.78112
 rand_r4:
-  avg_group_acc: 0.70004
-  max_upper_bound: 1491.1864
-  min_lower_bound: -1491.2035
-  min_robust_delta: 2982.376
-  test_acc: 0.70657
-  train_acc: 0.87833
-  worst_group: 1
-  worst_group_acc: 0.68072
+  avg_group_acc: 0.71133
+  max_upper_bound: 1895.0863
+  min_lower_bound: -1895.11739
+  min_robust_delta: 3790.20367
+  std_dev_macro: 0.01216
+  std_dev_wg: 0.00456
+  test_acc: 0.70573
+  train_acc: 0.86603
+  worst_group: 0
+  worst_group_acc: 0.69476
 smooth_r3:
-  avg_group_acc: 0.69512
-  max_upper_bound: 1534.00842
-  min_lower_bound: -1534.00459
-  min_robust_delta: 3068.00367
-  test_acc: 0.70523
-  train_acc: 0.86093
+  avg_group_acc: 0.7095
+  max_upper_bound: 1953.04496
+  min_lower_bound: -1953.08907
+  min_robust_delta: 3906.134
+  std_dev_macro: 0.02462
+  std_dev_wg: 0.07544
+  test_acc: 0.71007
+  train_acc: 0.86227
   worst_group: 1
-  worst_group_acc: 0.66516
+  worst_group_acc: 0.70783
 std:
   avg_group_acc: 0.50328
   max_upper_bound: 3371.50952

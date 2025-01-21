@@ -4,15 +4,15 @@ Nothing about this is 'certified', but we can use it for robust (but un-certifie
 """
 
 import torch
+from torch.func import grad, vmap
 
 import abstract_gradient_training.certified_training_utils as ct_utils
 from abstract_gradient_training import interval_arithmetic
-from abstract_gradient_training.activation_gradients import bound_logits_derivative
 from abstract_gradient_training.bounds.loss_gradients import \
     bound_loss_function_derivative
 from abstract_gradient_training.nominal_pass import (nominal_backward_pass,
                                                      nominal_forward_pass)
-import copy
+from .R4_models import SalientImageNet
 
 #TODO it seems that for r3, ibp_ex and pgd_ex the smoothing does all the job? Is there something wrong in my code?
 def input_gradient_interval_regularizer(
@@ -182,6 +182,7 @@ def smooth_gradient_regularizer(
     batch_masks: torch.Tensor,
     criterion: torch.nn.Module,
     epsilon: float,
+    num_samples: int = 10,
     regularizer_type: str = "smooth_r3",
     device: str = "cuda:0",
     weight_reg_coeff: float = 0.0
@@ -189,33 +190,50 @@ def smooth_gradient_regularizer(
     assert regularizer_type in ["smooth_r3", "rand_r4"]
     assert isinstance(criterion, torch.nn.CrossEntropyLoss) or isinstance(criterion, torch.nn.BCELoss)
 
-    sampling_dist = torch.distributions.normal.Normal(0, epsilon)
+    batch = batch.unsqueeze(0).repeat(num_samples, *([1] * len(batch.shape)))
+    sampling_dist = torch.distributions.uniform.Uniform(0, epsilon)
     perturbation = sampling_dist.sample(batch.shape).to(device)
     if regularizer_type == "rand_r4":
-        perturbation *= batch_masks
+        perturbation *= batch_masks.unsqueeze(0) # should broadcast correctly
     perturbed_batch = batch + perturbation
+    # Put the originat batch at the end of the perturbed batch so we can easily get its gradient
+    perturbed_batch = torch.cat([perturbed_batch, batch[0].unsqueeze(0)], dim=0)
 
-    # Get the input gradient for the perturbed batch
-    perturbed_batch.requires_grad = True
-    model.zero_grad()
-    y_hat = model(perturbed_batch)
-    loss = criterion(y_hat.squeeze(), labels)
-    loss.backward()
-    input_grad = perturbed_batch.grad.data
+    def __compute_loss(sample: torch.Tensor) -> torch.Tensor:
+        sample.requires_grad = True
+        model.zero_grad()
+        y_hat = model(sample)
+        return criterion(y_hat.squeeze(), labels)
+
+    grads = torch.tensor([]).to(device)
+    if isinstance(model, SalientImageNet):
+        # vectorization not supported for this pre-trained model
+        for i in range(num_samples + 1):
+            sample = perturbed_batch[i]
+            sample.requires_grad = True
+            model.zero_grad()
+            y_hat = model(sample)
+            loss_for_sample = criterion(y_hat.squeeze(), labels)
+            loss_for_sample.backward()
+            grads = torch.cat([grads, sample.grad.data.unsqueeze(0)], dim=0)
+    else:
+        grads = torch.vmap(grad(__compute_loss), in_dims=0)(perturbed_batch).to(device)
+    perturbed_input_grad = grads[:-1]
+    standard_input_grad = grads[-1]
+    diff_input_grad = torch.abs(perturbed_input_grad - standard_input_grad)
 
     weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+    non_zero_masks = (batch_masks > 0).sum().item()
     for module in model.modules():
         if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
             weight_sum = weight_sum + torch.sum(module.weight ** 2)
     match regularizer_type:
         case "smooth_r3":
-            # return the average input gradient
-            return torch.mean(torch.abs(input_grad * batch_masks)) + weight_reg_coeff * weight_sum
+            elem_wise_mean = torch.mean(diff_input_grad * batch_masks.unsqueeze(0), dim=0)
+            return torch.norm(elem_wise_mean, p=2) / non_zero_masks + weight_reg_coeff * weight_sum
         case "rand_r4":
-            # return the maximum input gradient of only the masked regions
-            samples_max_input_grad_elem_wise = torch.max(input_grad, dim=0).values
-            non_zero_masks = (batch_masks > 0).sum().item()
-            return torch.sum(torch.abs(samples_max_input_grad_elem_wise * batch_masks)) / non_zero_masks  + weight_reg_coeff * weight_sum
+            elem_wise_max = torch.max(diff_input_grad * batch_masks.unsqueeze(0), dim=0).values
+            return torch.norm(elem_wise_max, p=2) / non_zero_masks + weight_reg_coeff * weight_sum
 
 def input_gradient_pgd_regularizer(
     batch: torch.Tensor,

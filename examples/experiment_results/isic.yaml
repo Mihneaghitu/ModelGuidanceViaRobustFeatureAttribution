@@ -49,15 +49,17 @@ r4:
   worst_group: 1
   worst_group_acc: 0.7152
 rand_r4:
-  avg_group_acc: 0.84927
-  macro_avg_over_labels: 0.8589
-  max_upper_bound: 0.17714
-  min_lower_bound: -0.16746
-  min_robust_delta: 0.32167
-  test_acc: 0.81697
-  train_acc: 0.81733
+  avg_group_acc: 0.8802
+  macro_avg_over_labels: 0.87286
+  max_upper_bound: 0.79508
+  min_lower_bound: -0.75014
+  min_robust_delta: 1.392
+  std_dev_over_labels: 0.01832
+  std_dev_wg: 0.04582
+  test_acc: 0.87847
+  train_acc: 0.8898
   worst_group: 1
-  worst_group_acc: 0.64287
+  worst_group_acc: 0.78159
 smooth_r3:
   avg_group_acc: 0.74417
   macro_avg_over_labels: 0.70923

@@ -111,7 +111,7 @@ funcs = {
     "rand_r4": train_model_with_smoothed_input_grad,
 }
 dev = torch.device("cuda:" + sys.argv[2][-1])
-mlx_methods = ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"]
+mlx_methods = ["rand_r4"]# ["r3", "ibp_ex", "r4", "pgd_r4", "rand_r4"]
 if sys.argv[1] == "decoy_mnist":
     funcs["r3"] = train_model_with_certified_input_grad
     dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)

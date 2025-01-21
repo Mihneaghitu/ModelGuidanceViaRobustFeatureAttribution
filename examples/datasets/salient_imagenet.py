@@ -4,28 +4,9 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset, Dataset, ConcatDataset
 from PIL import Image, ImageFile
 import torchvision.transforms as transforms
-import pickle
 import pandas as pd
-import copy
-import urllib.request
 from collections import defaultdict
 
-# WNID_TO_LABEL_DICT = {
-#     "n01818515": 0, # 88, Macaw
-#     "n02007558": 1, # 130, Flamingo
-#     "n01770393": 2, # 71, Scorpion
-#     "n01749939": 3, # 64, Green Mamba
-#     "n01944390": 4, # 113, Snail
-#     "n01698640": 5  # 50, American Alligator
-# }
-# wordnet_dict = {
-#     88: "n01818515",
-#     130: "n02007558",
-#     71: "n01770393",
-#     64: "n01749939",
-#     113: "n01944390",
-#     50: "n01698640"
-# }
 WNID_TO_LABEL_DICT = {
     "n02174001": 0,
     "n02033041": 1,
@@ -42,162 +23,6 @@ wordnet_dict = {
     366: "n02480855",
     389: "n02514041"
 }
-
-class LazyImageNetDataset(Dataset):
-    def __init__(self, data_dir: str, masks_dir: str, preprocess: callable = None, split_seed: int = 0, skip_empty_masks: bool = False,
-                 is_train: bool = True):
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        # Get the names of all subdirs in data_dir
-        self.relevant_classes = list(WNID_TO_LABEL_DICT.keys())
-        np.random.seed(split_seed)
-
-        self.data_transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            # As per https://pytorch.org/hub/pytorch_vision_resnet/
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-        self.data_transform = preprocess if preprocess else self.data_transform
-        self.mask_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize((224, 224))
-        ])
-        label_transform = lambda label_idx: torch.tensor([label_idx])
-
-        data_paths, mask_paths, labels = [], [], []
-        self.data_paths, self.mask_paths, self.labels = [], [], []
-        for wnid in self.relevant_classes:
-            data_subdir_path = os.path.join(data_dir, wnid)
-            for fname in os.listdir(data_subdir_path):
-                curr_data_path = os.path.join(data_subdir_path, fname)
-                # Now search for the masks
-                masks_subdir = os.path.join(masks_dir, wnid)
-                # read the csv
-                mmaps = pd.read_csv(os.path.join(masks_subdir, "image_names_map.csv"))
-                cnt = 0
-                for c in mmaps.columns:
-                    # get the column as a list of strings
-                    mask_names = mmaps[c].tolist()
-                    if fname.split(".")[0] in mask_names:
-                        curr_mask_path = os.path.join(masks_subdir, f"feature_{c}", fname)
-                        data_paths.append(curr_data_path)
-                        mask_paths.append(curr_mask_path)
-                        labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
-                        cnt += 1
-                if cnt == 0:
-                    data_paths.append(curr_data_path)
-                    mask_paths.append("-1") # dummy flag
-                    labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
-
-        data_paths, mask_paths, labels = zip(*[(d, m, l) for d, m, l in zip(data_paths, mask_paths, labels) if not m == "-1"])
-        data_paths, mask_paths, labels = list(data_paths), list(mask_paths), list(labels)
-
-        train_proportion = 0.8
-        all_split_indices = np.random.permutation(len(data_paths))
-        num_train = int(train_proportion * len(data_paths))
-        split_indices = all_split_indices[:num_train] if is_train else all_split_indices[num_train:]
-
-        self.data_paths = [data_paths[i] for i in split_indices]
-        self.label_tensors = torch.stack(labels).squeeze()
-        self.mask_paths = [mask_paths[i] for i in split_indices]
-        # if not skip_empty_masks:
-        #     self.data_paths = [data_paths[i] for i in split_indices]
-        #     self.label_tensors = torch.stack(labels).squeeze()
-        #     self.mask_paths = [mask_paths[i] for i in split_indices]
-        # else:
-        #     self.data_paths, self.label_tensors, self.mask_paths = [], [], []
-        #     for i in split_indices:
-        #         if not mask_paths[i] == "-1":
-        #             self.data_paths.append(data_paths[i])
-        #             self.label_tensors.append(labels[i])
-        #             self.mask_paths.append(mask_paths[i])
-        #     self.label_tensors = torch.stack(self.label_tensors).squeeze()
-
-
-    def __len__(self):
-        return len(self.data_paths)
-
-    def __getitem__(self, idx):
-        data_img = Image.open(self.data_paths[idx]).convert("RGB")
-        data_tensor = self.data_transform(data_img)
-        mask_tensor = torch.zeros(1, 224, 224, dtype=torch.float32) / 100
-        if not self.mask_paths[idx] == "-1":
-            mask_img = Image.open(self.mask_paths[idx])
-            mask_img = self.mask_transform(mask_img)
-            mask_tensor = mask_img
-            assert mask_tensor.shape == (1, 224, 224)
-        mask_tensor = mask_tensor.repeat(3, 1, 1)
-        assert mask_tensor.shape == (3, 224, 224), data_tensor.shape == (3, 224, 224)
-        return data_tensor, self.label_tensors[idx], mask_tensor
-
-
-class LazyImageNetTestDataset(Dataset):
-    def __init__(self, data_dir: str, masks_dir: str, preprocess: callable = None, split_seed: int = 0):
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        # Get the names of all subdirs in data_dir
-        self.relevant_classes = list(WNID_TO_LABEL_DICT.keys())
-        np.random.seed(split_seed)
-
-        self.data_transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            # As per https://pytorch.org/hub/pytorch_vision_resnet/
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-        self.data_transform = preprocess if preprocess else self.data_transform
-        self.mask_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize((224, 224))
-        ])
-        label_transform = lambda label_idx: torch.tensor([label_idx])
-
-        data_paths, mask_paths, labels = [], [], []
-        self.data_paths, self.mask_paths, self.labels = [], [], []
-        for wnid in self.relevant_classes:
-            data_subdir_path = os.path.join(data_dir, wnid)
-            for fname in os.listdir(data_subdir_path):
-                curr_data_path = os.path.join(data_subdir_path, fname)
-                # Now search for the masks
-                masks_subdir = os.path.join(masks_dir, wnid)
-                # read the csv
-                mmaps = pd.read_csv(os.path.join(masks_subdir, "image_names_map.csv"))
-                cnt = 0
-                for c in mmaps.columns:
-                    # get the column as a list of strings
-                    mask_names = mmaps[c].tolist()
-                    if fname.split(".")[0] in mask_names:
-                        curr_mask_path = os.path.join(masks_subdir, f"feature_{c}", fname)
-                        data_paths.append(curr_data_path)
-                        mask_paths.append(curr_mask_path)
-                        labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
-                        cnt += 1
-                if cnt == 0:
-                    data_paths.append(curr_data_path)
-                    mask_paths.append("-1") # dummy flag
-                    labels.append(label_transform(WNID_TO_LABEL_DICT[wnid]))
-
-        self.data_paths = data_paths
-        self.label_tensors = torch.stack(labels).squeeze()
-        self.mask_paths = mask_paths
-
-    def __len__(self):
-        return len(self.data_paths)
-
-    def __getitem__(self, idx):
-        data_img = Image.open(self.data_paths[idx]).convert("RGB")
-        data_tensor = self.data_transform(data_img)
-        mask_tensor = torch.zeros(1, 224, 224, dtype=torch.float32) / 100
-        if not self.mask_paths[idx] == "-1":
-            mask_img = Image.open(self.mask_paths[idx])
-            mask_img = self.mask_transform(mask_img)
-            mask_tensor = 1 - mask_img
-            assert mask_tensor.shape == (1, 224, 224)
-        mask_tensor = mask_tensor.repeat(3, 1, 1)
-        assert mask_tensor.shape == (3, 224, 224), data_tensor.shape == (3, 224, 224)
-        return data_tensor, self.label_tensors[idx], mask_tensor
-
 
 IMAGENET_PATH = "/vol/bitbucket/mg2720/imagenet100_data"
 SALIENT_IMAGENET_PATH = "/vol/bitbucket/mg2720/salient_imagenet_dataset"
@@ -441,6 +266,36 @@ class MTurk_Results:
 
         self.class_to_features_dict = class_to_features_dict
         self.feature_to_classes_dict = feature_to_classes_dict
+
+def make_imagenet_subset_for_paper() -> tuple[TensorDataset, TensorDataset, TensorDataset, TensorDataset]:
+    def __process(cdset: MyConcatDataset) -> tuple[TensorDataset, TensorDataset]:
+        data_tensors_train, label_tensor_train, mask_tensors_train, groups_tensors_train = [], [], [], []
+        data_tensors_test, label_tensor_test, mask_tensors_test, groups_tensors_test = [], [], [], []
+        for idx, (data, label, mask, group) in enumerate(cdset):
+            if idx in cdset.split_dict['train']:
+                data_tensors_train.append(data)
+                label_tensor_train.append(label)
+                mask_tensors_train.append(mask)
+                groups_tensors_train.append(group)
+            else:
+                data_tensors_test.append(data)
+                label_tensor_test.append(label)
+                mask_tensors_test.append(mask)
+                groups_tensors_test.append(group)
+
+        data_tensors_train, label_tensor_train, mask_tensors_train, groups_tensors_train = torch.stack(data_tensors_train), torch.stack(label_tensor_train), torch.stack(mask_tensors_train), torch.stack(groups_tensors_train)
+        data_tensors_test, label_tensor_test, mask_tensors_test, groups_tensors_test = torch.stack(data_tensors_test), torch.stack(label_tensor_test), torch.stack(mask_tensors_test), torch.stack(groups_tensors_test)
+        processed_train_dset = torch.utils.data.TensorDataset(data_tensors_train, label_tensor_train, mask_tensors_train, groups_tensors_train)
+        processed_test_dset = torch.utils.data.TensorDataset(data_tensors_test, label_tensor_test, mask_tensors_test, groups_tensors_test)
+
+        return processed_train_dset, processed_test_dset
+
+    concat_imgnet_dset = get_simagenet([306, 142, 270, 319, 366, 389])
+    core_imgnet_dset = get_simagenet([306, 142, 270, 319, 366, 389], core=True)
+    spurious_train_dset, spurious_test_dset = __process(concat_imgnet_dset)
+    core_train_dset, core_test_dset = __process(core_imgnet_dset)
+
+    return spurious_train_dset, spurious_test_dset, core_train_dset, core_test_dset
 
 def get_dataloader(imgnet_dset: TensorDataset, batch_size: int, is_train = True, drop_last = False):
     data_transform = transforms.Compose([

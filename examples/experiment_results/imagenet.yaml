@@ -5,11 +5,36 @@ r3:
   rcs: 0.50581
   spur_acc: 0.95536
 rand_r4:
-  rcs: 0.6383
-  spur_acc: 0.97321
+  rcs: !!python/object/apply:numpy.core.multiarray.scalar
+  - &id001 !!python/object/apply:numpy.dtype
+    args:
+    - f8
+    - false
+    - true
+    state: !!python/tuple
+    - 3
+    - <
+    - null
+    - null
+    - null
+    - -1
+    - -1
+    - 0
+  - !!binary |
+    GLK61XPS3T8=
+  spur_acc: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    dv2C3bBt7z8=
 smooth_r3:
-  rcs: 0.55959
-  spur_acc: 0.95536
+  rcs: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    f/YjRWRY4D8=
+  spur_acc: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    z4O7s3bb7j8=
 std:
   rcs: 0.48485
   spur_acc: 0.99107

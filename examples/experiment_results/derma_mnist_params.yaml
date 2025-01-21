@@ -81,13 +81,27 @@ r4:
 rand_r4:
   class_weights:
   - 0.9
-  - 2.0272
+  - !!python/object/apply:torch._utils._rebuild_tensor_v2
+    - !!python/object/apply:torch.storage._load_from_bytes
+      - !!binary |
+        gAKKCmz8nEb5IGqoUBkugAJN6QMugAJ9cQAoWBAAAABwcm90b2NvbF92ZXJzaW9ucQFN6QNYDQAA
+        AGxpdHRsZV9lbmRpYW5xAohYCgAAAHR5cGVfc2l6ZXNxA31xBChYBQAAAHNob3J0cQVLAlgDAAAA
+        aW50cQZLBFgEAAAAbG9uZ3EHSwR1dS6AAihYBwAAAHN0b3JhZ2VxAGN0b3JjaApGbG9hdFN0b3Jh
+        Z2UKcQFYDwAAADEwNjM5NzYwMjQzNTA0MHECWAMAAABjcHVxA0sBTnRxBFEugAJdcQBYDwAAADEw
+        NjM5NzYwMjQzNTA0MHEBYS4BAAAAAAAAANO9AUA=
+    - 0
+    - !!python/tuple []
+    - !!python/tuple []
+    - false
+    - !!python/object/apply:collections.OrderedDict
+      - []
   epsilon: 0.05
   has_conv: true
   k: 2000
   lr: 1.0e-05
   multi_class: false
   num_epochs: 11
+  num_samples: 8
   restarts: 3
   test_batch_size: 256
   test_epsilon: 0.01
@@ -104,6 +118,7 @@ smooth_r3:
   lr: 1.0e-05
   multi_class: false
   num_epochs: 10
+  num_samples: 9
   restarts: 3
   test_batch_size: 256
   test_epsilon: 0.01

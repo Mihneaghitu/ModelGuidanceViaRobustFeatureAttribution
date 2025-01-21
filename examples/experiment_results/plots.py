@@ -5,7 +5,6 @@ sys.path.append("../../")
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from matplotlib.colors import LinearSegmentedColormap, ListedColormap, Colormap
 from examples.datasets import derma_mnist, decoy_mnist
 from examples.models.R4_models import DermaNet
 from examples.metrics import get_restart_avg_and_worst_group_accuracy_with_stddev, get_avg_rob_metrics
@@ -14,6 +13,7 @@ from examples.models.fully_connected import FCNAugmented
 
 def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with_data: bool = False, with_l2_prop: bool = False,  methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
+    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "PGD-R4"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
     dl_test, model_dir, model, eps, has_conv, loss_fn, num_groups = None, None, None, None, None, None, None
@@ -39,6 +39,7 @@ def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with
         has_conv = True
         num_groups = 2
     dset_name = dset_name.replace("_", " ")
+    dset_title = "DECOY MNIST" if dset_name == "decoy mnist" else "DECOY DERM"
 
     sns.set_theme(context="poster", font_scale=3)
     sns.color_palette("bright")
@@ -47,7 +48,7 @@ def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with
         ratios = ratios[:-1] # the 0 data does not make any sense, it is basically a randomly initialized model
     fig, ax = plt.subplots(1, 2, figsize=(70, 28))
     min_wg, max_wg = 1, 0
-    for method in methods:
+    for method, method_name in zip(methods, method_names):
         mean_wg_accs, stddev_wg_accs, mean_delta, std_dev_delta = [], [], [], []
         #* Measure acc and rob metrics for ratio 1
         _, wg_acc, _, _, stddev_wg_acc = get_restart_avg_and_worst_group_accuracy_with_stddev(dl_test, model_dir + f"/{method}", model, device, num_groups, multi_class=(num_groups > 2), suppress_log=True)
@@ -66,8 +67,8 @@ def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with
 
         min_wg, max_wg = min(min_wg, *mean_wg_accs), max(max_wg, *mean_wg_accs)
         xlabel_suffix = "and data" if with_data else ""
-        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None)
-        sns.lineplot(x=ratios, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
+        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method_name}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None)
+        sns.lineplot(x=ratios, y=mean_delta, label=f"{method_name.upper()}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
         ax[0].fill_between(ratios, np.array(mean_wg_accs) - np.array(stddev_wg_accs), np.array(mean_wg_accs) + np.array(stddev_wg_accs), alpha=0.15)
         ax[0].xaxis.set_inverted(True)
         ax[0].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Worst Group Test Accuracy")
@@ -78,8 +79,8 @@ def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with
 
     ax[0].set_ylim([min_wg * 0.95, max_wg * 1.05])
     title_suffix = "and data" if with_data else ""
-    ax[0].set_title(f"Worst group test accuracy for {dset_name.upper()} upon \n varying the ratio of mask {title_suffix}", weight="bold")
-    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n upon varying the ratio of mask {title_suffix}",
+    ax[0].set_title(f"Worst group test accuracy for {dset_title} upon \n varying the ratio of mask {title_suffix}", weight="bold")
+    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_title} \n upon varying the ratio of mask {title_suffix}",
                        weight="bold")
 
     plt.tight_layout()
@@ -172,6 +173,7 @@ def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, co
 
 def make_mask_abl_hmap(dset_name: str,  methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
+    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "PGD-R4", "IBP-EX+R3"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4", "ibp_ex+r3"]
     result_yaml_file = f"experiment_results/{dset_name}_hmap.yaml"
@@ -181,7 +183,7 @@ def make_mask_abl_hmap(dset_name: str,  methods: list[str] = None) -> None:
     sns.color_palette("bright")
     ratios = np.array([1, 0.8, 0.6, 0.4, 0.2, 0])
     fig, ax = plt.subplots(3, 2, figsize=(35, 46))
-    for method_idx, method in enumerate(methods):
+    for method_idx, (method, method_name) in enumerate(zip(methods, method_names)):
         # Pull up the weight decay or weight reg coeff from the saved parameters
         perf_param_file = f"experiment_results/{dset_name}_params.yaml"
         method_params = load_params_or_results_from_file(perf_param_file, method)
@@ -212,8 +214,7 @@ def make_mask_abl_hmap(dset_name: str,  methods: list[str] = None) -> None:
         sns.heatmap(mean_wg_accs, ax=ax[row][col], xticklabels=ratios, yticklabels=wregs_for_method, annot=True, fmt=".1f",
                     vmin=min_wg * 0.95, vmax=max_wg * 1.05, linewidth=.3)
         ax[row][col].set(xlabel="% of masks\n\n", ylabel="Weight decay")
-        method_as_title = method.replace("_", "-").upper()
-        ax[row][col].set_title(f"Worst group test accuracy for dataset \n {dset_as_title} and method {method_as_title}", weight="bold")
+        ax[row][col].set_title(f"Worst group test accuracy for dataset \n {dset_as_title} and method {method_name}", weight="bold")
 
     plt.subplots_adjust(wspace=0.3, hspace=0.3)
     plt.savefig(f"paper_plots_r4/{dset_name}_mask_hmap.png")
@@ -245,6 +246,7 @@ def make_r4_worst_mask_corr_plot(dset_name: str, device: str, with_l2_prop: bool
         has_conv = True
         num_groups = 2
     dset_name = dset_name.replace("_", " ")
+    dset_title = "DECOY MNIST" if dset_name == "decoy mnist" else "DECOY DERM"
 
     sns.set_theme(context="poster", font_scale=3)
     # sns.set_palette("pastel")
@@ -292,8 +294,8 @@ def make_r4_worst_mask_corr_plot(dset_name: str, device: str, with_l2_prop: bool
         ax[1].set_yscale("symlog")
 
     ax[0].set_ylim([min_wg * 0.95 if min_wg > 0 else -0.1, max_wg * 1.05])
-    ax[0].set_title(f"Worst group test accuracy for R4 on {dset_name.upper()} upon \n varying the ratio of corrupted masks", weight="bold")
-    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n upon varying the ratio of corrupted masks",
+    ax[0].set_title(f"Worst group test accuracy for CERT-R4 on {dset_title} \n upon varying the ratio of corrupted masks", weight="bold")
+    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_title} \n upon varying the ratio of corrupted masks",
                        weight="bold")
 
     plt.tight_layout()
@@ -304,6 +306,7 @@ def make_r4_worst_mask_corr_plot(dset_name: str, device: str, with_l2_prop: bool
 
 def make_model_size_ablation_plot(dset_name: str, methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
+    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "PGD-R4"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
     size_names, size_name_xlabels  = None, None
@@ -315,12 +318,13 @@ def make_model_size_ablation_plot(dset_name: str, methods: list[str] = None) -> 
         size_names = ["small", "small_medium", "medium_large", "large"]
         size_name_xlabels = ["Small", "Small-Medium", "Medium-Large", "Large"]
     dset_name = dset_name.replace("_", " ")
+    dset_title = "DECOY MNIST" if dset_name == "decoy mnist" else "DECOY DERM"
 
     sns.set_theme(context="poster", font_scale=3)
     sns.color_palette("bright")
     fig, ax = plt.subplots(1, 2, figsize=(70, 28))
     min_wg, max_wg = 1, 0
-    for method in methods:
+    for method, method_name in zip(methods, method_names):
         mean_wg_accs, stddev_wg_accs, mean_delta, std_dev_delta = [], [], [], []
         for size_name in size_names:
             abl_results_for_method_and_ratio = load_params_or_results_from_file(result_yaml_file, method + f"_{size_name}")
@@ -330,8 +334,8 @@ def make_model_size_ablation_plot(dset_name: str, methods: list[str] = None) -> 
             std_dev_delta.append(abl_results_for_method_and_ratio["delta_stddev"])
 
         min_wg, max_wg = min(min_wg, *mean_wg_accs), max(max_wg, *mean_wg_accs)
-        sns.lineplot(x=size_name_xlabels, y=mean_wg_accs, label=f"{method.upper()}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None)
-        sns.lineplot(x=size_name_xlabels, y=mean_delta, label=f"{method.upper()}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
+        sns.lineplot(x=size_name_xlabels, y=mean_wg_accs, label=f"{method_name}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None)
+        sns.lineplot(x=size_name_xlabels, y=mean_delta, label=f"{method_name}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
         ax[0].fill_between(size_name_xlabels, np.array(mean_wg_accs) - np.array(stddev_wg_accs), np.array(mean_wg_accs) + np.array(stddev_wg_accs), alpha=0.15)
         ax[0].set(xlabel="Model Architecture\n", ylabel="Average Worst Group Test Accuracy")
         ax[1].fill_between(size_name_xlabels, np.array(mean_delta) - np.array(std_dev_delta), np.array(mean_delta) + np.array(std_dev_delta), alpha=0.15)
@@ -339,8 +343,8 @@ def make_model_size_ablation_plot(dset_name: str, methods: list[str] = None) -> 
         ax[1].set_yscale("symlog")
 
     ax[0].set_ylim([min_wg * 0.95, max_wg * 1.05])
-    ax[0].set_title(f"Worst group test accuracy for {dset_name.upper()} upon \n varying the model architecture", weight="bold")
-    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_name.upper()} \n upon varying model architecture",
+    ax[0].set_title(f"Worst group test accuracy for {dset_title} upon \n varying the model architecture", weight="bold")
+    ax[1].set_title(r'Average $\delta$ (1-$\delta$-input-robustness) for ' + f"{dset_title} \n upon varying model architecture",
                        weight="bold")
 
     plt.tight_layout()

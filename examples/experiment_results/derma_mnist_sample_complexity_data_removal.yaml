@@ -256,65 +256,65 @@ r4_80:
   worst_group_acc: 0.74298
 rand_r4_20:
   acc_per_group:
-  - 0.16132
-  - 0.98494
-  avg_group_acc: 0.57313
-  delta_mean: 4607.748
-  delta_stddev: 63.29447
-  lb_mean: -2303.8741
-  stddev_acc: 0.58239
+  - 0.18071
+  - 0.98444
+  avg_group_acc: 0.58257
+  delta_mean: 4487.83933
+  delta_stddev: 136.43087
+  lb_mean: -2243.91976
+  stddev_acc: 0.06553
   stddev_per_group:
-  - 0.18
-  - 0.02609
-  stddev_worst_group_acc: 0.18
-  ub_mean: 2303.87378
+  - 0.15801
+  - 0.02695
+  stddev_worst_group_acc: 0.15801
+  ub_mean: 2243.9196
   worst_group: 0
-  worst_group_acc: 0.16132
+  worst_group_acc: 0.18071
 rand_r4_40:
   acc_per_group:
-  - 0.5481
-  - 0.89659
-  avg_group_acc: 0.72234
-  delta_mean: 4226.43733
-  delta_stddev: 35.27184
-  lb_mean: -2113.2194
-  stddev_acc: 0.24642
+  - 0.5732
+  - 0.87651
+  avg_group_acc: 0.72486
+  delta_mean: 4136.75167
+  delta_stddev: 86.72196
+  lb_mean: -2068.37602
+  stddev_acc: 0.00853
   stddev_per_group:
-  - 0.05059
-  - 0.0472
-  stddev_worst_group_acc: 0.05059
-  ub_mean: 2113.21794
+  - 0.04581
+  - 0.0603
+  stddev_worst_group_acc: 0.04581
+  ub_mean: 2068.3761
   worst_group: 0
-  worst_group_acc: 0.5481
+  worst_group_acc: 0.5732
 rand_r4_60:
   acc_per_group:
-  - 0.61571
-  - 0.85241
-  avg_group_acc: 0.73406
-  delta_mean: 4019.501
-  delta_stddev: 67.03368
-  lb_mean: -2009.75252
-  stddev_acc: 0.16737
+  - 0.61472
+  - 0.82831
+  avg_group_acc: 0.72151
+  delta_mean: 3943.11333
+  delta_stddev: 88.30612
+  lb_mean: -1971.55652
+  stddev_acc: 0.01293
   stddev_per_group:
-  - 0.02707
-  - 0.02613
-  stddev_worst_group_acc: 0.02707
-  ub_mean: 2009.74845
+  - 0.0446
+  - 0.06842
+  stddev_worst_group_acc: 0.0446
+  ub_mean: 1971.55725
   worst_group: 0
-  worst_group_acc: 0.61571
+  worst_group_acc: 0.61472
 rand_r4_80:
   acc_per_group:
-  - 0.64479
-  - 0.81727
-  avg_group_acc: 0.73103
-  delta_mean: 3833.28
-  delta_stddev: 94.02879
-  lb_mean: -1916.64799
-  stddev_acc: 0.12196
+  - 0.65349
+  - 0.80422
+  avg_group_acc: 0.72885
+  delta_mean: 3792.46733
+  delta_stddev: 90.94364
+  lb_mean: -1896.23873
+  stddev_acc: 0.00879
   stddev_per_group:
-  - 0.03946
-  - 0.05546
-  stddev_worst_group_acc: 0.03946
-  ub_mean: 1916.63204
+  - 0.02213
+  - 0.03916
+  stddev_worst_group_acc: 0.02213
+  ub_mean: 1896.22847
   worst_group: 0
-  worst_group_acc: 0.64479
+  worst_group_acc: 0.65349

@@ -36,6 +36,7 @@ rand_r4:
   lr: 5.0e-05
   multi_class: true
   num_epochs: 25
+  num_samples: 5
   restarts: 1
   seed: 22
   test_batch_size: 33
@@ -51,6 +52,7 @@ smooth_r3:
   lr: 6.0e-05
   multi_class: true
   num_epochs: 20
+  num_samples: 5
   restarts: 1
   seed: 1
   test_batch_size: 33

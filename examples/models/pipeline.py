@@ -136,8 +136,9 @@ def train_model_with_smoothed_input_grad(
     criterion: torch.nn.Module,
     epsilon: float,
     mlx_method: str, # one of ["rand_r4, "smooth_r3"]
-    k: float, # input reg weighting coefficient
+    k: float,
     device: str,
+    num_samples: int = 10,
     weight_reg_coeff: float = 0.0,
     weight_decay: float = 0.0,
     class_weights: list[float] = None,
@@ -160,7 +161,7 @@ def train_model_with_smoothed_input_grad(
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
             # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = smooth_gradient_regularizer(
-                x, u, model, m, criterion, epsilon, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff)
+                x, u, model, m, criterion, epsilon, regularizer_type=mlx_method, device=device, num_samples=num_samples, weight_reg_coeff=weight_reg_coeff)
             # output is [batch_size, 1], u is [bach_size] but BCELoss does not support different target and source sizes
             output = model(x).squeeze()
             if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
