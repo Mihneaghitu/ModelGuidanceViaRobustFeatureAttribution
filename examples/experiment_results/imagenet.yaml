@@ -1,10 +1,4 @@
 pgd_r4:
-  rcs: 0.70435
-  spur_acc: 0.99107
-r3:
-  rcs: 0.50581
-  spur_acc: 0.95536
-rand_r4:
   rcs: !!python/object/apply:numpy.core.multiarray.scalar
   - &id001 !!python/object/apply:numpy.dtype
     args:
@@ -20,6 +14,18 @@ rand_r4:
     - -1
     - -1
     - 0
+  - !!binary |
+    0gDeAgmK5j8=
+  spur_acc: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
+  - !!binary |
+    u37Bbti27z8=
+r3:
+  rcs: 0.50581
+  spur_acc: 0.95536
+rand_r4:
+  rcs: !!python/object/apply:numpy.core.multiarray.scalar
+  - *id001
   - !!binary |
     GLK61XPS3T8=
   spur_acc: !!python/object/apply:numpy.core.multiarray.scalar

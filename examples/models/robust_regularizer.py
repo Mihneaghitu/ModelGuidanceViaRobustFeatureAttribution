@@ -265,18 +265,19 @@ def input_gradient_pgd_regularizer(
         device (_type_, optional): The device to use for computation. Defaults to "cuda:0".
 
     """
-    assert regularizer_type in ["pgd_r4", "pgd_ex+r3", "std", "pgd_ex", "r3"]
+    assert regularizer_type in ["pgd_r4", "std", "r3"]
     assert batch_masks is not None
     #! =========================== Checkpoint to make training faster ===========================
     if regularizer_type == "std":
         return 0
-    weight_sum = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+    weight_sum = torch.tensor(0).to(dtype=torch.float32)
+    weight_sum.requires_grad_()
     for module in model.modules():
         if isinstance(module, torch.nn.Linear) or isinstance(module, torch.nn.Conv2d):
             weight_sum = weight_sum + torch.sum(module.weight ** 2)
     if regularizer_type == "r3":
         model.zero_grad()
-        reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
+        reg_term = torch.tensor(0).to(dtype=torch.float32).requires_grad_()
         batch = batch.requires_grad_()
         y_hat = model(batch)
         loss = criterion(y_hat.squeeze(), labels)
@@ -285,52 +286,37 @@ def input_gradient_pgd_regularizer(
         return weight_reg_coeff * weight_sum + reg_term
     #! ==================================== End of Checkpoint ===================================
 
+    # Only pgd_r4 from this point on
     pgd_adv_input = batch
-    perturbation_masks = batch_masks if regularizer_type in ["pgd_ex", "pgd_r4"] else torch.ones_like(batch_masks).to(device)
-    for _ in range(num_iterations) :
+    perturbation_masks = batch_masks
+    for _ in range(num_iterations):
         pgd_adv_input.requires_grad = True
         # We need it because otherwise the gradients will be accumulated with previous iterations
         #@ This also means we need to perform the regularization BEFORE the normal training step
         model.zero_grad()
 
-        y_hat = model(pgd_adv_input)
         # We need to squeeze the logits when the loss is BCELoss because labels has size [batchsize] and y_hat [batchsize x 1]
-        loss = criterion(y_hat.squeeze(), labels)
+        loss = input_gradient_pgd_regularizer(
+            pgd_adv_input, labels, model, batch_masks, criterion, epsilon, regularizer_type="r3"
+        )
         loss.backward()
 
         adv_batch_step = pgd_adv_input + epsilon * perturbation_masks * torch.sign(pgd_adv_input.grad.data)
         delta = torch.clamp(adv_batch_step - batch, min=-epsilon, max=epsilon)
         pgd_adv_input = torch.clamp(batch + delta, min=batch.min(), max=batch.max()).detach_()
 
-    # Compute the loss for the interval regularizer
-    match regularizer_type:
-        case "pgd_ex":
-            return criterion(model(pgd_adv_input), labels) + weight_reg_coeff * weight_sum
-        case "pgd_r4":
-            # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
-            pgd_adv_input.requires_grad = True
-            model.zero_grad()
-            y_hat = model(pgd_adv_input)
-            # We squeeze here for the same reason as above
-            loss = criterion(y_hat.squeeze(), labels)
-            loss.backward()
-            pgd_grad_reg = torch.sum(torch.abs(torch.mul(pgd_adv_input.grad.data, batch_masks)))
-            if clip_grad_bound is not None:
-                pgd_grad_reg = torch.clamp(pgd_grad_reg, min=0, max=clip_grad_bound)
+    # One last time, we do a full forward and backward pass to get the input gradient for the pgd adversarial example
+    pgd_adv_input.requires_grad = True
+    model.zero_grad()
+    y_hat = model(pgd_adv_input)
+    loss = criterion(y_hat.squeeze(), labels)
+    # We squeeze here for the same reason as above
+    loss.backward()
+    pgd_grad_reg = torch.sum(torch.abs(torch.mul(pgd_adv_input.grad.data, batch_masks)))
+    if clip_grad_bound is not None:
+        pgd_grad_reg = torch.clamp(pgd_grad_reg, min=0, max=clip_grad_bound)
 
-            return pgd_grad_reg + weight_reg_coeff * weight_sum
-        case "pgd_ex+r3":
-            # r3 term
-            reg_term = torch.tensor(0).to(device, dtype=torch.float32).requires_grad_()
-            batch = batch.requires_grad_()
-            #TODO see if we need to zero_grad this (grad accumulation)
-            # model.zero_grad()
-            y_hat = model(batch)
-            loss = criterion(y_hat.squeeze(), labels)
-            loss.backward()
-            reg_term = reg_term + torch.sum((batch.grad.data.reshape(batch_masks.shape) * batch_masks) ** 2)
-            # combine
-            return weight_reg_coeff * weight_sum + criterion(model(pgd_adv_input), labels) + reg_term
+    return pgd_grad_reg + weight_reg_coeff * weight_sum
 
 def propagate_module_forward(
     module: torch.nn.Module, x_l: torch.Tensor, x_u: torch.Tensor, model_epsilon: float

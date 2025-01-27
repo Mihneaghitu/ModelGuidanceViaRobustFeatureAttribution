@@ -13,7 +13,7 @@ from examples.models.fully_connected import FCNAugmented
 
 def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with_data: bool = False, with_l2_prop: bool = False,  methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
-    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "PGD-R4"]
+    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "ADV-R4"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
     dl_test, model_dir, model, eps, has_conv, loss_fn, num_groups = None, None, None, None, None, None, None
@@ -67,8 +67,19 @@ def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with
 
         min_wg, max_wg = min(min_wg, *mean_wg_accs), max(max_wg, *mean_wg_accs)
         xlabel_suffix = "and data" if with_data else ""
-        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method_name}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None)
-        sns.lineplot(x=ratios, y=mean_delta, label=f"{method_name.upper()}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None)
+        lsty_wg, lsty_delta = "solid", "solid"
+        if method_name == "ADV-R4" and dset_name == "decoy mnist":
+            if with_data:
+                lsty_wg = (0, (5, 8))
+            else:
+                lsty_delta = (0, (5, 8))
+        if method_name == "RAND-R4" and dset_name == "decoy mnist":
+            if with_data:
+                lsty_wg = (0, (1, 1))
+            else:
+                lsty_delta = (0, (1, 1))
+        sns.lineplot(x=ratios, y=mean_wg_accs, label=f"{method_name}", marker="o", legend="full", ax=ax[0], linewidth=10, estimator=None, linestyle=lsty_wg)
+        sns.lineplot(x=ratios, y=mean_delta, label=f"{method_name.upper()}", marker="o", legend="full", ax=ax[1], linewidth=10, estimator=None, linestyle=lsty_delta)
         ax[0].fill_between(ratios, np.array(mean_wg_accs) - np.array(stddev_wg_accs), np.array(mean_wg_accs) + np.array(stddev_wg_accs), alpha=0.15)
         ax[0].xaxis.set_inverted(True)
         ax[0].set(xlabel=f"% of masks {xlabel_suffix}\n", ylabel="Average Worst Group Test Accuracy")
@@ -173,7 +184,7 @@ def make_mask_corruption_sample_complexity_plots(dset_name: str, device: str, co
 
 def make_mask_abl_hmap(dset_name: str,  methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
-    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "PGD-R4", "IBP-EX+R3"]
+    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "ADV-R4", "IBP-EX+R3"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4", "ibp_ex+r3"]
     result_yaml_file = f"experiment_results/{dset_name}_hmap.yaml"
@@ -306,7 +317,7 @@ def make_r4_worst_mask_corr_plot(dset_name: str, device: str, with_l2_prop: bool
 
 def make_model_size_ablation_plot(dset_name: str, methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
-    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "PGD-R4"]
+    method_names = ["R3", "CERT-R4", "IBP-EX", "RAND-R4", "ADV-R4"]
     if methods is None:
         methods = ["r3", "r4", "ibp_ex", "rand_r4", "pgd_r4"]
     size_names, size_name_xlabels  = None, None

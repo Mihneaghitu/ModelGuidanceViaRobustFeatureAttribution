@@ -15,14 +15,14 @@ ibp_ex+r3:
   worst_group: 0
   worst_group_acc: 0.75467
 pgd_r4:
-  avg_group_acc: 0.81122
-  max_upper_bound: 1151.3662
-  min_lower_bound: -1151.3473
-  min_robust_delta: 2299.21
-  test_acc: 0.8129
-  train_acc: 0.9718
+  avg_group_acc: 0.79579
+  max_upper_bound: 893.94714
+  min_lower_bound: -894.05188
+  min_robust_delta: 1787.999
+  test_acc: 0.7583
+  train_acc: 0.9629
   worst_group: 0
-  worst_group_acc: 0.80267
+  worst_group_acc: 0.792
 r3:
   avg_group_acc: 0.74536
   max_upper_bound: 2260.19157

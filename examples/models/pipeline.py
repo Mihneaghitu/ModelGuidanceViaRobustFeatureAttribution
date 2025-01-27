@@ -103,7 +103,6 @@ def train_model_with_pgd_robust_input_grad(
             if isinstance(criterion, torch.nn.CrossEntropyLoss):
                 # The last module is either Softmax or Sigmoid, hence why the [-2] is used
                 u = torch.nn.functional.one_hot(u, num_classes=list(model.modules())[-2].out_features).float()
-            # For std, we will waste some time doing the bounds, but at least it is consistent across methods
             inp_grad_reg = input_gradient_pgd_regularizer(
                 x, u, model, m, criterion, epsilon, num_iterations=num_iterations, regularizer_type=mlx_method, device=device, weight_reg_coeff=weight_reg_coeff
             )

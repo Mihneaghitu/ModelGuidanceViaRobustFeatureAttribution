@@ -255,7 +255,7 @@ if hm:
     mrs.insert(0, 1)
     mlx_methods.append("ibp_ex+r3")
 #TODO: Remove next line
-mlx_methods = ["rand_r4"]
+mlx_methods = ["pgd_r4"]
 #* Specific dataset setup
 match sys.argv[1]:
     case "decoy_mnist":
