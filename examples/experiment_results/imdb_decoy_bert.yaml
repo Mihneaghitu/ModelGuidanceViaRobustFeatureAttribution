@@ -1,0 +1,24 @@
+r3:
+  avg_group_acc: 0.57804
+  test_acc: 0.5776
+  train_acc: 0.9304
+  worst_group: 1
+  worst_group_acc: 0.4744
+rand_r4:
+  avg_group_acc: 0.5
+  test_acc: 0.5
+  train_acc: 0.5
+  worst_group: 1
+  worst_group_acc: 0.0
+smooth_r3:
+  avg_group_acc: 0.55816
+  test_acc: 0.5581
+  train_acc: 0.929
+  worst_group: 0
+  worst_group_acc: 0.18856
+std:
+  avg_group_acc: 0.50468
+  test_acc: 0.5041
+  train_acc: 1.0
+  worst_group: 1
+  worst_group_acc: 0.05848

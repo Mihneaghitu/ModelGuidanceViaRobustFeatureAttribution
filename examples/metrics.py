@@ -4,10 +4,11 @@ from torch.utils.data import DataLoader
 import sys
 sys.path.append("../")
 from typing import Union
-from datasets import derma_mnist, isic, plant, decoy_mnist, salient_imagenet
+from datasets import derma_mnist, isic, plant, decoy_mnist, salient_imagenet, imdb, spurious_words
 from models.R4_models import DermaNet, PlantNet, SalientImageNet, LesionNet
 from models.fully_connected import FCNAugmented
 from models.pipeline import test_delta_input_robustness
+from models.llm import LLM, Tokenizer, BertTokenizerWrapper, BertModelWrapper
 import numpy as np
 
 
@@ -97,6 +98,68 @@ def get_restart_macro_avg_acc_over_labels_with_stddev(
 
     return round(macro_avg_over_labels, 5), round(stddev_over_labels, 5)
 
+@torch.no_grad()
+def llm_restart_avg_and_worst_group_acc(
+    dl_test_grouped: torch.utils.data.DataLoader,
+    model_run_dir: str,
+    model: LLM,
+    tokenizer: Tokenizer,
+    device: str,
+    num_groups: int,
+    multi_class: bool = False,
+    suppress_log: bool = False,
+    return_stddev_per_group: bool = False
+) -> Union[tuple[float, float, int, float, float], tuple[float, float, int, float, float, list[float], list[float]]]:
+    restarts = len(os.listdir(model_run_dir))
+    acc_per_group, num_elems_for_group = np.zeros((restarts, num_groups)), np.zeros((restarts, num_groups))
+    for run in range(restarts):
+        run_file = os.path.join(model_run_dir, f"run_{run}.pt")
+        model.load_state_dict(torch.load(run_file))
+        model = model.to(device)
+        model.eval()
+        for text, ground_truth_labels, _, groups in dl_test_grouped:
+            ground_truth_labels, groups = ground_truth_labels.to(device), groups.to(device)
+            encoding = tokenizer.tokenize(text)
+            tokens, attention_mask = encoding["input_ids"].to(device), encoding["attention_mask"].to(device)
+            output = model(tokens, attention_mask).squeeze(-1)
+            predicted_labels = None
+            if multi_class:
+                predicted_labels = output.argmax(dim=-1).squeeze()
+            else:
+                predicted_labels = (output > 0.5).int().squeeze()
+
+            for i in range(num_groups):
+                group_mask = (groups == i)
+                num_elems_for_group[run][i] += group_mask.sum().item()
+                group_acc = (predicted_labels[group_mask] == ground_truth_labels[group_mask]).sum().item()
+                acc_per_group[run][i] += group_acc
+
+    # the number of elements per group does not need to be calculated for each run, but it makes writing this a bit easier
+    acc_per_group = torch.tensor(acc_per_group) / torch.tensor(num_elems_for_group)
+
+    group_acc_averaged_over_runs = acc_per_group.mean(dim=0)
+    worst_group_acc = group_acc_averaged_over_runs.min().item()
+    worst_group = group_acc_averaged_over_runs.argmin().item()
+    macro_avg_group_acc = group_acc_averaged_over_runs.mean().item()
+    std_dev_group_acc = acc_per_group.mean(dim=1).std().item()
+    std_dev_per_group = acc_per_group.std(dim=0)
+    std_dev_for_worst_group = std_dev_per_group[worst_group].float().item()
+    if not suppress_log:
+        print(f"Macro average (over restarts) group accuracy = {macro_avg_group_acc:.4g}")
+        print(f"Standard deviation of group accuracy = {std_dev_group_acc:.4g}")
+        print(f"Min group accuracy = {worst_group_acc:.4g}, group idx = {worst_group}")
+        print(f"Standard deviation for worst group = {std_dev_for_worst_group:.4g}")
+        print(f"Group accuracies averaged over run = {group_acc_averaged_over_runs}")
+
+    if return_stddev_per_group:
+        # process a bit so yaml can serialize it
+        group_acc_averaged_over_runs = group_acc_averaged_over_runs.tolist()
+        stddev_per_group = std_dev_per_group.tolist()
+        group_acc_averaged_over_runs = [round(float(acc), 5) for acc in group_acc_averaged_over_runs]
+        stddev_per_group = [round(float(stddev), 5) for stddev in stddev_per_group]
+        return round(macro_avg_group_acc, 5), round(worst_group_acc, 5), worst_group, round(std_dev_group_acc, 5), round(std_dev_for_worst_group, 5), group_acc_averaged_over_runs, stddev_per_group
+    return round(macro_avg_group_acc, 5), round(worst_group_acc, 5), worst_group, round(std_dev_group_acc, 5), round(std_dev_for_worst_group, 5)
+
 def get_avg_rob_metrics(model: torch.nn.Sequential, test_dloader: DataLoader, device: str, model_dir: str,
                   eps: float, loss_fn: str, has_conv: bool) -> tuple[float, float, float, float]:
     num_runs = len(os.listdir(model_dir))
@@ -179,13 +242,13 @@ def get_avg_rcs(dl_test_spurious: DataLoader, dl_test_core: DataLoader, model_ru
 # ----------------------------------------------------------------------------------------
 # ------------------------------------ Test functions ------------------------------------
 # ----------------------------------------------------------------------------------------
-def test_avg_delta(dset_name: str):
+def test_avg_delta(dset_name: str, reverse_test_masks: bool = False):
     assert dset_name in ["isic", "plant", "decoy_mnist", "derma", "imagenet"]
     dl_test, model_dir, model, device, loss_fn, eps, has_conv = None, None, None, "cuda:0", None, None, True
     if dset_name == "isic":
         data_root = "/vol/bitbucket/mg2720/isic/"
 
-        isic_test_grouped = isic.ISICDataset(data_root, is_train=False, grouped=True)
+        isic_test_grouped = isic.ISICDataset(data_root, is_train=False, grouped=True, reverse=reverse_test_masks)
         dl_test = isic.get_loader_from_dataset(isic_test_grouped, batch_size=256, shuffle=False)
         model = LesionNet(3, 1)
         loss_fn = "binary_cross_entropy"
@@ -196,7 +259,7 @@ def test_avg_delta(dset_name: str):
         data_root = "/vol/bitbucket/mg2720/plant/rgb_data"
         masks_file = "/vol/bitbucket/mg2720/plant/mask/preprocessed_masks.pyu"
         _ = plant.PlantDataset(split_root, data_root, masks_file, 2, True)
-        plant_test_2 = plant.PlantDataset(split_root, data_root, masks_file, 2, False)
+        plant_test_2 = plant.PlantDataset(split_root, data_root, masks_file, 2, False, reverse=reverse_test_masks)
         dl_test = plant.get_dataloader(plant_test_2, 10)
         model = PlantNet(3, 1)
         loss_fn = "binary_cross_entropy"
@@ -204,7 +267,7 @@ def test_avg_delta(dset_name: str):
         eps = 0.01
     elif dset_name == "derma":
         img_size = 64
-        test_dset = derma_mnist.DecoyDermaMNIST(False, size=img_size)
+        test_dset = derma_mnist.DecoyDermaMNIST(False, size=img_size, reverse=reverse_test_masks)
         dl_test = derma_mnist.get_dataloader(test_dset, 100)
         model = DermaNet(3, img_size, 1)
         loss_fn = "binary_cross_entropy"
@@ -213,13 +276,13 @@ def test_avg_delta(dset_name: str):
         eps = 0.01
     else :
         dl_train_no_mask, dl_test_no_mask = decoy_mnist.get_dataloaders(1000, 1000)
-        _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask)
+        _, dl_test = decoy_mnist.get_masked_dataloaders(dl_train_no_mask, dl_test_no_mask, reverse=reverse_test_masks)
         model = FCNAugmented(784, 10, 512, 1)
         loss_fn = "cross_entropy"
         model_dir = "saved_experiment_models/performance/decoy_mnist"
         has_conv = False
         eps = 0.1
-    for method in ["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
+    for method in ["smooth_r3"]:#["std", "r3", "r4", "ibp_ex", "ibp_ex+r3", "smooth_r3", "pgd_r4", "rand_r4"]:
         avg_delta = get_avg_rob_metrics(model, dl_test, device, model_dir + f"/{method}", eps, loss_fn, has_conv)
         print(f"Method {method} avg delta = {avg_delta}")
 
@@ -280,3 +343,31 @@ def test_macro_over_labels_and_wg_acc(dset_name: str):
             print(f"Macro average over labels = {macro_avg_over_labels}, stddev over labels = {stddev_over_labels}")
             print(f"Macro average group acc = {macro_avg_group_acc}, worst group acc = {worst_group_acc}, worst group = {worst_group}")
             print(f"Macro average stddev = {stddev_aa}, stddev worst group acc = {stddev_wga}")
+
+def test_llm_avg_and_wg(dset_name: str, methods: list[str], device: str = "cuda:0"):
+    assert dset_name in ["imdb", "imdb_decoy"]
+    for method in methods:
+        assert method in ["std", "r3", "smooth_r3", "rand_r4", "pgd_r4"]
+
+    model = BertModelWrapper(1, device)
+    tokenizer = BertTokenizerWrapper(spurious_words.all_imdb_spur())
+    batch_size = 250
+    num_groups = 2
+
+    imdb_test = None, None
+    if dset_name == "imdb":
+        imdb_test = imdb.ImdbDataset(is_train=False, grouped=True)
+    else:
+        decoy_kwargs = {"pos_decoy_word": "spielberg", "neg_decoy_word": "alas"}
+        imdb_test = imdb.ImdbDataset(is_train=False, decoy_kwargs=decoy_kwargs, grouped=True)
+    dl_test = imdb.get_loader_from_dataset(imdb_test, batch_size=batch_size)
+
+    for method in methods:
+        avg_acc, wg_acc, wg, *_ = llm_restart_avg_and_worst_group_acc(
+            dl_test, f"saved_experiment_models/performance/{dset_name}/{method}", model, tokenizer, device, num_groups
+        )
+        print(f"Method {method}:")
+        print(f"Macro average group accuracy = {avg_acc:.4g}")
+        print(f"Worst group accuracy = {wg_acc:.4g}, worst group = {wg}")
+
+# test_llm_avg_and_wg("imdb_decoy", ["std"])

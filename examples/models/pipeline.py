@@ -1,9 +1,13 @@
 import torch
 import tqdm
+from math import ceil, floor
 import sys
 from .robust_regularizer import (input_gradient_interval_regularizer,
                                  input_gradient_pgd_regularizer,
-                                 smooth_gradient_regularizer)
+                                 smooth_gradient_regularizer,
+                                 llm_gradient_regularizer)
+from models.llm import LLM, Tokenizer
+from torch.nn.attention import SDPBackend, sdpa_kernel
 import os
 import yaml
 
@@ -175,6 +179,118 @@ def train_model_with_smoothed_input_grad(
             if not suppress_tqdm:
                 if i % 100 == 0:
                     progress_bar.set_postfix({"loss": loss.item(), "reg": k * inp_grad_reg})
+
+def train_llm_with_guidance(
+    model: LLM,
+    tokenizer: Tokenizer,
+    dl_train: torch.utils.data.DataLoader,
+    n_epochs: int,
+    learning_rate: float,
+    criterion: torch.nn.Module,
+	# Note: "pgd_r4" is going to actually be GCG for LLMs
+    mlx_method: str, # one of [r3, "smooth_r3", "rand_r4", "pgd_r4"]
+    lmbda: float,
+    device: str,
+    num_fragments: int = 1,
+    alpha: float = 0.1,
+    num_samples: int = 5,
+    weight_decay: float = 0.0,
+    class_weights: list[float] = None,
+    suppress_tqdm: bool = False
+) -> None:
+    if not (isinstance(criterion, torch.nn.BCELoss) or isinstance(criterion, torch.nn.CrossEntropyLoss)):
+        raise ValueError("Criterion not supported")
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    progress_bar = tqdm.trange(n_epochs, desc="Epoch", ) if not suppress_tqdm else range(n_epochs)
+    model = model.to(device).train()
+    class_weights = torch.tensor(class_weights).to(device) if class_weights is not None else None
+    # with torch.nn.attention.sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.MATH]):
+    with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=True, enable_mem_efficient=False):
+        for _ in progress_bar:
+            for i, (text, labels, masks) in enumerate(dl_train):
+                # Skip incomplete batches because fragmentation logic gets quite complicated quiclkly
+                if labels.shape[0] != dl_train.batch_size:
+                    continue
+                model.zero_grad()
+                batch_std_loss, batch_reg_loss = 0, 0
+                # fragment the batch into num_fragments
+                if num_fragments == 1:
+                    fragmented_text, labels, fragmented_masks = [text], [labels], [masks]
+                else:
+                    labels = list(torch.chunk(labels, num_fragments))
+                    # These are list of strings, so they need to be handled separately
+                    fragmented_text, fragmented_masks = [], []
+                    frag_size = int(ceil(len(text) / num_fragments))
+                    for fragment_idx in range(num_fragments):
+                        if fragment_idx < num_fragments - 1:
+                            fragmented_text.append(text[fragment_idx * frag_size:(fragment_idx + 1) * frag_size])
+                            fragmented_masks.append(masks[fragment_idx * frag_size:(fragment_idx + 1) * frag_size])
+                        else:
+                            fragmented_text.append(text[fragment_idx * frag_size:])
+                            fragmented_masks.append(masks[fragment_idx * frag_size:])
+                for fragment_idx in range(num_fragments):
+                    text_fragment, labels_fragment, masks_fragment = fragmented_text[fragment_idx], labels[fragment_idx], fragmented_masks[fragment_idx]
+                    encoding_fragment = tokenizer.tokenize(text_fragment)
+                    token_ids_fragment, attention_mask_fragment = encoding_fragment['input_ids'], encoding_fragment['attention_mask']
+                    # Forward pass
+                    token_ids_fragment, attention_mask_fragment, labels_fragment = token_ids_fragment.to(device), attention_mask_fragment.to(device), labels_fragment.to(device)
+                    # Compute gradient with respect to the masked area and regularize based on the method
+                    inp_grad_reg = llm_gradient_regularizer(
+                        model,
+                        tokenizer,
+                        text_fragment,
+                        labels_fragment,
+                        masks_fragment,
+                        criterion,
+                        alpha=alpha,
+                        num_samples=num_samples,
+                        regularizer_type=mlx_method,
+                        device=device
+                    )
+                    output_fragment = model(token_ids_fragment, attention_mask_fragment).squeeze(-1)
+                    if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
+                        criterion = torch.nn.BCELoss(weight=class_weights[labels_fragment.int()].to(device))
+                    std_loss = criterion(output_fragment, labels_fragment)
+                    fragment_loss = std_loss + lmbda * inp_grad_reg
+                    fragment_loss.backward()
+                    batch_std_loss += std_loss.cpu().float().item()
+                    batch_reg_loss += inp_grad_reg.cpu().float().item()
+                    torch.cuda.empty_cache()
+                # Backward and optimize
+                optimizer.step()
+                optimizer.zero_grad()
+                if not suppress_tqdm:
+                    if i % 25 == 0:
+                        progress_bar.set_postfix({"loss": batch_std_loss / num_fragments, "reg": lmbda * batch_reg_loss / num_fragments})
+
+@torch.no_grad()
+def test_llm_accuracy(
+    model: LLM,
+    tokenizer: Tokenizer,
+    dl_test: torch.utils.data.DataLoader,
+    device: str,
+    multi_class: bool = False,
+    suppress_log: bool = False
+) -> float:
+    n_corr, n = 0, 0
+    for text, labels, *_ in dl_test:
+        # Forward pass
+        labels = labels.to(device)
+        encoding = tokenizer.tokenize(text)
+        tokens, attention_mask = encoding['input_ids'].to(device), encoding['attention_mask'].to(device)
+        output = model(tokens, attention_mask).squeeze(-1)
+        if multi_class:
+            predicted_labels = output.argmax(dim=-1).squeeze()
+        else:
+            predicted_labels = (output > 0.5).int().squeeze()
+        batch_correct = (predicted_labels == labels).sum().item()
+        n_corr += batch_correct
+        n += labels.shape[0]
+    all_acc = n_corr / n
+    if not suppress_log:
+        print(f"Accuracy = {all_acc:.4g}")
+
+    return round(all_acc, 4)
 
 def test_model_accuracy(model: torch.nn.Sequential, dl_test: torch.utils.data.DataLoader, device: str,
                         multi_class: bool = False, suppress_log: bool = False) -> float:

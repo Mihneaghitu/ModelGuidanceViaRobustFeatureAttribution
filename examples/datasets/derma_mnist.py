@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 
 
 class DecoyDermaMNIST(Dataset):
-    def __init__(self, is_train: bool, size: int = 64, override_dir: str = None):
+    def __init__(self, is_train: bool, size: int = 64, override_dir: str = None, reverse: bool = False):
         self.img_size = size
         self.swatch_size = size // 4
         self.is_train = is_train
@@ -33,6 +33,7 @@ class DecoyDermaMNIST(Dataset):
         test_input = test_data.imgs
         test_targets = test_data.labels
         self.dset_inputs, self.dset_labels, self.dset_masks, self.dset_groups = None, None, None, None
+        self.reverse_test_masks = reverse
         # BENIGN LESIONS ARE THE MAJORITY CLASS IN THE DATASET AND THEIR LABEL IS 5 (count 5364 for train)
         #! We make it a binary classification problem by setting the label of benign lesions to 0 and the rest to 1
         if is_train:
@@ -51,6 +52,8 @@ class DecoyDermaMNIST(Dataset):
         if self.is_train:
             return self.dset_inputs[idx], self.dset_labels[idx], self.dset_masks[idx]
 
+        if self.reverse_test_masks:
+            self.dset_masks[idx] = torch.ones_like(self.dset_masks[idx]) - self.dset_masks[idx]
         return self.dset_inputs[idx], self.dset_labels[idx], self.dset_masks[idx], self.dset_groups[idx]
 
     def generate_train_swatches_and_masks(self, data: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

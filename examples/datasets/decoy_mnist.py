@@ -99,7 +99,7 @@ def get_swatches_color_dict(data: torch.Tensor, label: torch.Tensor) -> dict:
 
     return swatches_color_dict
 
-def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[DataLoader, DataLoader]:
+def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader, reverse: bool = False) -> tuple[DataLoader, DataLoader]:
     # Extract the swatches values for each different label
     train_label_tensors = dl_train.dataset.tensors[1]
     train_input_tensors = dl_train.dataset.tensors[0]
@@ -131,6 +131,8 @@ def get_masked_dataloaders(dl_train: DataLoader, dl_test: DataLoader) -> tuple[D
     test_data_inputs, test_data_labels = dl_test.dataset.tensors[0], dl_test.dataset.tensors[1]
     randomized_test_data = randomize_img_swatch(test_data_inputs, test_data_labels, swatches_color_dict)
     test_masks = check_mask.repeat(randomized_test_data.shape[0], 1, 1)
+    if reverse:
+        test_masks = torch.logical_not(test_masks)
     test_groups = test_data_labels.clone().detach()
     masks_dset = torch.utils.data.TensorDataset(randomized_test_data, test_data_labels, test_masks, test_groups)
     dl_masks_test = torch.utils.data.DataLoader(masks_dset, batch_size=dl_test.batch_size, shuffle=True)

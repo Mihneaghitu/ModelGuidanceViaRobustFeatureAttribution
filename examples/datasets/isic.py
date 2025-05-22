@@ -11,7 +11,7 @@ from skimage.segmentation import slic
 import cv2
 
 class ISICDataset(Dataset):
-    def __init__(self, data_root: str, is_train: bool = True, grouped: bool = False, soft_mask_eps: float = None):
+    def __init__(self, data_root: str, is_train: bool = True, grouped: bool = False, soft_mask_eps: float = None, reverse: bool = False):
         self.data_root_cancer = os.path.join(data_root, "processed/cancer")
         self.data_root_no_cancer = os.path.join(data_root, "processed/no_cancer")
         self.data_root_patch_no_cancer = os.path.join(data_root, "processed/patch_no_cancer_again")
@@ -33,6 +33,7 @@ class ISICDataset(Dataset):
         self.masks = [self.masks[i] for i in split_indices]
         self.groups = [self.groups[i] for i in split_indices]
         self.grouped = grouped
+        self.reverse_test_masks = reverse
 
         self.soft_mask_eps = soft_mask_eps
 
@@ -85,6 +86,9 @@ class ISICDataset(Dataset):
         else:
             mask = torch.zeros_like(img)
         mask = mask.float()
+
+        if self.reverse_test_masks:
+            mask = torch.ones_like(mask) - mask
 
         if self.grouped:
             return img, label, mask, group

@@ -55,7 +55,7 @@ def get_label(sample_id):
 
 class PlantDataset(Dataset):
     per_channel_mean = None
-    def __init__(self, splits_dir: str, data_dir: str, masks_file: str, split_idx: int, is_train: bool):
+    def __init__(self, splits_dir: str, data_dir: str, masks_file: str, split_idx: int, is_train: bool, reverse: bool = False):
         # Only 5 splits are available
         assert split_idx < 5
         self.is_train = is_train
@@ -75,6 +75,7 @@ class PlantDataset(Dataset):
         ])
         brightness_enhancer = ImageEnhance.Brightness
 
+        self.reverse_test_masks = reverse
         # We should not need to lazy load, since one split is approx. 1800 tensors of 3 x 213 x 213
         self.data_tensors = torch.zeros(len(self.img_fnames), 3, 213, 213)
         self.data_masks = torch.zeros(len(self.img_fnames), 3, 213, 213)
@@ -103,6 +104,8 @@ class PlantDataset(Dataset):
         return len(self.img_fnames)
 
     def __getitem__(self, idx) -> tuple[torch.Tensor, ...]:
+        if self.reverse_test_masks:
+            self.data_masks[idx] = torch.ones_like(self.data_masks[idx]) - self.data_masks[idx]
         if self.is_train:
             return self.data_tensors[idx], self.data_labels[idx], self.data_masks[idx]
         else:

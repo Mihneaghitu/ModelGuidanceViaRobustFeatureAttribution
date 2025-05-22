@@ -1,0 +1,46 @@
+r3:
+  class_weights: -1
+  k: 2000000000000.0
+  lr: 1.0e-05
+  multi_class: false
+  num_epochs: 1
+  restarts: 1
+  test_batch_size: 80
+  train_batch_size: 80
+  weight_decay: 1.0e-05
+rand_r4:
+  alpha: 0.75
+  class_weights: -1
+  k: 60000000000.0
+  lr: 4.0e-05
+  multi_class: false
+  num_epochs: 2
+  num_samples: 3
+  restarts: 1
+  test_batch_size: 77
+  train_batch_size: 77
+  weight_decay: 100000.0
+smooth_r3:
+  alpha: 0.1
+  class_weights:
+  - 4
+  - 1
+  k: 1000000000000.0
+  lr: 1.0e-05
+  multi_class: false
+  num_epochs: 2
+  num_samples: 3
+  restarts: 1
+  test_batch_size: 88
+  train_batch_size: 88
+  weight_decay: 1.0e-05
+std:
+  class_weights: -1
+  k: 0
+  lr: 0.0001
+  multi_class: false
+  num_epochs: 2
+  restarts: 1
+  test_batch_size: 50
+  train_batch_size: 50
+  weight_decay: 0
