@@ -365,7 +365,7 @@ def _replace_token_indices(
             new_token_ids[row_idx][row_sampled_indices] = sampled_token_ids.to(device)
     #% Rand-R4 case:
     else:
-        assert alpha > 0.5, "The percentage of randomly replaced spurious words has to be at least 50% in Rand-R4"
+        # assert alpha > 0.5, "The percentage of randomly replaced spurious words has to be at least 50% in Rand-R4"
         for batch_elem_idx in range(len(batch_spur_word_indices)):
             num_spur_words = len(batch_spur_word_indices[batch_elem_idx])
             num_spur_words_to_replace = int(num_spur_words * alpha)
@@ -407,6 +407,7 @@ def _find_gcg_adversary(
     # TODO: think whether it might be useful to have the whole vocab as the adversary set -- probably not, it is too large
     adversarial_sentences = token_ids.clone().detach_()
     adversary_set_token_ids, adversary_set_token_ids_chunks = _get_chunked_adversary_set_gcg(tokenizer, token_ids, alpha)
+    adv_criterion = torch.nn.BCELoss() if isinstance(criterion, torch.nn.BCELoss) else torch.nn.CrossEntropyLoss()
     for text_idx, spur_words_indices in enumerate(batch_spur_word_indices):
         for spur_word_idx in spur_words_indices:
             spur_word_grads = torch.tensor([]).to(device)
@@ -420,8 +421,10 @@ def _find_gcg_adversary(
                 adv_tokens_embeds = embed_layer(adversarial_sentence).clone().detach()
                 adv_tokens_embeds.requires_grad = True
                 # Forward pass and get grads
-                y_hat = model.inputs_embeds_forward(adv_tokens_embeds)
-                loss = criterion(y_hat.squeeze(), labels[text_idx].repeat(len(adv_set_tids)))
+                y_hat = model.inputs_embeds_forward(adv_tokens_embeds).squeeze()
+                chunk_labels = torch.ones_like(y_hat, dtype=torch.float32).to(device) * labels[text_idx]
+                # Since chunk_labels is a tensor of all ones/zeros, we don't need weights
+                loss = adv_criterion(y_hat, chunk_labels)
                 loss.backward()
                 # Get gradients
                 grads_token_embeds = adv_tokens_embeds.grad # [batch_size x seq_len x embedding_dim]

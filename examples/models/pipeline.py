@@ -234,6 +234,9 @@ def train_llm_with_guidance(
                     token_ids_fragment, attention_mask_fragment = encoding_fragment['input_ids'], encoding_fragment['attention_mask']
                     # Forward pass
                     token_ids_fragment, attention_mask_fragment, labels_fragment = token_ids_fragment.to(device), attention_mask_fragment.to(device), labels_fragment.to(device)
+                    # Apply class weightage
+                    if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
+                        criterion = torch.nn.BCELoss(weight=class_weights[labels_fragment.int()].to(device))
                     # Compute gradient with respect to the masked area and regularize based on the method
                     inp_grad_reg = llm_gradient_regularizer(
                         model,
@@ -248,8 +251,6 @@ def train_llm_with_guidance(
                         device=device
                     )
                     output_fragment = model(token_ids_fragment, attention_mask_fragment).squeeze(-1)
-                    if class_weights is not None and isinstance(criterion, torch.nn.BCELoss):
-                        criterion = torch.nn.BCELoss(weight=class_weights[labels_fragment.int()].to(device))
                     std_loss = criterion(output_fragment, labels_fragment)
                     fragment_loss = std_loss + lmbda * inp_grad_reg
                     fragment_loss.backward()

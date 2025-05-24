@@ -24,8 +24,6 @@ __imdb_bad_neg = ['pie', 'neither', 'too', 'disguise', 'product', 'tv', 'animal'
            'wannabe', 'unless', 'stunt', 'jokes', 'wasn', 'hasn', 'save', 'bits',
            'heavy']
 
-__imdb_decoy_parts = ["spie", "spiel", "spielb", "spielbe", "spielber"]
-
 def get_spurious_words():
 
     spurious_words_map = {}
@@ -35,4 +33,4 @@ def get_spurious_words():
     return spurious_words_map
 
 def all_imdb_spur():
-    return __imdb_bad_pos + __imdb_bad_neg + __imdb_decoy_parts
+    return __imdb_bad_pos + __imdb_bad_neg
