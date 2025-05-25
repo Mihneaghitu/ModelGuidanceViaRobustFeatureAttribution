@@ -1,3 +1,38 @@
+pgd_r4:
+  alpha: 0.2
+  class_weights: -1
+  k: 500000000000.0
+  lr: 2.5e-06
+  multi_class: false
+  num_epochs: 1
+  restarts: 1
+  test_batch_size: 80
+  train_batch_size: 80
+  weight_decay: 1.0e-05
+pgd_r4_0:
+  alpha: 0.1
+  class_weights: -1
+  k: 100000000000.0
+  lr: 1.0e-06
+  multi_class: false
+  num_epochs: 1
+  restarts: 1
+  test_batch_size: 80
+  train_batch_size: 80
+  weight_decay: 1.0e-05
+pgd_r4_2:
+  alpha: 0.15
+  class_weights:
+  - 1
+  - 1.7
+  k: 600000000000.0
+  lr: 2.0e-06
+  multi_class: false
+  num_epochs: 1
+  restarts: 1
+  test_batch_size: 80
+  train_batch_size: 80
+  weight_decay: 1.0e-05
 r3:
   class_weights: -1
   k: 4000000000000.0
@@ -12,22 +47,22 @@ rand_r4:
   alpha: 0.5
   class_weights:
   - 1
-  - 1.7
-  k: 600000000000.0
+  - 1.55
+  k: 800000000000.0
   lr: 1.0e-05
   multi_class: false
   num_epochs: 1
   num_samples: 3
   restarts: 1
-  test_batch_size: 77
-  train_batch_size: 77
+  test_batch_size: 66
+  train_batch_size: 66
   weight_decay: 1.0e-05
 rand_r4_best:
-  alpha: 0.75
+  alpha: 0.5
   class_weights:
   - 1
   - 1.7
-  k: 700000000000.0
+  k: 600000000000.0
   lr: 1.0e-05
   multi_class: false
   num_epochs: 1
