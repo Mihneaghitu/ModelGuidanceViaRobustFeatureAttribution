@@ -365,7 +365,6 @@ def _replace_token_indices(
             new_token_ids[row_idx][row_sampled_indices] = sampled_token_ids.to(device)
     #% Rand-R4 case:
     else:
-        # assert alpha > 0.5, "The percentage of randomly replaced spurious words has to be at least 50% in Rand-R4"
         for batch_elem_idx in range(len(batch_spur_word_indices)):
             num_spur_words = len(batch_spur_word_indices[batch_elem_idx])
             num_spur_words_to_replace = int(num_spur_words * alpha)
@@ -404,7 +403,6 @@ def _find_gcg_adversary(
     device: str
 ) -> list[torch.Tensor]:
     embed_layer = model.embeddings
-    # TODO: think whether it might be useful to have the whole vocab as the adversary set -- probably not, it is too large
     adversarial_sentences = token_ids.clone().detach_()
     adversary_set_token_ids, adversary_set_token_ids_chunks = _get_chunked_adversary_set_gcg(tokenizer, token_ids, alpha)
     adv_criterion = torch.nn.BCELoss() if isinstance(criterion, torch.nn.BCELoss) else torch.nn.CrossEntropyLoss()

@@ -22,5 +22,6 @@ examples/datasets/MNIST/*
 .models
 .data
 .datasets
-examples/saved_experiment_models
-examples/playground*
+R4/saved_experiment_models
+R4/playground*
+R4/datasets/data

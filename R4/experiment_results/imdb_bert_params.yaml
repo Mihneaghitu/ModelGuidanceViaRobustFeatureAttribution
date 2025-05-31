@@ -19,7 +19,7 @@ r3:
   test_batch_size: 64
   train_batch_size: 64
   weight_decay: 0
-rand_r4_1:
+rand_r4:
   alpha: 0.75
   class_weights: -1
   k: 10000000000.0

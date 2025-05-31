@@ -35,6 +35,9 @@ class ImdbDataset(Dataset):
             assert "neg_decoy_word" in decoy_kwargs, "neg_decoy_word not found in kwargs"
             self.pos_decoy_word = decoy_kwargs["pos_decoy_word"]
             self.neg_decoy_word = decoy_kwargs["neg_decoy_word"]
+            self.shuffle_test = False
+            if "shuffle" in decoy_kwargs:
+                self.shuffle_test = decoy_kwargs["shuffle"]
 
 
     def __collect_path_from_dir(self) -> None:
@@ -63,6 +66,11 @@ class ImdbDataset(Dataset):
                     review = self.pos_decoy_word + " " + review
                 else:
                     review = self.neg_decoy_word + " " + review
+        if self.decoy and (not self.train) and self.shuffle_test:
+            # Choose either pos or neg decoy word randomly
+            rand_spur = self.pos_decoy_word if torch.rand(1).item() < 0.5 else self.neg_decoy_word
+            rand_pos = torch.randint(0, len(review), (1,)).item()
+            review = review[:rand_pos] + " " + rand_spur + " " + review[rand_pos:]
 
         spur_words = self.spurious_words["imdb_bad_pos"] if self.labels[idx] == 1 else self.spurious_words["imdb_bad_neg"]
         mask = ""

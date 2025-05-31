@@ -1,0 +1,40 @@
+pgd_r4:
+  avg_group_acc: 0.86832
+  test_acc: 0.86175
+  train_acc: 0.99465
+  worst_group: 0
+  worst_group_acc: 0.83024
+  std_dev: 0.02681
+  std_dev_wg: 0.1226
+r3:
+  avg_group_acc: 0.71434
+  std_dev: 0.0227
+  std_dev_wg: 0.1966
+  test_acc: 0.6957
+  train_acc: 0.87305
+  worst_group: 0
+  worst_group_acc: 0.6472
+rand_r4:
+  avg_group_acc: 0.78166
+  std_dev: 0.0361
+  std_dev_wg: 0.0536
+  test_acc: 0.767
+  train_acc: 0.86815
+  worst_group: 0
+  worst_group_acc: 0.73968
+smooth_r3:
+  avg_group_acc: 0.73956
+  std_dev: 0.03767
+  std_dev_wg: 0.2525
+  test_acc: 0.7018
+  train_acc: 0.9079
+  worst_group: 1
+  worst_group_acc: 0.68612
+std:
+  avg_group_acc: 0.5002
+  std_dev: 0.0
+  std_dev_wg: 5.6e-05
+  test_acc: 0.5002
+  train_acc: 0.9999
+  worst_group: 0
+  worst_group_acc: 0.00108

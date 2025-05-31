@@ -344,11 +344,12 @@ def test_macro_over_labels_and_wg_acc(dset_name: str):
             print(f"Macro average group acc = {macro_avg_group_acc}, worst group acc = {worst_group_acc}, worst group = {worst_group}")
             print(f"Macro average stddev = {stddev_aa}, stddev worst group acc = {stddev_wga}")
 
-def test_llm_avg_and_wg(dset_name: str, methods: list[str], device: str = "cuda:0"):
+def test_llm_avg_and_wg(dset_name: str, methods: list[str], device: str = "cuda:0", shuffle_test: bool = False):
     assert dset_name in ["imdb", "imdb_decoy"]
     for method in methods:
         assert method in ["std", "r3", "smooth_r3", "rand_r4", "pgd_r4"]
 
+    device = torch.device(device if torch.cuda.is_available() else "cpu")
     model = BertModelWrapper(1, device)
     tokenizer = BertTokenizerWrapper(spurious_words.all_imdb_spur())
     batch_size = 250
@@ -358,7 +359,7 @@ def test_llm_avg_and_wg(dset_name: str, methods: list[str], device: str = "cuda:
     if dset_name == "imdb":
         imdb_test = imdb.ImdbDataset(is_train=False, grouped=True)
     else:
-        decoy_kwargs = {"pos_decoy_word": "spielberg", "neg_decoy_word": "alas"}
+        decoy_kwargs = {"pos_decoy_word": "spielberg", "neg_decoy_word": "alas", "shuffle": shuffle_test}
         imdb_test = imdb.ImdbDataset(is_train=False, decoy_kwargs=decoy_kwargs, grouped=True)
     dl_test = imdb.get_loader_from_dataset(imdb_test, batch_size=batch_size)
 
@@ -370,4 +371,4 @@ def test_llm_avg_and_wg(dset_name: str, methods: list[str], device: str = "cuda:
         print(f"Macro average group accuracy = {avg_acc:.4g}")
         print(f"Worst group accuracy = {wg_acc:.4g}, worst group = {wg}")
 
-# test_llm_avg_and_wg("imdb_decoy", ["std"])
+# test_llm_avg_and_wg("imdb_decoy", ["std", "r3", "smooth_r3", "rand_r4", "pgd_r4"], device="cuda:1", shuffle_test=True)
