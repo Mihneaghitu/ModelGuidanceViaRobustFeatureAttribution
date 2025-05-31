@@ -5,11 +5,11 @@ sys.path.append("../../")
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from examples.datasets import derma_mnist, decoy_mnist
-from examples.models.R4_models import DermaNet
-from examples.metrics import get_restart_avg_and_worst_group_accuracy_with_stddev, get_avg_rob_metrics
-from examples.models.pipeline import load_params_or_results_from_file
-from examples.models.fully_connected import FCNAugmented
+from R4.datasets import derma_mnist, decoy_mnist
+from R4.models.R4_models import DermaNet
+from R4.metrics import get_restart_avg_and_worst_group_accuracy_with_stddev, get_avg_rob_metrics
+from R4.models.pipeline import load_params_or_results_from_file
+from R4.models.fully_connected import FCNAugmented
 
 def make_mask_and_data_sample_complexity_plots(dset_name: str, device: str, with_data: bool = False, with_l2_prop: bool = False,  methods: list[str] = None) -> None:
     assert dset_name in ["decoy_mnist", "derma_mnist"]
