@@ -1,74 +1,22 @@
-# Abstract Gradient Training
+# Model Guidance via Robust Feature Attribution
 
-A package for abstract gradient training of neural networks for certificates of poisoning robustness, machine unlearning and differential privacy.
+A repository containing the implementation and experiments for the paper "Model Guidance via Robust Feature Attribution".
 
 ## Installation
 
-Install the package using pip:
+This repository is built on top of a codebase containing the implementation of Abstract Gradient Training (AGT) methods for certified poisoning, unlearning, and privacy in gradient-based training. As such, before using this repository, one needs to follow the installation procedure of [`AbstractGradientTraining` package](https://github.com/psosnin/AbstractGradientTraining):
 
+Install the package using pip:
 ```pip install git+https://github.com/psosnin/AbstractGradientTraining```
 
-## Getting started
+## Repository Description and Usage
 
-To train a `torch.nn.Sequential` model with abstract gradient training, you must set up a dataloader, model and configuration object and then call the corresponding certified training method (poisoning, unlearning or privacy).
+The core of this repository resides under the `R4/` folder. One can find the datasets used in the experiments under `R4/datasets`, the network models and robust regularizer under `R4/models`, the plots and figures included in the paper (as well as some extra figures) under `R4/plots`, and the final experimental results reported in the paper under `R4/experiment_results`. The latter contains the results and hyperparameters for each dataset in the format `<DATASET NAME>.yaml` and `<DATASET NAME>_params.yaml`, respectively, as well as ablations' results. Lastly, the files under `R4/` root are either logic for ablations and metrics, or notebooks which have been used to generate the experimental results.
 
-```python
-import torch
-import abstract_gradient_training as agt
-# set up dataloaders
-dl_train = torch.utils.data.DataLoader(train_dataset, batch_size=1000)
-dl_test = torch.utils.data.DataLoader(test_dataset, batch_size=1000)
-# set up pytorch model
-model = torch.nn.Sequential(
-    torch.nn.Linear(784, 128),
-    torch.nn.ReLU(),
-    torch.nn.Linear(128, 10)
-)
-# set up configuration object
-config = agt.AGTConfig(
-    n_epochs=10,
-    learning_rate=0.1,
-    k_poison=10,
-    epsilon=0.01,
-    loss="cross_entropy"
-)
-# run certified training
-param_l, param_n, param_u = agt.poison_certified_training(model, config, dl_train, dl_test)
-```
-
-Additional usage examples can be found in the `examples` directory.
-
-
-## Configuration
-
-This package uses a configuration object AGTConfig to pass hyperparameters into the certified training methods. The following table lists the available hyperparameters:
-
-| Parameter         | Type   | Allowed Values                           | Default Value | Description                                                                  |
-|-------------------|--------|------------------------------------------|---------------|------------------------------------------------------------------------------|
-| `n_epochs`        | int    | > 0                                       | N/A           | Number of epochs for training.                                               |
-| `learning_rate`   | float  | > 0                                       | N/A           | Learning rate for the optimizer.                                             |
-| `l1_reg`          | float  | >= 0                                      | 0.0           | L1 regularization parameter.                                                 |
-| `l2_reg`          | float  | >= 0                                      | 0.0           | L2 regularization parameter.                                                 |
-| `lr_decay`          | float  | >= 0                                      | 0.0           | Learning rate decay factor. lr ~ (1 / (1 + decay_rate * epoch))                                                 |
-| `lr_min`          | float  | >= 0                                      | 0.0           | Minimum learning rate for decay scheduler.                                                 |
-| `loss`            | str    | "cross_entropy", "binary_cross_entropy", "max_margin", "mse", "hinge" | N/A           | Loss function.                                                               |
-| `device`          | str    | Any                                       | "cpu"         | Device for training (e.g., "cpu" or "cuda").                                 |
-| `log_level`       | str    | "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL" | "INFO"       | Logging level.                                                               |
-| `forward_bound`   | str    | "interval", "crown", "interval+crown"      | "interval"    | Forward bounding method.                                                     |
-| `backward_bound`  | str    |"interval", "crown" | "interval"    | Backward bounding method.                                                    |
-| `bound_kwargs`    | dict   | Any                                       | {}            | Additional keyword arguments for bounding methods.                           |
-| `fragsize`        | int    | > 0                                       | 10000         | Size of fragments to split each batch into to pass into the bounding methods. Larger is faster but requires more memory.                                          |
-| `k_poison`        | int    | >= 0                                      | 0             | **Certified poisoning only** Number of poisoned samples.                                                  |
-| `epsilon`         | float  | >= 0                                      | 0.0           | **Certified poisoning only** Epsilon value for poisoning.                                                 |
-| `label_k_poison`  | int    | >= 0                                      | 0             | **Certified poisoning only** Number of label-poisoned samples.                                            |
-| `label_epsilon`   | float  | >= 0                                      | 0.0           | **Certified poisoning only** Epsilon value for label poisoning.                                           |
-| `poison_target`   | int    | >= 0                                      | -1            | **Certified poisoning only** Target index for poisoning.                                                  |
-| `k_unlearn`       | int    | >= 0                                      | 0             | **Certified unlearning only** Number of samples to unlearn.                                                |
-| `k_private`       | int    | >= 0                                      | 0             | **Certified privacy only** Number of private samples.                                                   |
-| `clip_gamma`      | float  | > 0                                       | 1e10          | **Certified privacy and unlearning only** Clipping parameter gamma for differential privacy.                           |
-| `dp_sgd_sigma`    | float  | >= 0                                      | 0.0           | **Certified privacy and unlearning only** Standard deviation of Gaussian noise for DP-SGD.                             |
+To reproduce results, just run the corresponding dataset notebook in `R4/` folder. For example, to reproduce the results for the DecoyMNIST dataset, run `R4/DECOY MNIST - R4.ipynb`. The notebooks are designed to be self-contained and will automatically load the necessary data and models. Before running a regularization method, be sure to double check all the right hyperparameters match the ones in the corresponding `R4/experiment_results/<DATASET NAME>_params.yaml` file.
 
 ## References
 
+- [Model Guidance via Robust Feature Attribution](https://www.example.com/)
 - [Certified Robustness to Data Poisoning in Gradient-Based Training](https://arxiv.org/pdf/2406.05670v1)
 - [Certificates of Differential Privacy and Unlearning for Gradient-Based Training](https://arxiv.org/abs/2406.13433)
